@@ -1,0 +1,39 @@
+@import "tailwindcss";
+@import "@fortawesome/fontawesome-free/css/all.min.css";
+@import "./pages/admin-dashboard.css";
+
+@source "../views/**/*.blade.php";
+@source "./**/*.{js,jsx,ts,tsx}";
+
+/* Custom global styles */
+@theme {
+    --color-navy-dark: #02122c;
+    --color-navy-light: #0d2347;
+    --color-brand-orange: #e06800;
+    --color-brand-green: #00a86b;
+    --font-sans: 'Inter', ui-sans-serif, system-ui;
+}
+
+body {
+    font-family: 'Inter', sans-serif;
+}
+
+/* Smooth fade between pages (supported in Chrome, Edge, Safari 18+) */
+@view-transition {
+    navigation: auto;
+}
+
+main {
+    view-transition-name: main-content;
+}
+
+/* Hide scrollbar for Chrome, Safari and Opera */
+.no-scrollbar::-webkit-scrollbar {
+    display: none;
+}
+
+/* Hide scrollbar for IE, Edge and Firefox */
+.no-scrollbar {
+    -ms-overflow-style: none;  /* IE and Edge */
+    scrollbar-width: none;  /* Firefox */
+}
