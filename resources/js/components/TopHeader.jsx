@@ -1,22 +1,27 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from "react";
+import { logout } from "../utils/logout";
 
 export default function TopHeader({
-    title = 'Dashboard',
-    userName = 'Elle Dela Cruz',
-    userRole = 'Tenant',
-    avatar = 'https://i.pravatar.cc/100?img=47',
+    title = "Dashboard",
+    userName = "Elle Dela Cruz",
+    userRole = "Tenant",
+    avatar = "https://i.pravatar.cc/100?img=47",
 }) {
     const [dropdownOpen, setDropdownOpen] = useState(false);
     const dropdownRef = useRef(null);
 
     useEffect(() => {
         const handleClickOutside = (e) => {
-            if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+            if (
+                dropdownRef.current &&
+                !dropdownRef.current.contains(e.target)
+            ) {
                 setDropdownOpen(false);
             }
         };
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
+        document.addEventListener("mousedown", handleClickOutside);
+        return () =>
+            document.removeEventListener("mousedown", handleClickOutside);
     }, []);
 
     return (
@@ -25,12 +30,16 @@ export default function TopHeader({
                 <button
                     type="button"
                     className="md:hidden text-slate-800 text-lg p-1.5 rounded-md hover:bg-slate-100"
-                    onClick={() => window.dispatchEvent(new Event('open-mobile-sidebar'))}
+                    onClick={() =>
+                        window.dispatchEvent(new Event("open-mobile-sidebar"))
+                    }
                     aria-label="Open menu"
                 >
                     <i className="fa-solid fa-bars" />
                 </button>
-                <h1 className="text-lg md:text-xl font-bold text-slate-800">{title}</h1>
+                <h1 className="text-lg md:text-xl font-bold text-slate-800">
+                    {title}
+                </h1>
             </div>
 
             <div className="flex items-center gap-5 md:gap-6">
@@ -57,8 +66,12 @@ export default function TopHeader({
                         onClick={() => setDropdownOpen(!dropdownOpen)}
                     >
                         <div className="hidden md:block text-right">
-                            <h4 className="text-[13px] font-bold text-slate-800 leading-tight">{userName}</h4>
-                            <p className="text-[11px] text-slate-500 leading-tight">{userRole}</p>
+                            <h4 className="text-[13px] font-bold text-slate-800 leading-tight">
+                                {userName}
+                            </h4>
+                            <p className="text-[11px] text-slate-500 leading-tight">
+                                {userRole}
+                            </p>
                         </div>
                         <img
                             src={avatar}
@@ -77,8 +90,12 @@ export default function TopHeader({
                                     className="w-[38px] h-[38px] rounded-full object-cover"
                                 />
                                 <div className="overflow-hidden">
-                                    <h4 className="text-[13px] font-bold text-slate-900">{userName}</h4>
-                                    <p className="text-[11px] text-slate-400 truncate">elledelacruz@gmail.com</p>
+                                    <h4 className="text-[13px] font-bold text-slate-900">
+                                        {userName}
+                                    </h4>
+                                    <p className="text-[11px] text-slate-400 truncate">
+                                        elledelacruz@gmail.com
+                                    </p>
                                 </div>
                             </div>
 
@@ -90,13 +107,14 @@ export default function TopHeader({
                                 <span>Account Settings</span>
                             </a>
 
-                            <a
-                                href="/logout"
-                                className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-medium text-red-600 hover:bg-red-50 transition-colors"
+                            <button
+                                type="button"
+                                onClick={logout}
+                                className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-medium text-red-600 hover:bg-red-50 transition-colors w-full text-left"
                             >
                                 <i className="fa-solid fa-right-from-bracket w-[18px] text-center text-sm" />
                                 <span>Logout</span>
-                            </a>
+                            </button>
                         </div>
                     )}
                 </div>

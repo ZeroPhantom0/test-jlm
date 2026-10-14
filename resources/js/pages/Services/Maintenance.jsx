@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import Sidebar from '../../components/Sidebar';
 import TopHeader from '../../components/TopHeader';
-import MaintenanceModals from '../../components/Services/MaintenanceModals';
+import MaintenanceModals from './MaintenanceModals'; 
 
 export default function Maintenance() {
     const [isCreateOpen, setIsCreateOpen] = useState(false);

@@ -1,8 +1,25 @@
+{{-- resources/views/layouts/admin.blade.php --}}
+@php
+    $user = auth()->user();
+    $sidebarProps = json_encode(['active' => $active ?? 'dashboard']);
+    $headerProps = json_encode([
+        'title'    => $pageTitle ?? 'Dashboard',
+        'userName' => $user->name ?? 'Admin',
+        'userRole' => 'Admin',
+        'userEmail' => $user->email ?? '',
+        'avatar'   => $user->profile_picture 
+                        ? asset('storage/' . $user->profile_picture) 
+                        : 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&q=80&w=120',
+        'showHamburger' => true,
+    ]);
+@endphp
+
 <!DOCTYPE html>
 <html lang="en" class="h-full w-full overflow-hidden">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="csrf-token" content="{{ csrf_token() }}"> 
     <title>@yield('title', 'Admin Portal') — JLM Cozy Cabin</title>
 
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -11,19 +28,11 @@
     @vite(['resources/css/app.css', 'resources/js/app.jsx'])
     @stack('styles')
 </head>
+{{-- Hidden logout form (POST + CSRF) --}}
+<form id="logout-form" action="{{ route('logout') }}" method="POST" class="hidden">
+    @csrf
+</form>
 <body class="bg-[#f4f6f9] text-slate-900 antialiased flex h-full w-full overflow-hidden">
-
-    @php
-        $sidebarProps = json_encode(['active' => $active ?? 'dashboard']);
-        $headerProps  = json_encode([
-            'title'    => $pageTitle ?? 'Dashboard',
-            'userName' => 'Leah Administrator',
-            'userRole' => 'Admin',
-            'userEmail' => 'leah.admin@jlmcozycabin.com',
-            'avatar'   => 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&q=80&w=120',
-            'showHamburger' => true,
-        ]);
-    @endphp
 
     {{-- Mobile backdrop --}}
     <div id="admin-sidebar-overlay"

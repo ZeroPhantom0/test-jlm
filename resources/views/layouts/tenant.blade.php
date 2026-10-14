@@ -1,3 +1,17 @@
+{{-- resources/views/layouts/tenant.blade.php --}}
+@php
+    $user = auth()->user();
+    $sidebarProps = json_encode(['active' => $active ?? 'dashboard']);
+    $headerProps = json_encode([
+        'title'    => $pageTitle ?? 'Dashboard',
+        'userName' => $user->name ?? 'Tenant',
+        'userRole' => 'Tenant',
+        'avatar'   => $user->profile_picture 
+                        ? asset('storage/' . $user->profile_picture) 
+                        : 'https://i.pravatar.cc/100?img=47',
+    ]);
+@endphp
+
 <!DOCTYPE html>
 <html lang="en">
 
@@ -11,6 +25,11 @@
 
     @vite(['resources/css/app.css', 'resources/js/app.jsx'])
 </head>
+
+{{-- Hidden logout form (POST + CSRF) --}}
+<form id="logout-form" action="{{ route('logout') }}" method="POST" class="hidden">
+    @csrf
+</form>
 
 <body class="bg-slate-50 flex min-h-screen text-slate-800">
 

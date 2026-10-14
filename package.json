@@ -17,6 +17,7 @@
     },
     "dependencies": {
         "@fortawesome/fontawesome-free": "^7.3.1",
+        "@inertiajs/react": "^2.3.29",
         "react": "^19.3.0",
         "react-dom": "^19.3.0"
     }

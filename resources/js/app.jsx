@@ -1,6 +1,7 @@
 // resources/js/app.jsx
 import '../css/app.css';
 import { createRoot } from 'react-dom/client';
+import { createInertiaApp } from '@inertiajs/react';
 
 // Tenant components
 import Sidebar from './components/Sidebar';
@@ -20,10 +21,24 @@ import AnnouncementsModals from './pages/Admin/AnnouncementsModals';
 import VirtualTourModals from './pages/Admin/VirtualTourModals';
 import SettingsArchive from './pages/Admin/SettingsArchive';
 
+// --------------------------------------------------
+// INERTIA APP BOOTSTRAP (Landing, Auth, Onboarding pages)
+// --------------------------------------------------
+createInertiaApp({
+    resolve: (name) => {
+        const pages = import.meta.glob('./Pages/**/*.jsx', { eager: true });
+        return pages[`./Pages/${name}.jsx`];
+    },
+    setup({ el, App, props }) {
+        createRoot(el).render(<App {...props} />);
+    },
+});
+
+// --------------------------------------------------
+// EXISTING REACT COMPONENT MOUNTER (Tenant & Admin portals)
+// --------------------------------------------------
 function mountReact() {
-    // --------------------------------------------------
     // TENANT PORTAL
-    // --------------------------------------------------
     const tenantSidebar = document.querySelector('[data-react="sidebar"]');
     if (tenantSidebar && !tenantSidebar.dataset.mounted) {
         const props = JSON.parse(tenantSidebar.dataset.props || '{}');
@@ -38,9 +53,7 @@ function mountReact() {
         tenantHeader.dataset.mounted = 'true';
     }
 
-    // --------------------------------------------------
     // ADMIN PORTAL
-    // --------------------------------------------------
     const adminSidebar = document.querySelector('[data-react="admin-sidebar"]');
     if (adminSidebar && !adminSidebar.dataset.mounted) {
         const props = JSON.parse(adminSidebar.dataset.props || '{}');
@@ -55,9 +68,7 @@ function mountReact() {
         adminHeader.dataset.mounted = 'true';
     }
 
-    // --------------------------------------------------
-    // ADMIN MODALS (only mount if their root divs exist on the page)
-    // --------------------------------------------------
+    // ADMIN MODALS
     const mountIfExists = (id, Component) => {
         const el = document.getElementById(id);
         if (el && !el.dataset.mounted) {
@@ -76,7 +87,6 @@ function mountReact() {
     mountIfExists('admin-settings-archive',     SettingsArchive);
 }
 
-// Initial mount
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', mountReact);
 } else {
