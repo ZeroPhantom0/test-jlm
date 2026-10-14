@@ -21,22 +21,33 @@ import AnnouncementsModals from './pages/Admin/AnnouncementsModals';
 import VirtualTourModals from './pages/Admin/VirtualTourModals';
 import SettingsArchive from './pages/Admin/SettingsArchive';
 
-// --------------------------------------------------
-// INERTIA APP BOOTSTRAP (Landing, Auth, Onboarding pages)
-// --------------------------------------------------
-createInertiaApp({
-    resolve: (name) => {
-        const pages = import.meta.glob('./Pages/**/*.jsx', { eager: true });
-        return pages[`./Pages/${name}.jsx`];
-    },
-    setup({ el, App, props }) {
-        createRoot(el).render(<App {...props} />);
-    },
-});
+// ============================================================
+// INERTIA APP BOOTSTRAP
+// Inertia v2 renders:
+//   <div id="app"></div>
+//   <script data-page="app" type="application/json">...</script>
+// So we detect the presence of the JSON script, not a data-page
+// attribute on the div (that was v1 behavior).
+// ============================================================
+const inertiaRoot     = document.getElementById('app');
+const inertiaPageData = document.querySelector('script[data-page="app"]');
 
-// --------------------------------------------------
+if (inertiaRoot && inertiaPageData) {
+    createInertiaApp({
+        resolve: (name) => {
+            // ⚠️ MUST match your actual folder name — lowercase `pages`
+            const pages = import.meta.glob('./pages/**/*.jsx', { eager: true });
+            return pages[`./pages/${name}.jsx`];
+        },
+        setup({ el, App, props }) {
+            createRoot(el).render(<App {...props} />);
+        },
+    });
+}
+
+// ============================================================
 // EXISTING REACT COMPONENT MOUNTER (Tenant & Admin portals)
-// --------------------------------------------------
+// ============================================================
 function mountReact() {
     // TENANT PORTAL
     const tenantSidebar = document.querySelector('[data-react="sidebar"]');

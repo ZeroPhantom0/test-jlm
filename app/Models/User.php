@@ -57,4 +57,9 @@ class User extends Authenticatable
     {
         return $this->hasOne(IdentityVerification::class);
     }
+
+    public function tenant()
+{
+    return $this->hasOne(Tenant::class);
+}
 }

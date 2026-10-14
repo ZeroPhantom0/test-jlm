@@ -24,15 +24,15 @@
     <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
         <div class="bg-white rounded-2xl px-5 py-4 border border-slate-200">
             <div class="text-xs text-slate-500 font-medium">Total</div>
-            <div class="text-[26px] font-extrabold text-slate-900 mt-1">5</div>
+            <div class="text-[26px] font-extrabold text-slate-900 mt-1">{{ $metrics['total'] }}</div>
         </div>
         <div class="bg-white rounded-2xl px-5 py-4 border border-slate-200">
             <div class="text-xs text-slate-500 font-medium">Active</div>
-            <div class="text-[26px] font-extrabold text-green-600 mt-1">4</div>
+            <div class="text-[26px] font-extrabold text-green-600 mt-1">{{ $metrics['active'] }}</div>
         </div>
         <div class="bg-white rounded-2xl px-5 py-4 border border-slate-200">
             <div class="text-xs text-slate-500 font-medium">Inactive</div>
-            <div class="text-[26px] font-extrabold text-slate-500 mt-1">1</div>
+            <div class="text-[26px] font-extrabold text-slate-500 mt-1">{{ $metrics['inactive'] }}</div>
         </div>
     </div>
 
@@ -65,53 +65,72 @@
                     </tr>
                 </thead>
                 <tbody>
-                    @foreach([
-                        ['initial' => 'N', 'name' => 'Nicole Custorio', 'email' => 'nicole@gmail.com', 'phone' => '09171234567', 'room' => 'Room 202', 'rate' => '₱1,900', 'status' => 'active'],
-                        ['initial' => 'E', 'name' => 'Elle Dela Cruz', 'email' => 'elle@gmail.com', 'phone' => '09181234567', 'room' => 'Room 101', 'rate' => '₱600', 'status' => 'active'],
-                        ['initial' => 'M', 'name' => 'Mau Santos', 'email' => 'mau@gmail.com', 'phone' => '09191234567', 'room' => 'Room 201', 'rate' => '₱600', 'status' => 'active'],
-                        ['initial' => 'G', 'name' => 'Gabriel Maningo', 'email' => 'gabriel@gmail.com', 'phone' => '09201234567', 'room' => 'Room 101', 'rate' => '₱1,000', 'status' => 'active'],
-                        ['initial' => 'F', 'name' => 'Francis Sabiniano', 'email' => 'francis@gmail.com', 'phone' => '09211234567', 'room' => 'Room 203', 'rate' => '₱4,200', 'status' => 'inactive'],
-                    ] as $t)
-                    <tr class="border-b border-slate-50 last:border-0">
-                        <td class="py-4 px-3.5">
-                            <div class="flex items-center gap-3">
-                                <div class="w-9 h-9 rounded-full {{ $t['status'] === 'active' ? 'bg-green-100 text-green-600' : 'bg-slate-100 text-slate-500' }} flex items-center justify-center font-bold text-[13px]">
-                                    {{ $t['initial'] }}
+                    @forelse ($tenants as $tenant)
+                        <tr class="border-b border-slate-50 last:border-0"
+                            data-tenant='@json($tenant)'>
+                            <td class="py-4 px-3.5">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-9 h-9 rounded-full
+                                        {{ $tenant->status === 'active' ? 'bg-green-100 text-green-600' : 'bg-slate-100 text-slate-500' }}
+                                        flex items-center justify-center font-bold text-[13px]">
+                                        {{ $tenant->initial }}
+                                    </div>
+                                    <div class="font-bold text-slate-900">{{ $tenant->user->name ?? 'Unknown' }}</div>
                                 </div>
-                                <div class="font-bold text-slate-900">{{ $t['name'] }}</div>
-                            </div>
-                        </td>
-                        <td class="py-4 px-3.5">
-                            <div class="flex flex-col gap-0.5 text-xs text-slate-500">
-                                <div class="flex items-center gap-1.5"><i class="fa-regular fa-envelope text-[11px] w-3"></i> {{ $t['email'] }}</div>
-                                <div class="flex items-center gap-1.5"><i class="fa-solid fa-phone text-[11px] w-3"></i> {{ $t['phone'] }}</div>
-                            </div>
-                        </td>
-                        <td class="py-4 px-3.5 text-[13px] font-medium text-slate-900">{{ $t['room'] }}</td>
-                        <td class="py-4 px-3.5 text-xs text-slate-700">
-                            <div><i class="fa-regular fa-calendar text-[10px] text-slate-400 mr-1"></i> Mar 20, 2026</div>
-                            <div class="text-slate-500">6:00 PM</div>
-                        </td>
-                        <td class="py-4 px-3.5 text-xs text-slate-700">
-                            <div><i class="fa-regular fa-calendar text-[10px] text-slate-400 mr-1"></i> Mar 22, 2026</div>
-                            <div class="text-slate-500">6:00 PM</div>
-                        </td>
-                        <td class="py-4 px-3.5 text-[13px] font-semibold text-slate-900">{{ $t['rate'] }}</td>
-                        <td class="py-4 px-3.5">
-                            <span class="inline-block px-2.5 py-1 rounded-xl text-[11px] font-bold
-                                {{ $t['status'] === 'active' ? 'bg-green-100 text-green-600' : 'bg-slate-100 text-slate-500' }}">
-                                {{ ucfirst($t['status']) }}
-                            </span>
-                        </td>
-                        <td class="py-4 px-3.5">
-                            <div class="flex items-center gap-3">
-                                <i class="fa-regular fa-eye text-green-500 text-sm cursor-pointer hover:scale-110 transition view-tenant-btn"></i>
-                                <i class="fa-solid fa-pencil text-slate-700 text-sm cursor-pointer hover:scale-110 transition edit-tenant-btn"></i>
-                                <i class="fa-regular fa-trash-can text-red-500 text-sm cursor-pointer hover:scale-110 transition"></i>
-                            </div>
-                        </td>
-                    </tr>
-                    @endforeach
+                            </td>
+                            <td class="py-4 px-3.5">
+                                <div class="flex flex-col gap-0.5 text-xs text-slate-500">
+                                    <div class="flex items-center gap-1.5">
+                                        <i class="fa-regular fa-envelope text-[11px] w-3"></i>
+                                        {{ $tenant->user->email ?? '—' }}
+                                    </div>
+                                    <div class="flex items-center gap-1.5">
+                                        <i class="fa-solid fa-phone text-[11px] w-3"></i>
+                                        {{ $tenant->user->phone ?? '—' }}
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="py-4 px-3.5 text-[13px] font-medium text-slate-900">
+                                {{ $tenant->room->room_number ? 'Room ' . $tenant->room->room_number : '—' }}
+                            </td>
+                            <td class="py-4 px-3.5 text-xs text-slate-700">
+                                <div>
+                                    <i class="fa-regular fa-calendar text-[10px] text-slate-400 mr-1"></i>
+                                    {{ $tenant->move_in_date?->format('M d, Y') ?? '—' }}
+                                </div>
+                                <div class="text-slate-500">{{ $tenant->move_in_time ?? '' }}</div>
+                            </td>
+                            <td class="py-4 px-3.5 text-xs text-slate-700">
+                                <div>
+                                    <i class="fa-regular fa-calendar text-[10px] text-slate-400 mr-1"></i>
+                                    {{ $tenant->move_out_date?->format('M d, Y') ?? '—' }}
+                                </div>
+                                <div class="text-slate-500">{{ $tenant->move_out_time ?? '' }}</div>
+                            </td>
+                            <td class="py-4 px-3.5 text-[13px] font-semibold text-slate-900">
+                                ₱{{ number_format($tenant->rent_rate, 0) }}
+                            </td>
+                            <td class="py-4 px-3.5">
+                                <span class="inline-block px-2.5 py-1 rounded-xl text-[11px] font-bold
+                                    {{ $tenant->status === 'active' ? 'bg-green-100 text-green-600' : 'bg-slate-100 text-slate-500' }}">
+                                    {{ ucfirst($tenant->status) }}
+                                </span>
+                            </td>
+                            <td class="py-4 px-3.5">
+                                <div class="flex items-center gap-3">
+                                    <i class="fa-regular fa-eye text-green-500 text-sm cursor-pointer hover:scale-110 transition view-tenant-btn"></i>
+                                    <i class="fa-solid fa-pencil text-slate-700 text-sm cursor-pointer hover:scale-110 transition edit-tenant-btn"></i>
+                                    <i class="fa-regular fa-trash-can text-red-500 text-sm cursor-pointer hover:scale-110 transition"></i>
+                                </div>
+                            </td>
+                        </tr>
+                    @empty
+                        <tr>
+                            <td colspan="8" class="py-10 text-center text-slate-400 text-sm">
+                                No tenants found.
+                            </td>
+                        </tr>
+                    @endforelse
                 </tbody>
             </table>
         </div>

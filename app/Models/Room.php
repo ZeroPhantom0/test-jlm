@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasOne; 
 
 class Room extends Model
 {
@@ -69,5 +70,10 @@ class Room extends Model
             str_contains($this->room_type, 'Barkada')  => 'bg-purple-100 text-purple-700',
             default                                    => 'bg-slate-100 text-slate-700',
         };
+    }
+
+    public function virtualTour(): HasOne
+    {
+        return $this->hasOne(VirtualTour::class);
     }
 }
