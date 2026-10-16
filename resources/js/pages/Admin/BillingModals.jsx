@@ -2,151 +2,213 @@
 import React, { useState, useEffect } from 'react';
 import Modal from '../../components/Modal';
 
+const csrf = () =>
+    document.querySelector('meta[name="csrf-token"]')?.content ||
+    document.querySelector('input[name="_token"]')?.value;
+
+const FALLBACK = {
+    tn: 'tn-000',
+    description: 'No description',
+    tenant: 'Unknown',
+    room: 'N/A',
+    total: '₱0',
+    rate: '₱ 0/day',
+    paid: '₱0',
+    days: '0 days',
+    balance: '₱0',
+    due: '-',
+    status: 'Unpaid',
+    check_in: '-',
+    check_out: '-',
+    payment_method: 'Not Set',
+};
+
 export default function BillingModals() {
-    const [showEdit, setShowEdit] = useState(false);
+    const [showEdit, setShowEdit]       = useState(false);
     const [showSummary, setShowSummary] = useState(false);
     const [showReceipt, setShowReceipt] = useState(false);
+    const [invoice, setInvoice]         = useState(null);
+    const [saving, setSaving]           = useState(false);
+    const [invoicesData, setInvoicesData] = useState({});
 
+    // Read invoices data from the DOM (passed by Blade)
+    useEffect(() => {
+        const el = document.getElementById('admin-billing-modals');
+        if (el?.dataset?.invoices) {
+            try {
+                setInvoicesData(JSON.parse(el.dataset.invoices));
+            } catch (e) {
+                console.error('Invalid invoices JSON', e);
+            }
+        }
+    }, []);
+
+    // ============================================================
+    // Event delegation
+    // ============================================================
     useEffect(() => {
         const handleClick = (e) => {
-            if (e.target.closest('.icon-edit')) return setShowEdit(true);
-            if (e.target.closest('.icon-view')) return setShowSummary(true);
-            if (e.target.closest('.icon-payment')) return setShowReceipt(true);
+            const editBtn    = e.target.closest('.icon-edit');
+            const viewBtn    = e.target.closest('.icon-view');
+            const payBtn     = e.target.closest('.icon-payment');
+            const receiptBtn = e.target.closest('.icon-receipt');
+            const remindBtn  = e.target.closest('.icon-remind');
+
+            const btn = editBtn || viewBtn || payBtn || receiptBtn || remindBtn;
+            if (!btn) return;
+
+            const row = btn.closest('tr');
+            const tn  = row?.dataset?.tn;
+            const data = invoicesData[tn] || FALLBACK;
+            setInvoice(data);
+
+            if (editBtn)    return setShowEdit(true);
+            if (viewBtn)    return setShowSummary(true);
+            if (payBtn)     return setShowReceipt(true);
+            if (receiptBtn) return setShowReceipt(true);
+            if (remindBtn)  return handleSendReminder(data);
         };
         document.addEventListener('click', handleClick);
         return () => document.removeEventListener('click', handleClick);
-    }, []);
+    }, [invoicesData]);
+
+    const closeAll = () => {
+        setShowEdit(false);
+        setShowSummary(false);
+        setShowReceipt(false);
+        setInvoice(null);
+    };
+
+    // ============================================================
+    // Actions — wired to backend
+    // ============================================================
+    const handleSendReminder = async (data) => {
+        if (!confirm(`Send payment reminder to ${data.tenant}?`)) return;
+        try {
+            const res = await fetch(`/admin/billing/${data.tn}/remind`, {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': csrf(),
+                },
+            });
+            const result = await res.json();
+            if (!res.ok) throw new Error(result.message || 'Failed to send reminder.');
+            alert(result.message || 'Reminder sent.');
+        } catch (err) {
+            alert(err.message);
+        }
+    };
+
+    const handleSaveEdit = async (formData) => {
+        if (!invoice) return;
+        setSaving(true);
+        try {
+            const res = await fetch(`/admin/billing/${invoice.tn}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': csrf(),
+                },
+                body: JSON.stringify(formData),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.message || 'Failed to update.');
+            closeAll();
+            window.location.reload();
+        } catch (err) {
+            alert(err.message);
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const data = invoice || FALLBACK;
+
+    const statusBadgeClass = {
+        Unpaid:  'bg-amber-100 text-amber-700',
+        Overdue: 'bg-rose-100 text-rose-600',
+        Partial: 'bg-yellow-100 text-yellow-700',
+        Pending: 'bg-blue-100 text-blue-600',
+        Paid:    'bg-green-100 text-green-600',
+    }[data.status] || 'bg-slate-100 text-slate-500';
 
     return (
         <>
+            {/* ============================================================ */}
+            {/* MODAL 1: EDIT INVOICE */}
+            {/* ============================================================ */}
             {showEdit && (
-                <Modal onClose={() => setShowEdit(false)} maxWidth="max-w-[520px]">
-                    <div className="p-5 pb-4 flex items-center justify-between border-b border-slate-100">
-                        <h3 className="text-lg font-bold text-slate-900">Edit Invoice</h3>
-                        <button onClick={() => setShowEdit(false)} className="text-slate-400 hover:text-slate-700 text-lg">
-                            <i className="fa-solid fa-xmark"></i>
-                        </button>
-                    </div>
-                    <div className="p-6 overflow-y-auto">
-                        <div className="grid grid-cols-2 gap-3.5">
-                            <div>
-                                <label className="block text-xs font-semibold text-slate-600 mb-1.5">Tenant Name</label>
-                                <input type="text" defaultValue="Nicole Custorio" className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-[13px] outline-none" />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-semibold text-slate-600 mb-1.5">Room Number</label>
-                                <input type="text" defaultValue="R202" className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-[13px] outline-none" />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-semibold text-slate-600 mb-1.5">Check In</label>
-                                <input type="text" defaultValue="03-20-2026 07:00 AM" className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-[13px] outline-none" />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-semibold text-slate-600 mb-1.5">Check Out</label>
-                                <input type="text" defaultValue="03-22-2026 07:00 AM" className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-[13px] outline-none" />
-                            </div>
-                            <div className="col-span-2">
-                                <label className="block text-xs font-semibold text-slate-600 mb-1.5">Description</label>
-                                <input type="text" defaultValue="Solo - March 20-22, 2026" className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-[13px] outline-none" />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-semibold text-slate-600 mb-1.5">Total Amount (₱)</label>
-                                <input type="text" defaultValue="1,900" className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-[13px] outline-none" />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-semibold text-slate-600 mb-1.5">Amount Paid</label>
-                                <input type="text" defaultValue="0" className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-[13px] outline-none" />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-semibold text-slate-600 mb-1.5">Balance</label>
-                                <input type="text" defaultValue="1,900" className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-[13px] outline-none" />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-semibold text-slate-600 mb-1.5">Due Date</label>
-                                <input type="text" defaultValue="03-22-2026" className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-[13px] outline-none" />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-semibold text-slate-600 mb-1.5">Payment Method</label>
-                                <select className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-[13px] outline-none bg-white">
-                                    <option>Not Set</option>
-                                    <option>GCash</option>
-                                    <option>Over The Counter</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label className="block text-xs font-semibold text-slate-600 mb-1.5">Status</label>
-                                <select className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-[13px] outline-none bg-white">
-                                    <option>Unpaid</option>
-                                    <option>Overdue</option>
-                                    <option>Partial</option>
-                                    <option>Pending</option>
-                                    <option>Paid</option>
-                                </select>
-                            </div>
-                        </div>
-                    </div>
-                    <div className="p-5 border-t border-slate-100 flex justify-end gap-3">
-                        <button onClick={() => setShowEdit(false)} className="text-slate-600 text-[13px] font-semibold px-4 py-2">Cancel</button>
-                        <button onClick={() => setShowEdit(false)} className="bg-[#02122b] text-white px-5 py-2.5 rounded-lg text-[13px] font-semibold">
-                            Save Changes
-                        </button>
-                    </div>
-                </Modal>
+                <EditInvoiceModal
+                    data={data}
+                    onClose={closeAll}
+                    onSave={handleSaveEdit}
+                    saving={saving}
+                />
             )}
 
+            {/* ============================================================ */}
+            {/* MODAL 2: INVOICE SUMMARY */}
+            {/* ============================================================ */}
             {showSummary && (
-                <Modal onClose={() => setShowSummary(false)} maxWidth="max-w-[520px]">
+                <Modal onClose={closeAll} maxWidth="max-w-[520px]">
                     <div className="p-5 pb-4 flex items-center justify-between border-b border-slate-100">
                         <h3 className="text-lg font-bold text-slate-900">Invoice Summary</h3>
-                        <button onClick={() => setShowSummary(false)} className="text-slate-400 hover:text-slate-700 text-lg">
+                        <button onClick={closeAll} className="text-slate-400 hover:text-slate-700 text-lg">
                             <i className="fa-solid fa-xmark"></i>
                         </button>
                     </div>
                     <div className="p-6 overflow-y-auto flex flex-col gap-4">
                         <div className="flex items-center justify-between">
-                            <span className="text-xs text-slate-400">inv-101</span>
-                            <span className="px-3 py-1 rounded-full text-[11px] font-bold bg-amber-100 text-amber-700">Unpaid</span>
+                            <span className="text-xs text-slate-400">{data.tn}</span>
+                            <span className={`px-3 py-1 rounded-full text-[11px] font-bold ${statusBadgeClass}`}>
+                                {data.status}
+                            </span>
                         </div>
 
                         <div className="bg-orange-50 rounded-xl p-5 text-center">
                             <div className="text-[11px] font-bold text-orange-600">Total Amount</div>
-                            <div className="text-[28px] font-extrabold text-orange-600 mt-1">₱1,900</div>
+                            <div className="text-[28px] font-extrabold text-orange-600 mt-1">{data.total}</div>
                             <div className="flex justify-center gap-5 text-[11px] text-slate-400 mt-1.5">
-                                <span>2 days</span>
-                                <span>950 per day</span>
+                                <span>{data.days}</span>
+                                <span>{data.rate.replace('₱ ', '')} per day</span>
                             </div>
                         </div>
 
                         <div className="grid grid-cols-2 gap-3">
-                            <div className="bg-slate-50 rounded-xl p-3"><div className="text-[11px] text-slate-400">Tenant</div><div className="text-[13px] font-bold text-slate-900 mt-0.5">Nicole Custorio</div></div>
-                            <div className="bg-slate-50 rounded-xl p-3"><div className="text-[11px] text-slate-400">Room Number</div><div className="text-[13px] font-bold text-slate-900 mt-0.5">R202</div></div>
-                            <div className="bg-slate-50 rounded-xl p-3"><div className="text-[11px] text-slate-400">Check In</div><div className="text-[13px] font-bold text-slate-900 mt-0.5">03-20-2026 07:00 AM</div></div>
-                            <div className="bg-slate-50 rounded-xl p-3"><div className="text-[11px] text-slate-400">Check Out</div><div className="text-[13px] font-bold text-slate-900 mt-0.5">03-22-2026 07:00 AM</div></div>
-                            <div className="bg-slate-50 rounded-xl p-3"><div className="text-[11px] text-slate-400">Amount Paid</div><div className="text-[13px] font-bold text-slate-900 mt-0.5">₱0</div></div>
-                            <div className="bg-slate-50 rounded-xl p-3"><div className="text-[11px] text-slate-400">Balance</div><div className="text-[13px] font-bold text-slate-900 mt-0.5">₱1,900</div></div>
-                            <div className="bg-slate-50 rounded-xl p-3 col-span-2"><div className="text-[11px] text-slate-400">Due Date</div><div className="text-[13px] font-bold text-slate-900 mt-0.5">03-22-2026</div></div>
+                            <div className="bg-slate-50 rounded-xl p-3"><div className="text-[11px] text-slate-400">Tenant</div><div className="text-[13px] font-bold text-slate-900 mt-0.5">{data.tenant}</div></div>
+                            <div className="bg-slate-50 rounded-xl p-3"><div className="text-[11px] text-slate-400">Room Number</div><div className="text-[13px] font-bold text-slate-900 mt-0.5">{data.room}</div></div>
+                            <div className="bg-slate-50 rounded-xl p-3"><div className="text-[11px] text-slate-400">Check In</div><div className="text-[13px] font-bold text-slate-900 mt-0.5">{data.check_in}</div></div>
+                            <div className="bg-slate-50 rounded-xl p-3"><div className="text-[11px] text-slate-400">Check Out</div><div className="text-[13px] font-bold text-slate-900 mt-0.5">{data.check_out}</div></div>
+                            <div className="bg-slate-50 rounded-xl p-3"><div className="text-[11px] text-slate-400">Amount Paid</div><div className="text-[13px] font-bold text-slate-900 mt-0.5">{data.paid}</div></div>
+                            <div className="bg-slate-50 rounded-xl p-3"><div className="text-[11px] text-slate-400">Balance</div><div className="text-[13px] font-bold text-slate-900 mt-0.5">{data.balance}</div></div>
+                            <div className="bg-slate-50 rounded-xl p-3 col-span-2"><div className="text-[11px] text-slate-400">Due Date</div><div className="text-[13px] font-bold text-slate-900 mt-0.5">{data.due}</div></div>
                         </div>
 
                         <div className="text-[13px] font-bold text-slate-900 mt-1">Payments:</div>
 
                         <div className="bg-[#02122b] text-white rounded-xl p-4 flex flex-col gap-2.5">
                             <div className="flex justify-between text-xs"><span className="text-slate-400">Payment #</span><span className="font-semibold">-</span></div>
-                            <div className="flex justify-between text-xs"><span className="text-slate-400">Amount</span><span className="font-semibold">₱0</span></div>
-                            <div className="flex justify-between text-xs"><span className="text-slate-400">Payment Method</span><span className="font-semibold">-</span></div>
+                            <div className="flex justify-between text-xs"><span className="text-slate-400">Amount</span><span className="font-semibold">{data.paid}</span></div>
+                            <div className="flex justify-between text-xs"><span className="text-slate-400">Payment Method</span><span className="font-semibold">{data.payment_method}</span></div>
                             <div className="flex justify-between text-xs"><span className="text-slate-400">Date Paid</span><span className="font-semibold">-</span></div>
                         </div>
                     </div>
                     <div className="p-5 border-t border-slate-100 flex justify-start">
-                        <button onClick={() => setShowSummary(false)} className="bg-[#02122b] text-white px-5 py-2.5 rounded-lg text-[13px] font-semibold">Close</button>
+                        <button onClick={closeAll} className="bg-[#02122b] text-white px-5 py-2.5 rounded-lg text-[13px] font-semibold">Close</button>
                     </div>
                 </Modal>
             )}
 
+            {/* ============================================================ */}
+            {/* MODAL 3: PAYMENT RECEIPT */}
+            {/* ============================================================ */}
             {showReceipt && (
-                <Modal onClose={() => setShowReceipt(false)} maxWidth="max-w-[520px]">
+                <Modal onClose={closeAll} maxWidth="max-w-[520px]">
                     <div className="p-5 pb-4 flex items-center justify-between border-b border-slate-100">
                         <h3 className="text-lg font-bold text-slate-900">Payment Receipt</h3>
-                        <button onClick={() => setShowReceipt(false)} className="text-slate-400 hover:text-slate-700 text-lg">
+                        <button onClick={closeAll} className="text-slate-400 hover:text-slate-700 text-lg">
                             <i className="fa-solid fa-xmark"></i>
                         </button>
                     </div>
@@ -159,18 +221,18 @@ export default function BillingModals() {
                                 <h4 className="text-base font-extrabold text-slate-900">Official Receipt</h4>
                                 <p className="text-[11px] text-orange-600 font-semibold">JLM Cozy Cabin</p>
                             </div>
-                            <div className="text-sm font-semibold text-slate-600">Transaction No. OTC-20260215-0018</div>
-                            <div className="text-[11px] text-slate-400">Date of Issue: March 22, 2026</div>
+                            <div className="text-sm font-semibold text-slate-600">Transaction No. {data.tn.toUpperCase()}</div>
+                            <div className="text-[11px] text-slate-400">Date of Issue: {data.due}</div>
 
                             <div className="w-full border-t border-slate-100 pt-3 flex flex-col gap-2">
                                 {[
-                                    ['Receipt No.', 'Inv-105'],
-                                    ['Tenant', 'Francis Sabiniano'],
-                                    ['Room', 'Room 203'],
-                                    ['Description', 'Solo - January 15-22, 2026'],
-                                    ['Check-in', '01-15-2026 10:00AM'],
-                                    ['Check-out', '01-22-2026 10:00AM'],
-                                    ['Rate Per Day', '₱600'],
+                                    ['Receipt No.',       data.tn.toUpperCase()],
+                                    ['Tenant',            data.tenant],
+                                    ['Room',              `Room ${data.room}`],
+                                    ['Description',       data.description],
+                                    ['Check-in',          data.check_in],
+                                    ['Check-out',         data.check_out],
+                                    ['Rate Per Day',      data.rate.replace('₱ ', '₱')],
                                 ].map((row, i) => (
                                     <div key={i} className="flex justify-between text-xs">
                                         <span className="text-slate-500 font-medium">{row[0]}</span>
@@ -179,16 +241,16 @@ export default function BillingModals() {
                                 ))}
                                 <div className="flex justify-between text-sm mt-2 pt-2 border-t border-slate-100">
                                     <span className="text-slate-900 font-bold">Total Amount</span>
-                                    <span className="text-slate-900 font-extrabold">₱4,200</span>
+                                    <span className="text-slate-900 font-extrabold">{data.total}</span>
                                 </div>
                             </div>
 
                             <div className="w-full border-t border-dashed border-slate-200 pt-3 flex flex-col gap-2">
                                 <div className="text-xs font-bold text-slate-900 mb-1">Payment Details:</div>
-                                <div className="flex justify-between text-xs"><span className="text-slate-500">Payment #</span><span className="text-slate-900 font-bold">REF-20260215-0018</span></div>
-                                <div className="flex justify-between text-xs"><span className="text-slate-500">Payment Method</span><span className="text-slate-900 font-bold">Over The Counter</span></div>
-                                <div className="flex justify-between text-xs"><span className="text-slate-500">Amount Paid</span><span className="text-slate-900 font-bold">₱2,200</span></div>
-                                <div className="flex justify-between text-xs"><span className="text-slate-500">Date Paid</span><span className="text-slate-900 font-bold">Jan 15, 2026</span></div>
+                                <div className="flex justify-between text-xs"><span className="text-slate-500">Payment #</span><span className="text-slate-900 font-bold">REF-{data.tn.toUpperCase()}</span></div>
+                                <div className="flex justify-between text-xs"><span className="text-slate-500">Payment Method</span><span className="text-slate-900 font-bold">{data.payment_method}</span></div>
+                                <div className="flex justify-between text-xs"><span className="text-slate-500">Amount Paid</span><span className="text-slate-900 font-bold">{data.paid}</span></div>
+                                <div className="flex justify-between text-xs"><span className="text-slate-500">Date Paid</span><span className="text-slate-900 font-bold">{data.due}</span></div>
                             </div>
 
                             <div className="text-center mt-2">
@@ -204,5 +266,115 @@ export default function BillingModals() {
                 </Modal>
             )}
         </>
+    );
+}
+
+/* ============================================================
+   Edit Invoice Modal — separate component so we can use useState
+   ============================================================ */
+function EditInvoiceModal({ data, onClose, onSave, saving }) {
+    const [form, setForm] = useState({
+        tenant_name:    data.tenant,
+        room_number:    data.room,
+        description:    data.description,
+        check_in:       data.check_in,
+        check_out:      data.check_out,
+        rate_per_day:   data.rate.replace(/[₱\s,]/g, '').replace('/day', ''),
+        days:           data.days.replace(/\D/g, ''),
+        amount_paid:    data.paid.replace(/[₱\s,]/g, ''),
+        due_date:       data.due,
+        payment_method: data.payment_method,
+        status:         data.status,
+    });
+
+    const updateField = (key, value) => setForm((f) => ({ ...f, [key]: value }));
+
+    const handleSubmit = () => {
+        onSave({
+            ...form,
+            rate_per_day: parseFloat(form.rate_per_day) || 0,
+            days:         parseInt(form.days, 10) || 1,
+            amount_paid:  parseFloat(form.amount_paid) || 0,
+        });
+    };
+
+    return (
+        <Modal onClose={onClose} maxWidth="max-w-[520px]">
+            <div className="p-5 pb-4 flex items-center justify-between border-b border-slate-100">
+                <h3 className="text-lg font-bold text-slate-900">Edit Invoice</h3>
+                <button onClick={onClose} className="text-slate-400 hover:text-slate-700 text-lg">
+                    <i className="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            <div className="p-6 overflow-y-auto">
+                <div className="grid grid-cols-2 gap-3.5">
+                    <div>
+                        <label className="block text-xs font-semibold text-slate-600 mb-1.5">Tenant Name</label>
+                        <input type="text" value={form.tenant_name} onChange={(e) => updateField('tenant_name', e.target.value)} className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-[13px] outline-none" />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-semibold text-slate-600 mb-1.5">Room Number</label>
+                        <input type="text" value={form.room_number} onChange={(e) => updateField('room_number', e.target.value)} className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-[13px] outline-none" />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-semibold text-slate-600 mb-1.5">Check In</label>
+                        <input type="text" value={form.check_in} onChange={(e) => updateField('check_in', e.target.value)} className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-[13px] outline-none" />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-semibold text-slate-600 mb-1.5">Check Out</label>
+                        <input type="text" value={form.check_out} onChange={(e) => updateField('check_out', e.target.value)} className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-[13px] outline-none" />
+                    </div>
+                    <div className="col-span-2">
+                        <label className="block text-xs font-semibold text-slate-600 mb-1.5">Description</label>
+                        <input type="text" value={form.description} onChange={(e) => updateField('description', e.target.value)} className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-[13px] outline-none" />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-semibold text-slate-600 mb-1.5">Rate Per Day (₱)</label>
+                        <input type="text" value={form.rate_per_day} onChange={(e) => updateField('rate_per_day', e.target.value.replace(/[^\d.]/g, ''))} className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-[13px] outline-none" />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-semibold text-slate-600 mb-1.5">Days</label>
+                        <input type="text" value={form.days} onChange={(e) => updateField('days', e.target.value.replace(/\D/g, ''))} className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-[13px] outline-none" />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-semibold text-slate-600 mb-1.5">Amount Paid (₱)</label>
+                        <input type="text" value={form.amount_paid} onChange={(e) => updateField('amount_paid', e.target.value.replace(/[^\d.]/g, ''))} className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-[13px] outline-none" />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-semibold text-slate-600 mb-1.5">Due Date</label>
+                        <input type="text" value={form.due_date} onChange={(e) => updateField('due_date', e.target.value)} className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-[13px] outline-none" />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-semibold text-slate-600 mb-1.5">Payment Method</label>
+                        <select value={form.payment_method} onChange={(e) => updateField('payment_method', e.target.value)} className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-[13px] outline-none bg-white">
+                            <option>Not Set</option>
+                            <option>GCash</option>
+                            <option>Over The Counter</option>
+                            <option>Bank Transfer</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label className="block text-xs font-semibold text-slate-600 mb-1.5">Status</label>
+                        <select value={form.status} onChange={(e) => updateField('status', e.target.value)} className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-[13px] outline-none bg-white">
+                            <option>Unpaid</option>
+                            <option>Overdue</option>
+                            <option>Partial</option>
+                            <option>Pending</option>
+                            <option>Paid</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <div className="p-5 border-t border-slate-100 flex justify-end gap-3">
+                <button onClick={onClose} className="text-slate-600 text-[13px] font-semibold px-4 py-2">Cancel</button>
+                <button
+                    onClick={handleSubmit}
+                    disabled={saving}
+                    className="bg-[#02122b] text-white px-5 py-2.5 rounded-lg text-[13px] font-semibold disabled:opacity-50"
+                >
+                    {saving ? 'Saving…' : 'Save Changes'}
+                </button>
+            </div>
+        </Modal>
     );
 }

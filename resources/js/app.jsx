@@ -20,14 +20,31 @@ import ReservationsModals from './pages/Admin/ReservationsModals';
 import AnnouncementsModals from './pages/Admin/AnnouncementsModals';
 import VirtualTourModals from './pages/Admin/VirtualTourModals';
 import SettingsArchive from './pages/Admin/SettingsArchive';
+import RoomChangeModals from './pages/Admin/RoomChangeModals';
+import StayExtensionModals from './pages/Admin/StayExtensionModals';
+
+// Tenant service modals
+import TenantMaintenanceModals   from './pages/Services/TenantMaintenanceModals';
+import TenantRoomChangeModals    from './pages/Services/RoomChangeModals';
+import TenantStayExtensionModals from './pages/Services/StayExtensionModals';
+
+// Tenant billing modal
+import PaymentModal from './pages/Billing/PaymentModal';
+
+// Tenant reservations modal
+import TenantReservationsModal from './pages/Reservations/ReservationsModal';
+
+// Tenant announcements modal
+import TenantAnnouncementsModals from './pages/Announcements/AnnouncementsModals';
+
+// Tenant history modal
+import TenantHistoryModals from './pages/History/HistoryModals';
+
+// ✅ Tenant settings accordion (behavior only, not a modal)
+import TenantSettingsAccordions from './pages/Settings/SettingsAccordions';
 
 // ============================================================
 // INERTIA APP BOOTSTRAP
-// Inertia v2 renders:
-//   <div id="app"></div>
-//   <script data-page="app" type="application/json">...</script>
-// So we detect the presence of the JSON script, not a data-page
-// attribute on the div (that was v1 behavior).
 // ============================================================
 const inertiaRoot     = document.getElementById('app');
 const inertiaPageData = document.querySelector('script[data-page="app"]');
@@ -35,7 +52,6 @@ const inertiaPageData = document.querySelector('script[data-page="app"]');
 if (inertiaRoot && inertiaPageData) {
     createInertiaApp({
         resolve: (name) => {
-            // ⚠️ MUST match your actual folder name — lowercase `pages`
             const pages = import.meta.glob('./pages/**/*.jsx', { eager: true });
             return pages[`./pages/${name}.jsx`];
         },
@@ -49,7 +65,6 @@ if (inertiaRoot && inertiaPageData) {
 // EXISTING REACT COMPONENT MOUNTER (Tenant & Admin portals)
 // ============================================================
 function mountReact() {
-    // TENANT PORTAL
     const tenantSidebar = document.querySelector('[data-react="sidebar"]');
     if (tenantSidebar && !tenantSidebar.dataset.mounted) {
         const props = JSON.parse(tenantSidebar.dataset.props || '{}');
@@ -64,7 +79,6 @@ function mountReact() {
         tenantHeader.dataset.mounted = 'true';
     }
 
-    // ADMIN PORTAL
     const adminSidebar = document.querySelector('[data-react="admin-sidebar"]');
     if (adminSidebar && !adminSidebar.dataset.mounted) {
         const props = JSON.parse(adminSidebar.dataset.props || '{}');
@@ -79,7 +93,6 @@ function mountReact() {
         adminHeader.dataset.mounted = 'true';
     }
 
-    // ADMIN MODALS
     const mountIfExists = (id, Component) => {
         const el = document.getElementById(id);
         if (el && !el.dataset.mounted) {
@@ -88,14 +101,37 @@ function mountReact() {
         }
     };
 
-    mountIfExists('admin-rooms-modals',         RoomsModals);
-    mountIfExists('admin-tenants-modals',       TenantsModals);
-    mountIfExists('admin-services-modals',      ServicesModals);
-    mountIfExists('admin-billing-modals',       BillingModals);
-    mountIfExists('admin-reservations-modals',  ReservationsModals);
-    mountIfExists('admin-announcements-modals', AnnouncementsModals);
-    mountIfExists('admin-virtual-tour-modals',  VirtualTourModals);
-    mountIfExists('admin-settings-archive',     SettingsArchive);
+    // ---------- ADMIN MODALS ----------
+    mountIfExists('admin-rooms-modals',           RoomsModals);
+    mountIfExists('admin-tenants-modals',         TenantsModals);
+    mountIfExists('admin-services-modals',        ServicesModals);
+    mountIfExists('admin-billing-modals',         BillingModals);
+    mountIfExists('admin-reservations-modals',    ReservationsModals);
+    mountIfExists('admin-announcements-modals',   AnnouncementsModals);
+    mountIfExists('admin-virtual-tour-modals',    VirtualTourModals);
+    mountIfExists('admin-settings-archive',       SettingsArchive);
+    mountIfExists('admin-room-change-modals',     RoomChangeModals);
+    mountIfExists('admin-stay-extension-modals',  StayExtensionModals);
+
+    // ---------- TENANT SERVICE MODALS ----------
+    mountIfExists('tenant-maintenance-modals',    TenantMaintenanceModals);
+    mountIfExists('services-room-change-root',    TenantRoomChangeModals);
+    mountIfExists('services-stay-extension-root', TenantStayExtensionModals);
+
+    // ---------- TENANT BILLING MODAL ----------
+    mountIfExists('payment-modal-root',           PaymentModal);
+
+    // ---------- TENANT RESERVATIONS MODAL ----------
+    mountIfExists('tenant-reservations-modals',   TenantReservationsModal);
+
+    // ---------- TENANT ANNOUNCEMENTS MODAL ----------
+    mountIfExists('tenant-announcements-modals',  TenantAnnouncementsModals);
+
+    // ---------- TENANT HISTORY MODAL ----------
+    mountIfExists('tenant-history-modals',        TenantHistoryModals);
+
+    // ---------- TENANT SETTINGS ACCORDIONS ---------- 
+    mountIfExists('tenant-settings-accordions',   TenantSettingsAccordions);
 }
 
 if (document.readyState === 'loading') {

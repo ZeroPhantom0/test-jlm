@@ -19,34 +19,42 @@
     <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div class="bg-white rounded-2xl px-5 py-4 border border-slate-200 shadow-sm">
             <span class="text-[13px] text-slate-500 font-medium">Total</span>
-            <div class="text-[22px] font-bold text-slate-900 mt-2">2</div>
+            <div class="text-[22px] font-bold text-slate-900 mt-2">{{ $metrics['total'] }}</div>
         </div>
         <div class="bg-white rounded-2xl px-5 py-4 border border-slate-200 shadow-sm">
             <span class="text-[13px] text-slate-500 font-medium">Pending</span>
-            <div class="mt-2"><div class="w-7 h-7 rounded-full bg-yellow-100 text-amber-700 flex items-center justify-center text-[13px] font-bold">1</div></div>
+            <div class="mt-2">
+                <div class="w-7 h-7 rounded-full bg-yellow-100 text-amber-700 flex items-center justify-center text-[13px] font-bold">{{ $metrics['pending'] }}</div>
+            </div>
         </div>
         <div class="bg-white rounded-2xl px-5 py-4 border border-slate-200 shadow-sm">
             <span class="text-[13px] text-slate-500 font-medium">Approved</span>
-            <div class="mt-2"><div class="w-7 h-7 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-[13px] font-bold">1</div></div>
+            <div class="mt-2">
+                <div class="w-7 h-7 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-[13px] font-bold">{{ $metrics['approved'] }}</div>
+            </div>
         </div>
         <div class="bg-white rounded-2xl px-5 py-4 border border-slate-200 shadow-sm">
             <span class="text-[13px] text-slate-500 font-medium">Rejected</span>
-            <div class="mt-2"><div class="w-7 h-7 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center text-[13px] font-bold">0</div></div>
+            <div class="mt-2">
+                <div class="w-7 h-7 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center text-[13px] font-bold">{{ $metrics['rejected'] }}</div>
+            </div>
         </div>
     </div>
 
     {{-- Filters --}}
     <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 flex flex-col md:flex-row gap-4">
-        <div class="flex-1 bg-slate-50 border border-slate-200 rounded-[10px] px-4 py-2.5 flex items-center gap-2.5">
-            <i class="fa-solid fa-magnifying-glass text-slate-400 text-sm"></i>
-            <input type="text" placeholder="Search by tenant, room..." class="w-full text-[13.5px] outline-none bg-transparent">
-        </div>
-        <select class="bg-white border border-slate-200 rounded-[10px] px-4 py-2.5 text-[13.5px] font-medium text-slate-700 outline-none cursor-pointer min-w-[160px]">
-            <option>All Statuses</option>
-            <option>Pending</option>
-            <option>Approved</option>
-            <option>Rejected</option>
-        </select>
+        <form method="GET" action="{{ route('admin.services.stay-extension') }}" class="flex-1 flex flex-col md:flex-row gap-4">
+            <div class="flex-1 bg-slate-50 border border-slate-200 rounded-[10px] px-4 py-2.5 flex items-center gap-2.5">
+                <i class="fa-solid fa-magnifying-glass text-slate-400 text-sm"></i>
+                <input type="text" name="search" value="{{ $filters['search'] ?? '' }}" placeholder="Search by tenant, room..." class="w-full text-[13.5px] outline-none bg-transparent">
+            </div>
+            <select name="status" onchange="this.form.submit()" class="bg-white border border-slate-200 rounded-[10px] px-4 py-2.5 text-[13.5px] font-medium text-slate-700 outline-none cursor-pointer min-w-[160px]">
+                <option value="">All Statuses</option>
+                <option value="Pending" {{ ($filters['status'] ?? '') === 'Pending' ? 'selected' : '' }}>Pending</option>
+                <option value="Approved" {{ ($filters['status'] ?? '') === 'Approved' ? 'selected' : '' }}>Approved</option>
+                <option value="Rejected" {{ ($filters['status'] ?? '') === 'Rejected' ? 'selected' : '' }}>Rejected</option>
+            </select>
+        </form>
     </div>
 
     {{-- Table --}}
@@ -64,47 +72,57 @@
                     </tr>
                 </thead>
                 <tbody>
-                    @foreach([
-                        ['name' => 'Nicole Custorio', 'room' => 'Room 101', 'current' => 'Mar 22, 2026', 'requested' => 'Mar 26, 2026', 'extension' => '+4 days', 'status' => 'Pending', 'statusClass' => 'bg-yellow-100 text-amber-700'],
-                        ['name' => 'Elle Dela Cruz', 'room' => 'Room 102', 'current' => 'Mar 21, 2026', 'requested' => 'Mar 23, 2026', 'extension' => '+2 days', 'status' => 'Approved', 'statusClass' => 'bg-emerald-100 text-emerald-600'],
-                    ] as $req)
+                    @forelse($requests as $req)
                     <tr class="border-b border-slate-50 last:border-0">
                         <td class="py-4 px-5">
-                            <div class="text-sm font-bold text-slate-900">{{ $req['name'] }}</div>
-                            <div class="text-xs text-slate-400 mt-0.5">{{ $req['room'] }}</div>
+                            <div class="text-sm font-bold text-slate-900">{{ $req->tenant->user->name ?? 'Unknown' }}</div>
+                            <div class="text-xs text-slate-400 mt-0.5">{{ $req->room?->room_number ? 'Room ' . $req->room->room_number : 'N/A' }}</div>
                         </td>
                         <td class="py-4 px-5">
                             <div class="flex items-center gap-2 text-[13px] text-slate-700">
                                 <i class="fa-regular fa-calendar text-slate-400 text-[13px]"></i>
-                                {{ $req['current'] }}
+                                {{ $req->current_lease_end?->format('M d, Y') }}
                             </div>
                         </td>
                         <td class="py-4 px-5">
                             <div class="flex items-center gap-2 text-[13px] text-purple-700 font-semibold">
                                 <i class="fa-regular fa-calendar text-purple-600 text-[13px]"></i>
-                                {{ $req['requested'] }}
+                                {{ $req->requested_lease_end?->format('M d, Y') }}
                             </div>
                         </td>
                         <td class="py-4 px-5">
-                            <span class="inline-block bg-purple-100 text-purple-700 text-[11px] font-bold px-2.5 py-1 rounded-xl">{{ $req['extension'] }}</span>
+                            <span class="inline-block bg-purple-100 text-purple-700 text-[11px] font-bold px-2.5 py-1 rounded-xl">{{ $req->extension_label }}</span>
                         </td>
                         <td class="py-4 px-5">
-                            <span class="inline-block px-3 py-1 rounded-full text-xs font-semibold {{ $req['statusClass'] }}">{{ $req['status'] }}</span>
+                            <span class="inline-block px-3 py-1 rounded-full text-xs font-semibold {{ $req->status_class }}">{{ $req->status }}</span>
                         </td>
                         <td class="py-4 px-5">
                             <div class="flex items-center justify-end gap-3 text-slate-400 text-sm">
-                                @if($req['status'] === 'Pending')
+                                @if($req->status === 'Pending')
                                 <i class="fa-regular fa-circle-check text-emerald-500 cursor-pointer hover:text-emerald-600"></i>
                                 <i class="fa-regular fa-circle-xmark text-rose-500 cursor-pointer hover:text-rose-600"></i>
                                 @endif
-                                <i class="fa-regular fa-eye cursor-pointer hover:text-slate-700"></i>
+                                <i
+                                    class="fa-regular fa-eye cursor-pointer hover:text-slate-700 open-details-btn"
+                                    data-request-id="{{ $req->id }}"
+                                ></i>
                             </div>
                         </td>
                     </tr>
-                    @endforeach
+                    @empty
+                    <tr>
+                        <td colspan="6" class="text-center py-12 text-slate-400">
+                            <i class="fa-solid fa-inbox text-4xl mb-3"></i>
+                            <p class="text-sm">No stay extension requests found.</p>
+                        </td>
+                    </tr>
+                    @endforelse
                 </tbody>
             </table>
         </div>
     </div>
 </div>
+
+{{-- React Modal Mount Point with data --}}
+<div id="admin-stay-extension-modals" data-requests='@json($requestsForReact)'></div>
 @endsection

@@ -1,57 +1,188 @@
 // resources/js/pages/Services/StayExtensionModals.jsx
 import React, { useState, useEffect } from 'react';
+import Modal from '../../components/Modal';
+
+const csrf = () =>
+    document.querySelector('meta[name="csrf-token"]')?.content ||
+    document.querySelector('input[name="_token"]')?.value;
 
 export default function StayExtensionModals() {
-    const [showSubmit, setShowSubmit] = useState(false);
-    const [showDetails, setShowDetails] = useState(false);
+    const [showSubmit, setShowSubmit]     = useState(false);
+    const [showDetails, setShowDetails]   = useState(false);
+    const [request, setRequest]           = useState(null);
+    const [saving, setSaving]             = useState(false);
+    const [requestsData, setRequestsData] = useState({});
+    const [roomNumber, setRoomNumber]     = useState('');
+    const [currentLeaseEnd, setCurrentLeaseEnd] = useState('');
 
+    // Form state
+    const [form, setForm] = useState({
+        current_lease_end:   '',
+        requested_lease_end: '',
+        reason:              '',
+    });
+
+    // ============================================================
+    // Read data attributes from mount element
+    // ============================================================
     useEffect(() => {
-        const newBtn = document.getElementById('open-new-stay-extension');
-        const viewBtn = document.getElementById('view-stay-extension-details');
+        const el = document.getElementById('services-stay-extension-root');
+        if (!el) return;
 
-        const openSubmit = () => setShowSubmit(true);
-        const openDetails = () => setShowDetails(true);
+        setRoomNumber(el.dataset.roomNumber || '');
+        setCurrentLeaseEnd(el.dataset.currentLeaseEnd || '');
 
-        newBtn?.addEventListener('click', openSubmit);
-        viewBtn?.addEventListener('click', openDetails);
-
-        return () => {
-            newBtn?.removeEventListener('click', openSubmit);
-            viewBtn?.removeEventListener('click', openDetails);
-        };
+        if (el.dataset.requests) {
+            try {
+                setRequestsData(JSON.parse(el.dataset.requests));
+            } catch (e) {
+                console.error('Invalid requests JSON', e);
+            }
+        }
     }, []);
+
+    // ============================================================
+    // Event delegation
+    // ============================================================
+    useEffect(() => {
+        const handler = (e) => {
+            // Open submit modal
+            if (e.target.closest('#open-new-stay-extension')) {
+                setForm({
+                    current_lease_end:   currentLeaseEnd,
+                    requested_lease_end: '',
+                    reason:              '',
+                });
+                setShowSubmit(true);
+                return;
+            }
+
+            // Open details modal
+            const viewBtn = e.target.closest('.view-stay-extension-details-btn');
+            if (viewBtn) {
+                const id = viewBtn.dataset.requestId;
+                const data = requestsData[id];
+                if (data) {
+                    setRequest(data);
+                    setShowDetails(true);
+                }
+                return;
+            }
+        };
+
+        document.addEventListener('click', handler);
+        return () => document.removeEventListener('click', handler);
+    }, [requestsData, currentLeaseEnd]);
+
+    const updateField = (key, value) => setForm((f) => ({ ...f, [key]: value }));
+
+    // ============================================================
+    // Submit new stay extension request
+    // ============================================================
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+
+        if (!form.current_lease_end.trim() ||
+            !form.requested_lease_end.trim() ||
+            !form.reason.trim()) {
+            alert('Please fill in all required fields.');
+            return;
+        }
+
+        setSaving(true);
+        try {
+            const res = await fetch('/tenants/services/stay-extension', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': csrf(),
+                },
+                body: JSON.stringify({
+                    room_number:         roomNumber,
+                    current_lease_end:   form.current_lease_end,
+                    requested_lease_end: form.requested_lease_end,
+                    reason:              form.reason,
+                }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.message || 'Failed to submit request.');
+            setShowSubmit(false);
+            window.location.reload();
+        } catch (err) {
+            alert(err.message);
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    // ============================================================
+    // Cancel a pending request
+    // ============================================================
+    const handleCancelRequest = async () => {
+        if (!request) return;
+        if (!confirm('Cancel this stay extension request?')) return;
+
+        setSaving(true);
+        try {
+            const res = await fetch(`/tenants/services/stay-extension/${request.id}/cancel`, {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': csrf(),
+                },
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.message || 'Failed to cancel request.');
+            setShowDetails(false);
+            window.location.reload();
+        } catch (err) {
+            alert(err.message);
+        } finally {
+            setSaving(false);
+        }
+    };
 
     return (
         <>
+            {/* ============================================================ */}
             {/* MODAL 1: Submit Stay Extension Request */}
+            {/* ============================================================ */}
             {showSubmit && (
-                <div
-                    className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[999] flex items-center justify-center p-4"
-                    onClick={(e) => e.target === e.currentTarget && setShowSubmit(false)}
-                >
-                    <div className="bg-white rounded-2xl w-full max-w-[480px] p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
-                        <button onClick={() => setShowSubmit(false)} className="absolute top-5 right-5 text-slate-400 hover:text-slate-600">
+                <Modal onClose={() => setShowSubmit(false)} maxWidth="max-w-[480px]">
+                    <div className="p-5 pb-4 flex items-center justify-between border-b border-slate-100">
+                        <h3 className="text-lg font-bold text-slate-900">Submit Stay Extension Request</h3>
+                        <button
+                            onClick={() => setShowSubmit(false)}
+                            className="text-slate-400 hover:text-slate-700 text-lg"
+                        >
                             <i className="fa-solid fa-xmark"></i>
                         </button>
+                    </div>
 
-                        <h3 className="text-lg font-bold text-slate-900 mb-4">Submit Stay Extension Request</h3>
+                    <form onSubmit={handleSubmit}>
+                        <div className="p-6 overflow-y-auto flex flex-col gap-4">
 
-                        <div className="bg-emerald-50 rounded-lg p-3 flex gap-2.5 text-[13px] text-emerald-600 mb-4 leading-snug">
-                            <i className="fa-regular fa-circle-info mt-0.5"></i>
-                            <span>Request to extend your lease by providing the new end date and reason.</span>
-                        </div>
+                            {/* Info banner */}
+                            <div className="bg-emerald-50 rounded-lg p-3 flex gap-2.5 text-[13px] text-emerald-600 leading-snug">
+                                <i className="fa-regular fa-circle-info mt-0.5"></i>
+                                <span>Request to extend your lease by providing the new end date and reason.</span>
+                            </div>
 
-                        <form onSubmit={(e) => { e.preventDefault(); setShowSubmit(false); }} className="space-y-4">
+                            {/* Room Number (readonly) */}
                             <div>
-                                <label className="block text-[12.5px] font-semibold text-slate-700 mb-1.5">Room Number</label>
+                                <label className="block text-[12.5px] font-semibold text-slate-700 mb-1.5">
+                                    Room Number
+                                </label>
                                 <input
                                     type="text"
-                                    value="101"
+                                    value={roomNumber}
                                     readOnly
                                     className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5 text-[13px] text-slate-600 cursor-not-allowed"
                                 />
                             </div>
 
+                            {/* Lease Dates Row */}
                             <div className="grid grid-cols-2 gap-3">
                                 <div>
                                     <label className="block text-[12.5px] font-semibold text-slate-700 mb-1.5">
@@ -60,6 +191,8 @@ export default function StayExtensionModals() {
                                     <div className="relative">
                                         <input
                                             type="text"
+                                            value={form.current_lease_end}
+                                            onChange={(e) => updateField('current_lease_end', e.target.value)}
                                             placeholder="mm/dd/yyyy"
                                             className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5 pr-8 text-[13px] outline-none focus:border-slate-400"
                                         />
@@ -73,6 +206,8 @@ export default function StayExtensionModals() {
                                     <div className="relative">
                                         <input
                                             type="text"
+                                            value={form.requested_lease_end}
+                                            onChange={(e) => updateField('requested_lease_end', e.target.value)}
                                             placeholder="mm/dd/yyyy"
                                             className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5 pr-8 text-[13px] outline-none focus:border-slate-400"
                                         />
@@ -81,91 +216,124 @@ export default function StayExtensionModals() {
                                 </div>
                             </div>
 
+                            {/* Reason */}
                             <div>
                                 <label className="block text-[12.5px] font-semibold text-slate-700 mb-1.5">
                                     Reason <span className="text-rose-500">*</span>
                                 </label>
                                 <textarea
+                                    value={form.reason}
+                                    onChange={(e) => updateField('reason', e.target.value)}
                                     placeholder="Explain why you need to extend your stay..."
                                     className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5 text-[13px] outline-none resize-none h-[90px] focus:border-slate-400"
                                 ></textarea>
                             </div>
+                        </div>
 
-                            <div className="flex justify-end items-center gap-3 pt-2">
-                                <button type="button" onClick={() => setShowSubmit(false)} className="text-slate-600 text-[13px] font-medium px-4 py-2">
-                                    Cancel
-                                </button>
-                                <button type="submit" className="bg-[#001838] hover:bg-[#0d2347] text-white px-4 py-2.5 rounded-lg text-[13px] font-medium">
-                                    Submit Request
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
+                        <div className="p-5 border-t border-slate-100 flex justify-end items-center gap-3">
+                            <button
+                                type="button"
+                                onClick={() => setShowSubmit(false)}
+                                className="text-slate-600 text-[13px] font-medium px-4 py-2"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="submit"
+                                disabled={saving}
+                                className="bg-[#001838] hover:bg-[#0d2347] disabled:opacity-50 text-white px-4 py-2.5 rounded-lg text-[13px] font-medium"
+                            >
+                                {saving ? 'Submitting…' : 'Submit Request'}
+                            </button>
+                        </div>
+                    </form>
+                </Modal>
             )}
 
+            {/* ============================================================ */}
             {/* MODAL 2: Stay Extension Details */}
-            {showDetails && (
-                <div
-                    className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[999] flex items-center justify-center p-4"
-                    onClick={(e) => e.target === e.currentTarget && setShowDetails(false)}
-                >
-                    <div className="bg-white rounded-2xl w-full max-w-[480px] p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
-                        <button onClick={() => setShowDetails(false)} className="absolute top-5 right-5 text-slate-400 hover:text-slate-600">
-                            <i className="fa-solid fa-xmark"></i>
-                        </button>
-
-                        <div className="flex justify-between items-start mb-1">
+            {/* ============================================================ */}
+            {showDetails && request && (
+                <Modal onClose={() => setShowDetails(false)} maxWidth="max-w-[480px]">
+                    <div className="p-5 pb-4 flex items-center justify-between border-b border-slate-100">
+                        <div className="flex items-center gap-3">
                             <h3 className="text-lg font-bold text-slate-900">Stay Extension Request</h3>
-                            <span className="bg-amber-100 text-amber-700 text-[11px] font-semibold px-2.5 py-1 rounded-full inline-flex items-center gap-1">
-                                <i className="fa-regular fa-clock"></i> Pending
+                            <span className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-full inline-flex items-center gap-1 ${
+                                request.status === 'Pending'
+                                    ? 'bg-amber-100 text-amber-700'
+                                    : request.status === 'Approved'
+                                    ? 'bg-emerald-100 text-emerald-600'
+                                    : 'bg-rose-100 text-rose-600'
+                            }`}>
+                                <i className="fa-regular fa-clock"></i> {request.status}
                             </span>
                         </div>
-                        <div className="text-xs text-slate-400 mb-4">se-1</div>
+                        <button
+                            onClick={() => setShowDetails(false)}
+                            className="text-slate-400 hover:text-slate-700 text-lg"
+                        >
+                            <i className="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
 
-                        <div className="grid grid-cols-2 gap-3 mb-3">
+                    <div className="p-6 overflow-y-auto flex flex-col gap-4">
+
+                        {/* Reference */}
+                        <div className="text-xs text-slate-400 -mt-1">{request.ref}</div>
+
+                        {/* Details grid */}
+                        <div className="grid grid-cols-2 gap-3">
                             <div className="bg-slate-50 rounded-lg p-3">
                                 <div className="text-[11px] text-slate-400 mb-1">Tenant</div>
-                                <div className="text-[13px] font-semibold text-slate-900">Elle Dela Cruz</div>
+                                <div className="text-[13px] font-semibold text-slate-900">{request.tenant}</div>
                             </div>
                             <div className="bg-slate-50 rounded-lg p-3">
                                 <div className="text-[11px] text-slate-400 mb-1">Room / Bed ID</div>
-                                <div className="text-[13px] font-semibold text-slate-900">Room 101</div>
+                                <div className="text-[13px] font-semibold text-slate-900">{request.room}</div>
                             </div>
                             <div className="bg-slate-50 rounded-lg p-3">
                                 <div className="text-[11px] text-slate-400 mb-1">Current Lease End</div>
-                                <div className="text-[13px] font-semibold text-slate-900">Mar 20, 2026</div>
+                                <div className="text-[13px] font-semibold text-slate-900">{request.current_lease_end}</div>
                             </div>
                             <div className="bg-slate-50 rounded-lg p-3">
                                 <div className="text-[11px] text-slate-400 mb-1">Requested Lease End</div>
-                                <div className="text-[13px] font-semibold text-slate-900">Mar 22, 2026</div>
+                                <div className="text-[13px] font-semibold text-slate-900">{request.requested_lease_end}</div>
                             </div>
                         </div>
 
-                        <div className="bg-slate-50 rounded-lg p-3 mb-3 w-1/2">
+                        {/* Submitted (half width) */}
+                        <div className="bg-slate-50 rounded-lg p-3 w-1/2">
                             <div className="text-[11px] text-slate-400 mb-1">Submitted</div>
-                            <div className="text-[13px] font-semibold text-slate-900">Mar 21, 2026</div>
+                            <div className="text-[13px] font-semibold text-slate-900">{request.submitted}</div>
                         </div>
 
-                        <div className="bg-slate-50 rounded-lg p-3 mb-4">
+                        {/* Reason */}
+                        <div className="bg-slate-50 rounded-lg p-3">
                             <div className="text-[11px] text-slate-400 mb-1">Reason:</div>
-                            <div className="text-[13px] text-slate-700">Still settling at new job, need more time.</div>
+                            <div className="text-[13px] text-slate-700">{request.reason}</div>
                         </div>
+                    </div>
 
-                        <div className="flex justify-end items-center gap-2 pt-2">
-                            <button className="border border-red-300 text-red-500 hover:bg-red-50 rounded-lg px-3.5 py-2 text-[12.5px] font-medium inline-flex items-center gap-1.5">
+                    {/* Footer */}
+                    <div className="p-5 border-t border-slate-100 flex justify-end items-center gap-2">
+                        {request.status === 'Pending' && (
+                            <button
+                                onClick={handleCancelRequest}
+                                disabled={saving}
+                                className="border border-red-300 text-red-500 hover:bg-red-50 disabled:opacity-50 rounded-lg px-3.5 py-2 text-[12.5px] font-medium inline-flex items-center gap-1.5"
+                            >
                                 <i className="fa-regular fa-circle-xmark"></i>
                                 Cancel Request
                             </button>
-                            <button
-                                onClick={() => setShowDetails(false)}
-                                className="bg-[#001838] hover:bg-[#0d2347] text-white px-4 py-2 rounded-lg text-[12.5px] font-medium"
-                            >
-                                Close
-                            </button>
-                        </div>
+                        )}
+                        <button
+                            onClick={() => setShowDetails(false)}
+                            className="bg-[#001838] hover:bg-[#0d2347] text-white px-4 py-2 rounded-lg text-[12.5px] font-medium"
+                        >
+                            Close
+                        </button>
                     </div>
-                </div>
+                </Modal>
             )}
         </>
     );

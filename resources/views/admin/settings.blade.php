@@ -271,6 +271,8 @@
 
             {{-- DATA MANAGEMENT --}}
             <div class="settings-panel hidden" data-panel="data">
+
+                {{-- ============ BACKUP DATABASE CARD ============ --}}
                 <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6 mb-6">
                     <h3 class="text-base font-bold text-slate-900 mb-1">Backup Database</h3>
                     <p class="text-[12.5px] text-slate-500 mb-5">Create and manage database snapshots to protect your data</p>
@@ -383,6 +385,71 @@
                     </table>
                 </div>
 
+                {{-- ============ EXPORT SYSTEM DATA CARD (NEW) ============ --}}
+                <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6 mb-6">
+                    <h3 class="text-base font-bold text-slate-900 mb-1">Export System Data</h3>
+                    <p class="text-[12.5px] text-slate-500 mb-5">Download records for reporting, compliance, or migration</p>
+
+                    {{-- Export Format Options --}}
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-5">
+                        <div class="export-format-card selected border-2 border-emerald-500 bg-emerald-50 rounded-[10px] p-4 text-center cursor-pointer transition"
+                             data-format="csv">
+                            <i class="fa-solid fa-file-csv text-[20px] text-emerald-500 mb-1.5 block"></i>
+                            <span class="block text-[13px] font-bold text-emerald-500">CSV</span>
+                            <span class="block text-[11px] text-slate-500 mt-0.5">Spreadsheet friendly</span>
+                        </div>
+
+                        <div class="export-format-card border border-slate-200 bg-white rounded-[10px] p-4 text-center cursor-pointer transition hover:border-slate-300"
+                             data-format="xlsx">
+                            <i class="fa-solid fa-file-excel text-[20px] text-slate-400 mb-1.5 block"></i>
+                            <span class="block text-[13px] font-bold text-slate-900">Excel (.xlsx)</span>
+                            <span class="block text-[11px] text-slate-500 mt-0.5">Formatted workbook</span>
+                        </div>
+
+                        <div class="export-format-card border border-slate-200 bg-white rounded-[10px] p-4 text-center cursor-pointer transition hover:border-slate-300"
+                             data-format="json">
+                            <i class="fa-solid fa-code text-[20px] text-slate-400 mb-1.5 block"></i>
+                            <span class="block text-[13px] font-bold text-slate-900">JSON</span>
+                            <span class="block text-[11px] text-slate-500 mt-0.5">Raw structured data</span>
+                        </div>
+                    </div>
+
+                    {{-- Modules to Export --}}
+                    <h4 class="text-[13.5px] font-bold text-slate-900 mb-3">Select Modules to Export</h4>
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                        <div class="module-export-box border border-slate-200 bg-white rounded-lg px-3 py-3 cursor-pointer transition hover:border-slate-300">
+                            <i class="fa-solid fa-users text-[14px] text-slate-500 mb-1 block"></i>
+                            <div class="text-[12px] font-semibold text-slate-900">Tenants</div>
+                            <div class="text-[11px] text-slate-500">4 active records</div>
+                        </div>
+
+                        <div class="module-export-box border border-slate-200 bg-white rounded-lg px-3 py-3 cursor-pointer transition hover:border-slate-300">
+                            <i class="fa-solid fa-bed text-[14px] text-slate-500 mb-1 block"></i>
+                            <div class="text-[12px] font-semibold text-slate-900">Rooms</div>
+                            <div class="text-[11px] text-slate-500">12 room profiles</div>
+                        </div>
+
+                        <div class="module-export-box border border-slate-200 bg-white rounded-lg px-3 py-3 cursor-pointer transition hover:border-slate-300">
+                            <i class="fa-solid fa-credit-card text-[14px] text-slate-500 mb-1 block"></i>
+                            <div class="text-[12px] font-semibold text-slate-900">Billing</div>
+                            <div class="text-[11px] text-slate-500">Payments &amp; Invoices</div>
+                        </div>
+
+                        <div class="module-export-box border border-slate-200 bg-white rounded-lg px-3 py-3 cursor-pointer transition hover:border-slate-300">
+                            <i class="fa-solid fa-wrench text-[14px] text-slate-500 mb-1 block"></i>
+                            <div class="text-[12px] font-semibold text-slate-900">Maintenance</div>
+                            <div class="text-[11px] text-slate-500">Service requests</div>
+                        </div>
+                    </div>
+
+                    <div class="flex justify-end mt-6">
+                        <button class="bg-[#02122b] text-white px-5 py-2.5 rounded-lg text-[13px] font-semibold inline-flex items-center gap-2 hover:bg-[#092042] transition">
+                            <i class="fa-solid fa-download"></i> Export Data
+                        </button>
+                    </div>
+                </div>
+
+                {{-- ============ ARCHIVE RECORDS CARD ============ --}}
                 <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
                     <h3 class="text-base font-bold text-slate-900 mb-1">Archive Records</h3>
                     <p class="text-[12.5px] text-slate-500 mb-5">Move old, inactive records to long-term cold storage to keep the database lean</p>
@@ -437,6 +504,9 @@
 @push('scripts')
 <script>
 (function () {
+    // ============================================================
+    // 1. TAB SWITCHING
+    // ============================================================
     const tabs = document.querySelectorAll('.settings-tab');
     const panels = document.querySelectorAll('.settings-panel');
 
@@ -459,7 +529,9 @@
         if (target) target.classList.remove('hidden');
     }));
 
-    // Archive item selection toggle
+    // ============================================================
+    // 2. ARCHIVE ITEM SELECTION
+    // ============================================================
     document.querySelectorAll('.archive-item').forEach(item => {
         item.addEventListener('click', (e) => {
             if (e.target.closest('.archive-trash')) return;
@@ -475,7 +547,6 @@
                 check.classList.add('hidden');
                 item.classList.remove('border-emerald-500','bg-emerald-50');
             }
-            // Recalculate count from selected items
             let total = 0;
             document.querySelectorAll('.archive-item.selected').forEach(sel => {
                 const sub = sel.querySelector('.archive-sub').textContent;
@@ -483,6 +554,36 @@
                 if (m) total += parseInt(m[0]);
             });
             document.getElementById('archive-count').textContent = total;
+        });
+    });
+
+    // ============================================================
+    // 3. EXPORT FORMAT SELECTION
+    // ============================================================
+    const formatCards = document.querySelectorAll('.export-format-card');
+    formatCards.forEach(card => {
+        card.addEventListener('click', () => {
+            formatCards.forEach(c => {
+                c.classList.remove('selected', 'border-2', 'border-emerald-500', 'bg-emerald-50');
+                c.classList.add('border', 'border-slate-200', 'bg-white');
+
+                const icon = c.querySelector('i');
+                const title = c.querySelector('span:first-of-type');
+                if (icon) icon.classList.remove('text-emerald-500');
+                if (icon) icon.classList.add('text-slate-400');
+                if (title) title.classList.remove('text-emerald-500');
+                if (title) title.classList.add('text-slate-900');
+            });
+
+            card.classList.add('selected', 'border-2', 'border-emerald-500', 'bg-emerald-50');
+            card.classList.remove('border', 'border-slate-200', 'bg-white');
+
+            const icon = card.querySelector('i');
+            const title = card.querySelector('span:first-of-type');
+            if (icon) icon.classList.remove('text-slate-400');
+            if (icon) icon.classList.add('text-emerald-500');
+            if (title) title.classList.remove('text-slate-900');
+            if (title) title.classList.add('text-emerald-500');
         });
     });
 })();

@@ -149,7 +149,7 @@ export default function AdminSidebar({ active = "dashboard" }) {
             {/* padding: 20px 18px 14px 18px (matches HTML) */}
             <div
                 className={`flex items-center justify-between shrink-0 whitespace-nowrap
-                            ${collapsed ? "md:justify-center md:px-[10px]" : ""}`}
+                            ${collapsed ? "md:justify-center md:px-2.5" : ""}`}
                 style={{
                     paddingTop: "20px",
                     paddingBottom: "14px",

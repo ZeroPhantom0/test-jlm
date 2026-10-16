@@ -19,158 +19,148 @@
     <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
         <div class="bg-white rounded-2xl px-5 py-4 border border-slate-100 shadow-sm">
             <div class="text-[13px] font-semibold text-slate-500">Total</div>
-            <div class="text-[26px] font-extrabold text-slate-900 mt-2">5</div>
+            <div class="text-[26px] font-extrabold text-slate-900 mt-2">{{ $metrics['total'] }}</div>
         </div>
         <div class="bg-white rounded-2xl px-5 py-4 border border-slate-100 shadow-sm">
             <div class="text-[13px] font-semibold text-slate-500">Pending</div>
-            <div class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-yellow-100 text-amber-700 text-base font-extrabold mt-2">2</div>
+            <div class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-yellow-100 text-amber-700 text-base font-extrabold mt-2">{{ $metrics['pending'] }}</div>
         </div>
         <div class="bg-white rounded-2xl px-5 py-4 border border-slate-100 shadow-sm">
             <div class="text-[13px] font-semibold text-slate-500">Approved</div>
-            <div class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-green-100 text-green-600 text-base font-extrabold mt-2">1</div>
+            <div class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-green-100 text-green-600 text-base font-extrabold mt-2">{{ $metrics['approved'] }}</div>
         </div>
         <div class="bg-white rounded-2xl px-5 py-4 border border-slate-100 shadow-sm">
             <div class="text-[13px] font-semibold text-slate-500">Rejected</div>
-            <div class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-rose-100 text-rose-600 text-base font-extrabold mt-2">1</div>
+            <div class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-rose-100 text-rose-600 text-base font-extrabold mt-2">{{ $metrics['rejected'] }}</div>
         </div>
         <div class="bg-white rounded-2xl px-5 py-4 border border-slate-100 shadow-sm">
             <div class="text-[13px] font-semibold text-slate-500">Expired</div>
-            <div class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-slate-100 text-slate-500 text-base font-extrabold mt-2">1</div>
+            <div class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-slate-100 text-slate-500 text-base font-extrabold mt-2">{{ $metrics['expired'] }}</div>
         </div>
     </div>
 
-    {{-- Toolbar --}}
-    <div class="bg-white rounded-2xl border border-slate-100 shadow-sm px-6 py-4 flex flex-col md:flex-row justify-between gap-4">
-        <div class="flex-1 bg-slate-50 border border-slate-200 rounded-[10px] px-4 py-2.5 flex items-center gap-2.5">
-            <i class="fa-solid fa-magnifying-glass text-slate-400 text-sm"></i>
-            <input type="text" placeholder="Search by name, email, or room..." class="w-full text-[13.5px] outline-none bg-transparent">
-        </div>
-        <div class="flex items-center gap-3">
-            <select class="bg-white border border-slate-200 rounded-[10px] px-4 py-2.5 text-[13.5px] text-slate-700 outline-none cursor-pointer min-w-[160px]">
-                <option>All Statuses</option>
-                <option>Pending</option>
-                <option>Approved</option>
-                <option>Rejected</option>
-                <option>Expired</option>
+    {{-- Table Card --}}
+    <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 space-y-5">
+
+        {{-- Toolbar --}}
+        <form method="GET" action="{{ route('admin.reservations') }}" class="flex flex-col md:flex-row gap-4">
+            <div class="flex-1 bg-slate-50 border border-slate-200 rounded-[10px] px-4 py-2.5 flex items-center gap-2.5">
+                <i class="fa-solid fa-magnifying-glass text-slate-400 text-sm"></i>
+                <input type="text" name="search" value="{{ $filters['search'] ?? '' }}" placeholder="Search by name, email, or room..." class="w-full text-[13.5px] outline-none bg-transparent">
+            </div>
+            <select name="status" onchange="this.form.submit()" class="bg-white border border-slate-200 rounded-[10px] px-4 py-2.5 text-[13.5px] text-slate-700 outline-none cursor-pointer min-w-[180px]">
+                <option value="">All Statuses</option>
+                <option value="Pending"  {{ ($filters['status'] ?? '') === 'Pending'  ? 'selected' : '' }}>Pending</option>
+                <option value="Approved" {{ ($filters['status'] ?? '') === 'Approved' ? 'selected' : '' }}>Approved</option>
+                <option value="Rejected" {{ ($filters['status'] ?? '') === 'Rejected' ? 'selected' : '' }}>Rejected</option>
+                <option value="Expired"  {{ ($filters['status'] ?? '') === 'Expired'  ? 'selected' : '' }}>Expired</option>
             </select>
-            <div class="flex bg-slate-100 rounded-[10px] p-1">
-                <button class="view-btn active bg-white text-slate-900 shadow-sm px-3.5 py-2 rounded-lg text-[13px] font-semibold inline-flex items-center gap-1.5">
-                    <i class="fa-solid fa-border-all"></i> Grid
-                </button>
-                <button class="view-btn text-slate-500 px-3.5 py-2 rounded-lg text-[13px] font-semibold inline-flex items-center gap-1.5">
-                    <i class="fa-solid fa-list"></i> List
-                </button>
-            </div>
-        </div>
-    </div>
+        </form>
 
-    {{-- Cards Grid --}}
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+        {{-- Table --}}
+        <div class="overflow-x-auto">
+            <table class="w-full text-left">
+                <thead>
+                    <tr class="text-[13px] font-bold text-slate-600 border-b border-slate-100 whitespace-nowrap">
+                        <th class="py-3 px-4">Resident</th>
+                        <th class="py-3 px-4">Contact</th>
+                        <th class="py-3 px-4">Desired Room</th>
+                        <th class="py-3 px-4">Check-in</th>
+                        <th class="py-3 px-4">Reservation Fee</th>
+                        <th class="py-3 px-4">Submitted</th>
+                        <th class="py-3 px-4">Status</th>
+                        <th class="py-3 px-4 text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @forelse($reservations as $res)
+                    <tr class="border-b border-slate-50 last:border-0">
+                        {{-- Resident --}}
+                        <td class="py-4 px-4">
+                            <div class="flex items-center gap-3">
+                                <div class="w-9 h-9 rounded-full {{ $res->avatar_bg }} {{ $res->avatar_color }} flex items-center justify-center text-[14px] font-bold shrink-0">
+                                    {{ $res->tenant_initial }}
+                                </div>
+                                <div>
+                                    <div class="font-bold text-slate-900 text-[13px]">{{ $res->tenant_name }}</div>
+                                    <div class="text-[11px] text-slate-400 mt-0.5">{{ $res->reference_no }}</div>
+                                </div>
+                            </div>
+                        </td>
 
-        {{-- Card 1 --}}
-        <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 flex flex-col justify-between gap-4">
-            <div>
-                <div class="flex justify-between items-start mb-4">
-                    <div class="flex items-center gap-3.5">
-                        <div class="w-11 h-11 rounded-full bg-teal-100 text-teal-600 flex items-center justify-center text-[18px] font-bold">M</div>
-                        <div>
-                            <h3 class="text-[15px] font-bold text-slate-900">Maria Santos</h3>
-                            <p class="text-xs text-slate-500 mt-0.5">Mar 23, 2026</p>
-                        </div>
-                    </div>
-                    <span class="bg-amber-100 text-amber-700 text-xs font-bold px-3.5 py-1.5 rounded-full inline-flex items-center gap-1.5">
-                        <i class="fa-regular fa-clock"></i> Pending
-                    </span>
-                </div>
+                        {{-- Contact --}}
+                        <td class="py-4 px-4">
+                            <div class="text-[13px] text-slate-700">{{ $res->email }}</div>
+                            <div class="text-[11px] text-slate-400 mt-0.5">{{ $res->phone }}</div>
+                        </td>
 
-                <div class="flex flex-col gap-2 mb-5">
-                    <div class="flex items-center gap-2.5 text-[13px] text-slate-600">
-                        <i class="fa-regular fa-envelope w-4 text-slate-400"></i>
-                        <span>maria@email.com</span>
-                    </div>
-                    <div class="flex items-center gap-2.5 text-[13px] text-slate-600">
-                        <i class="fa-solid fa-phone w-4 text-slate-400"></i>
-                        <span>09171112222</span>
-                    </div>
-                    <div class="flex items-center gap-2.5 text-[13px] text-slate-600">
-                        <i class="fa-solid fa-house w-4 text-slate-400"></i>
-                        <span>Room 302 – Bedspace</span>
-                    </div>
-                    <div class="flex items-center gap-2.5 text-[13px] text-slate-600">
-                        <i class="fa-regular fa-calendar w-4 text-slate-400"></i>
-                        <span>Check-in: Apr 1, 2026</span>
-                    </div>
-                </div>
-            </div>
+                        {{-- Desired Room --}}
+                        <td class="py-4 px-4">
+                            <div class="text-[13px] font-medium text-slate-700">{{ $res->desired_room }}</div>
+                        </td>
 
-            <div>
-                <div class="flex items-center justify-between text-[13px] mb-4">
-                    <span class="text-slate-500">Reservation Fee:</span>
-                    <span class="font-extrabold text-emerald-600 text-[15px]">₱500</span>
-                </div>
-                <div class="flex items-center gap-2.5">
-                    <button class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-lg text-[13px] font-semibold inline-flex items-center gap-1.5">
-                        <i class="fa-regular fa-circle-check"></i> Approve
-                    </button>
-                    <button class="bg-rose-50 text-rose-600 px-4 py-2.5 rounded-lg text-[13px] font-semibold inline-flex items-center gap-1.5">
-                        <i class="fa-regular fa-circle-xmark"></i> Reject
-                    </button>
-                    <button class="bg-slate-100 text-slate-600 px-4 py-2.5 rounded-lg text-[13px] font-semibold inline-flex items-center gap-1.5 flex-1 justify-center">
-                        <i class="fa-regular fa-eye"></i> Details
-                    </button>
-                </div>
-            </div>
-        </div>
+                        {{-- Check-in --}}
+                        <td class="py-4 px-4">
+                            <div class="flex items-center gap-2 text-[13px] text-slate-700">
+                                <i class="fa-regular fa-calendar text-slate-400 text-[13px]"></i>
+                                {{ $res->check_in?->format('M j, Y') }}
+                            </div>
+                        </td>
 
-        {{-- Card 2 --}}
-        <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 flex flex-col justify-between gap-4">
-            <div>
-                <div class="flex justify-between items-start mb-4">
-                    <div class="flex items-center gap-3.5">
-                        <div class="w-11 h-11 rounded-full bg-sky-100 text-sky-600 flex items-center justify-center text-[18px] font-bold">R</div>
-                        <div>
-                            <h3 class="text-[15px] font-bold text-slate-900">Ramon Bautista</h3>
-                            <p class="text-xs text-slate-500 mt-0.5">Mar 20, 2026</p>
-                        </div>
-                    </div>
-                    <span class="bg-green-100 text-green-600 text-xs font-bold px-3.5 py-1.5 rounded-full inline-flex items-center gap-1.5">
-                        <i class="fa-regular fa-circle-check"></i> Approved
-                    </span>
-                </div>
+                        {{-- Fee --}}
+                        <td class="py-4 px-4">
+                            <div class="font-extrabold text-emerald-600 text-[13px]">{{ $res->formatted_fee }}</div>
+                        </td>
 
-                <div class="flex flex-col gap-2 mb-5">
-                    <div class="flex items-center gap-2.5 text-[13px] text-slate-600">
-                        <i class="fa-regular fa-envelope w-4 text-slate-400"></i>
-                        <span>ramon@email.com</span>
-                    </div>
-                    <div class="flex items-center gap-2.5 text-[13px] text-slate-600">
-                        <i class="fa-solid fa-phone w-4 text-slate-400"></i>
-                        <span>09182223333</span>
-                    </div>
-                    <div class="flex items-center gap-2.5 text-[13px] text-slate-600">
-                        <i class="fa-solid fa-house w-4 text-slate-400"></i>
-                        <span>Room 204 – Barkada Room</span>
-                    </div>
-                    <div class="flex items-center gap-2.5 text-[13px] text-slate-600">
-                        <i class="fa-regular fa-calendar w-4 text-slate-400"></i>
-                        <span>Check-in: Apr 8, 2026</span>
-                    </div>
-                </div>
-            </div>
+                        {{-- Submitted --}}
+                        <td class="py-4 px-4 text-[13px] text-slate-600 whitespace-nowrap">
+                            {{ $res->created_at?->format('M d, Y') }}
+                        </td>
 
-            <div>
-                <div class="flex items-center justify-between text-[13px] mb-4">
-                    <span class="text-slate-500">Reservation Fee:</span>
-                    <span class="font-extrabold text-emerald-600 text-[15px]">₱500</span>
-                </div>
-                <div class="bg-sky-50 border border-sky-100 text-sky-600 text-[12.5px] font-medium rounded-[10px] px-4 py-2.5 mb-3">
-                    Approved. ₱9,000/mo. Deposit confirmed.
-                </div>
-                <button class="w-full bg-slate-100 text-slate-600 px-4 py-2.5 rounded-lg text-[13px] font-semibold inline-flex items-center justify-center gap-1.5">
-                    <i class="fa-regular fa-eye"></i> Details
-                </button>
-            </div>
+                        {{-- Status --}}
+                        <td class="py-4 px-4">
+                            <span class="inline-flex items-center gap-1.5 {{ $res->status_class }} px-3 py-1 rounded-full text-[11px] font-bold whitespace-nowrap">
+                                <i class="{{ $res->status_icon }}"></i> {{ $res->status }}
+                            </span>
+                        </td>
+
+                        {{-- Actions (icon-only) --}}
+                        <td class="py-4 px-4">
+                            <div class="flex items-center justify-end gap-3">
+                                @if($res->status === 'Pending')
+                                    <i
+                                        class="fa-regular fa-circle-check text-emerald-500 text-[15px] cursor-pointer hover:text-emerald-600 transition icon-approve"
+                                        title="Approve"
+                                        data-res-id="{{ $res->id }}"
+                                    ></i>
+                                    <i
+                                        class="fa-regular fa-circle-xmark text-rose-500 text-[15px] cursor-pointer hover:text-rose-600 transition icon-reject"
+                                        title="Reject"
+                                        data-res-id="{{ $res->id }}"
+                                    ></i>
+                                @endif
+                                <i
+                                    class="fa-regular fa-eye text-slate-700 text-[15px] cursor-pointer hover:text-orange-500 transition icon-view"
+                                    title="View Details"
+                                    data-res-key="{{ $res->reference_no }}"
+                                ></i>
+                            </div>
+                        </td>
+                    </tr>
+                    @empty
+                    <tr>
+                        <td colspan="8" class="text-center py-12 text-slate-400">
+                            <i class="fa-solid fa-inbox text-4xl mb-3"></i>
+                            <p class="text-sm">No reservations found.</p>
+                        </td>
+                    </tr>
+                    @endforelse
+                </tbody>
+            </table>
         </div>
     </div>
 </div>
+
+{{-- React Modal Mount Point with data --}}
+<div id="admin-reservations-modals" data-reservations='@json($reservationsForReact)'></div>
 @endsection

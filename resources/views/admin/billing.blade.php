@@ -10,7 +10,7 @@
             <i class="fa-solid fa-credit-card"></i>
         </div>
         <div>
-            <h1 class="text-2xl font-extrabold text-slate-900">Billing & Payments</h1>
+            <h1 class="text-2xl font-extrabold text-slate-900">Billing &amp; Payments</h1>
             <p class="text-[13px] text-slate-500 mt-0.5">Manage invoices and payment verification</p>
         </div>
     </div>
@@ -23,7 +23,7 @@
             </div>
             <div>
                 <p class="text-[13px] font-medium text-slate-500">Collected this month</p>
-                <h2 class="text-[26px] font-extrabold text-slate-900 mt-0.5">₱8,700</h2>
+                <h2 class="text-[26px] font-extrabold text-slate-900 mt-0.5">₱{{ number_format($metrics['collected'], 0) }}</h2>
             </div>
         </div>
 
@@ -33,7 +33,7 @@
             </div>
             <div>
                 <p class="text-[13px] font-medium text-slate-500">Pending Payments</p>
-                <h2 class="text-[26px] font-extrabold text-slate-900 mt-0.5">₱5,800</h2>
+                <h2 class="text-[26px] font-extrabold text-slate-900 mt-0.5">₱{{ number_format($metrics['pending'], 0) }}</h2>
             </div>
         </div>
 
@@ -43,33 +43,31 @@
             </div>
             <div>
                 <p class="text-[13px] font-medium text-slate-500">Overdue</p>
-                <h2 class="text-[26px] font-extrabold text-slate-900 mt-0.5">₱8,500</h2>
+                <h2 class="text-[26px] font-extrabold text-slate-900 mt-0.5">₱{{ number_format($metrics['overdue'], 0) }}</h2>
             </div>
         </div>
     </div>
 
     {{-- Table Card --}}
     <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 space-y-5">
-        <div class="flex flex-col md:flex-row gap-4">
+        <form method="GET" action="{{ route('admin.billing') }}" class="flex flex-col md:flex-row gap-4">
             <div class="flex-1 bg-white border border-slate-300 rounded-[10px] px-4 py-2.5 flex items-center gap-2.5">
                 <i class="fa-solid fa-magnifying-glass text-slate-400 text-sm"></i>
-                <input type="text" placeholder="Search invoices..." class="w-full text-[13px] outline-none bg-transparent">
+                <input type="text" name="search" value="{{ $filters['search'] ?? '' }}" placeholder="Search invoices..." class="w-full text-[13px] outline-none bg-transparent">
             </div>
-            <select class="bg-white border border-slate-300 rounded-[10px] px-4 py-2.5 text-[13px] font-medium text-slate-700 outline-none cursor-pointer min-w-[160px]">
-                <option>All Statuses</option>
-                <option>Unpaid</option>
-                <option>Overdue</option>
-                <option>Partial</option>
-                <option>Pending</option>
-                <option>Paid</option>
+            <select name="status" onchange="this.form.submit()" class="bg-white border border-slate-300 rounded-[10px] px-4 py-2.5 text-[13px] font-medium text-slate-700 outline-none cursor-pointer min-w-[160px]">
+                <option value="">All Statuses</option>
+                @foreach(['Unpaid','Overdue','Partial','Pending','Paid'] as $s)
+                    <option value="{{ $s }}" {{ ($filters['status'] ?? '') === $s ? 'selected' : '' }}>{{ $s }}</option>
+                @endforeach
             </select>
-            <select class="bg-white border border-slate-300 rounded-[10px] px-4 py-2.5 text-[13px] font-medium text-slate-700 outline-none cursor-pointer min-w-[160px]">
-                <option>All Methods</option>
-                <option>GCash</option>
-                <option>Over The Counter</option>
-                <option>Bank Transfer</option>
+            <select name="payment_method" onchange="this.form.submit()" class="bg-white border border-slate-300 rounded-[10px] px-4 py-2.5 text-[13px] font-medium text-slate-700 outline-none cursor-pointer min-w-[160px]">
+                <option value="">All Methods</option>
+                @foreach(['GCash','Over The Counter','Bank Transfer','Not Set'] as $m)
+                    <option value="{{ $m }}" {{ ($filters['payment_method'] ?? '') === $m ? 'selected' : '' }}>{{ $m }}</option>
+                @endforeach
             </select>
-        </div>
+        </form>
 
         <div class="overflow-x-auto">
             <table class="w-full text-left">
@@ -86,60 +84,62 @@
                     </tr>
                 </thead>
                 <tbody>
-                    @foreach([
-                        ['tn' => 'tn-101', 'desc' => 'Solo - March 20-22, 2026', 'tenant' => 'Nicole Custorio', 'room' => 'R202', 'total' => '₱1,900', 'rate' => '₱ 950/day', 'paid' => '₱0', 'days' => '2 days', 'balance' => '₱1,900', 'due' => 'Mar 22, 2026', 'status' => 'unpaid'],
-                        ['tn' => 'tn-102', 'desc' => 'Bedspace - March 20-21, 2026', 'tenant' => 'Elle Dela Cruz', 'room' => 'R101-B1-U', 'total' => '₱600', 'rate' => '₱ 300/day', 'paid' => '₱0', 'days' => '2 days', 'balance' => '₱600', 'due' => 'Mar 21, 2026', 'status' => 'overdue'],
-                        ['tn' => 'tn-103', 'desc' => 'Solo - March 20-21, 2026', 'tenant' => 'Mau Santos', 'room' => 'R201', 'total' => '₱600', 'rate' => '₱ 600/day', 'paid' => '₱300', 'days' => '2 days', 'balance' => '₱300', 'due' => 'Mar 21, 2026', 'status' => 'partial'],
-                        ['tn' => 'inv-104', 'desc' => 'Bedspace - March 20-25, 2026', 'tenant' => 'Gab Maningo', 'room' => 'R101-B2-L', 'total' => '₱1,000', 'rate' => '₱ 200/day', 'paid' => '₱1,000', 'days' => '5 days', 'balance' => '₱1,000', 'due' => 'Mar 25, 2026', 'status' => 'pending'],
-                        ['tn' => 'tn-105', 'desc' => 'Solo - January 15-22, 2026', 'tenant' => 'Francis Sabiniano', 'room' => 'R203', 'total' => '₱4,200', 'rate' => '₱ 600/day', 'paid' => '₱4,200', 'days' => '7 days', 'balance' => '₱0', 'due' => 'Jan 22, 2026', 'status' => 'paid'],
-                    ] as $inv)
-                    <tr class="border-b border-slate-50 last:border-0">
+                    @forelse($invoices as $inv)
+                    <tr class="border-b border-slate-50 last:border-0" data-tn="{{ $inv->transaction_no }}">
                         <td class="py-4 px-4">
-                            <div class="font-semibold text-slate-700 text-[13px]">{{ $inv['tn'] }}</div>
-                            <div class="text-[11px] text-slate-400 mt-0.5">{{ $inv['desc'] }}</div>
+                            <div class="font-semibold text-slate-700 text-[13px]">{{ $inv->transaction_no }}</div>
+                            <div class="text-[11px] text-slate-400 mt-0.5">{{ $inv->description }}</div>
                         </td>
                         <td class="py-4 px-4">
-                            <div class="font-bold text-slate-900 text-[13px]">{{ $inv['tenant'] }}</div>
-                            <div class="text-[11px] text-slate-400 mt-0.5">{{ $inv['room'] }}</div>
+                            <div class="font-bold text-slate-900 text-[13px]">{{ $inv->tenant_name }}</div>
+                            <div class="text-[11px] text-slate-400 mt-0.5">{{ $inv->room_number }}</div>
                         </td>
                         <td class="py-4 px-4">
-                            <div class="font-bold text-slate-900 text-[13px]">{{ $inv['total'] }}</div>
-                            <div class="text-[11px] text-slate-400 mt-0.5">{{ $inv['rate'] }}</div>
+                            <div class="font-bold text-slate-900 text-[13px]">{{ $inv->formatted_total }}</div>
+                            <div class="text-[11px] text-slate-400 mt-0.5">{{ $inv->formatted_rate }}</div>
                         </td>
                         <td class="py-4 px-4">
-                            <div class="font-bold text-slate-900 text-[13px]">{{ $inv['paid'] }}</div>
-                            <div class="text-[11px] text-slate-400 mt-0.5">{{ $inv['days'] }}</div>
+                            <div class="font-bold text-slate-900 text-[13px]">{{ $inv->formatted_paid }}</div>
+                            <div class="text-[11px] text-slate-400 mt-0.5">{{ $inv->formatted_days }}</div>
                         </td>
-                        <td class="py-4 px-4 font-bold text-slate-900 text-[13px]">{{ $inv['balance'] }}</td>
-                        <td class="py-4 px-4 text-[13px] text-slate-600">{{ $inv['due'] }}</td>
+                        <td class="py-4 px-4 font-bold text-slate-900 text-[13px]">{{ $inv->formatted_balance }}</td>
+                        <td class="py-4 px-4 text-[13px] text-slate-600">{{ $inv->due_date?->format('M d, Y') ?? '-' }}</td>
                         <td class="py-4 px-4">
-                            @php
-                                $badge = match($inv['status']) {
-                                    'unpaid' => 'bg-amber-100 text-amber-700',
-                                    'overdue' => 'bg-rose-100 text-rose-600',
-                                    'partial' => 'bg-yellow-100 text-yellow-700',
-                                    'pending' => 'bg-blue-100 text-blue-600',
-                                    'paid' => 'bg-green-100 text-green-600',
-                                };
-                            @endphp
-                            <span class="inline-block px-3.5 py-1 rounded-full text-[11px] font-bold {{ $badge }}">
-                                {{ ucfirst($inv['status']) }}
+                            <span class="inline-block px-3.5 py-1 rounded-full text-[11px] font-bold {{ $inv->status_class }}">
+                                {{ $inv->status }}
                             </span>
                         </td>
                         <td class="py-4 px-4">
                             <div class="flex items-center gap-3">
+                                {{-- Edit Invoice (always) --}}
                                 <i class="fa-solid fa-pen text-slate-700 text-[15px] cursor-pointer hover:text-orange-500 transition icon-edit" title="Edit Invoice"></i>
-                                <i class="fa-solid fa-bell text-slate-700 text-[15px] cursor-pointer hover:text-orange-500 transition" title="Send Reminder"></i>
+
+                                @if($inv->status === 'Paid')
+                                    <i class="fa-solid fa-receipt text-slate-700 text-[15px] cursor-pointer hover:text-orange-500 transition icon-payment" title="View Payment Receipt"></i>
+                                @elseif($inv->status === 'Pending')
+                                    <i class="fa-solid fa-file-lines text-slate-700 text-[15px] cursor-pointer hover:text-orange-500 transition icon-receipt" title="View Receipt"></i>
+                                @else
+                                    <i class="fa-solid fa-bell text-slate-700 text-[15px] cursor-pointer hover:text-orange-500 transition icon-remind" title="Send Reminder"></i>
+                                @endif
+
                                 <i class="fa-solid fa-eye text-slate-700 text-[15px] cursor-pointer hover:text-orange-500 transition icon-view" title="View Summary"></i>
                             </div>
                         </td>
                     </tr>
-                    @endforeach
+                    @empty
+                    <tr>
+                        <td colspan="8" class="text-center py-12 text-slate-400">
+                            <i class="fa-solid fa-inbox text-4xl mb-3"></i>
+                            <p class="text-sm">No invoices found.</p>
+                        </td>
+                    </tr>
+                    @endforelse
                 </tbody>
             </table>
         </div>
     </div>
 </div>
 
-<div id="admin-billing-modals"></div>
+{{-- React Modal Mount Point with data --}}
+<div id="admin-billing-modals" data-invoices='@json($invoicesForReact)'></div>
 @endsection

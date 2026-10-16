@@ -2,100 +2,206 @@
 import React, { useState, useEffect } from 'react';
 import Modal from '../../components/Modal';
 
-const DATA = {
-    maria: {
-        avatar: 'M', bg: 'bg-teal-100', color: 'text-teal-600',
-        name: 'Maria Santos', subCode: '#RSV-1',
-        resNumber: 'RSV-2026-00005',
-        email: 'maria@email.com', phone: '09171112222',
-        desiredRoom: 'Desired Room: Room 101 — Bedspace',
-        bedId: 'Room/Bed ID: R101-B1-U',
-        moveIn: 'Move-in: October 10, 2026',
-        submitted: 'Submitted: September 29, 2026',
-        requestDetails: 'Looking for a quiet unit near the stairs. Prefers bedspace for 7 days.',
-        totalCharges: '₱1,000.00', paymentOption: 'Down Payment',
-        remaining: '₱500.00', paymentMethod: 'GCash',
-        statusClass: 'bg-yellow-100 text-amber-700', statusText: 'Pending', statusIcon: 'fa-regular fa-clock',
-    },
-    ramon: {
-        avatar: 'R', bg: 'bg-sky-100', color: 'text-sky-600',
-        name: 'Ramon Bautista', subCode: '#RSV-2',
-        resNumber: 'RSV-2026-00005',
-        email: 'ramon@email.com', phone: '09182223333',
-        desiredRoom: 'Desired Room: Room 104 — Barkada Room',
-        bedId: 'Room/Bed ID: R104-B1-L',
-        moveIn: 'Move-in: April 8, 2026',
-        submitted: 'Submitted: March 9, 2026',
-        requestDetails: 'Group of 4 friends starting April. Need barkada room for 1 week.',
-        totalCharges: '₱9,000.00', paymentOption: 'Full Payment',
-        remaining: '₱0.00', paymentMethod: 'Bank Transfer',
-        statusClass: 'bg-green-100 text-green-600', statusText: 'Approved', statusIcon: 'fa-regular fa-circle-check',
-    },
-    jenny: {
-        avatar: 'J', bg: 'bg-sky-100', color: 'text-sky-600',
-        name: 'Jenny Villanueva', subCode: '#RSV-3',
-        resNumber: 'RSV-2026-00003',
-        email: 'jenny@email.com', phone: '09193334444',
-        desiredRoom: 'Desired Room: Room 103 — Bedspace',
-        bedId: 'Room/Bed ID: R103-B2-U',
-        moveIn: 'Move-in: March 28, 2026',
-        submitted: 'Submitted: March 15, 2026',
-        requestDetails: 'Needs bedspace near window. Student with early class schedule.',
-        totalCharges: '₱1,000.00', paymentOption: 'Down Payment',
-        remaining: '₱500.00', paymentMethod: 'GCash',
-        statusClass: 'bg-rose-100 text-rose-600', statusText: 'Rejected', statusIcon: 'fa-regular fa-circle-xmark',
-    },
-    lito: {
-        avatar: 'L', bg: 'bg-green-100', color: 'text-green-600',
-        name: 'Lito Cruz', subCode: '#RSV-4',
-        resNumber: 'RSV-2026-00002',
-        email: 'lito@email.com', phone: '09204445555',
-        desiredRoom: 'Desired Room: Room 202 — Solo Room',
-        bedId: 'Room/Bed ID: R202-S1',
-        moveIn: 'Move-in: March 22, 2026',
-        submitted: 'Submitted: March 10, 2026',
-        requestDetails: 'Requires solo room for work setup.',
-        totalCharges: '₱5,000.00', paymentOption: 'Full Payment',
-        remaining: '₱0.00', paymentMethod: 'Bank Transfer',
-        statusClass: 'bg-slate-100 text-slate-500', statusText: 'Expired', statusIcon: 'fa-regular fa-clock',
-    },
-    sofia: {
-        avatar: 'S', bg: 'bg-teal-100', color: 'text-teal-600',
-        name: 'Sofia Reyes', subCode: '#RSV-5',
-        resNumber: 'RSV-2026-00001',
-        email: 'sofia@email.com', phone: '09155556666',
-        desiredRoom: 'Desired Room: Room 303 — Barkada Room',
-        bedId: 'Room/Bed ID: R303-B1-L',
-        moveIn: 'Move-in: April 4, 2026',
-        submitted: 'Submitted: March 24, 2026',
-        requestDetails: 'Visiting for short term stay.',
-        totalCharges: '₱1,000.00', paymentOption: 'Down Payment',
-        remaining: '₱500.00', paymentMethod: 'GCash',
-        statusClass: 'bg-yellow-100 text-amber-700', statusText: 'Pending', statusIcon: 'fa-regular fa-clock',
-    },
-};
+const csrf = () =>
+    document.querySelector('meta[name="csrf-token"]')?.content ||
+    document.querySelector('input[name="_token"]')?.value;
 
 export default function ReservationsModals() {
     const [data, setData] = useState(null);
+    const [adminNotes, setAdminNotes] = useState('');
+    const [saving, setSaving] = useState(false);
+    const [reservationsData, setReservationsData] = useState({});
 
+    // ============================================================
+    // Read reservations data from the DOM (passed by Blade)
+    // ============================================================
+    useEffect(() => {
+        const el = document.getElementById('admin-reservations-modals');
+        if (el?.dataset?.reservations) {
+            try {
+                setReservationsData(JSON.parse(el.dataset.reservations));
+            } catch (e) {
+                console.error('Invalid reservations JSON', e);
+            }
+        }
+    }, []);
+
+    // ============================================================
+    // Event delegation for row actions
+    // ============================================================
     useEffect(() => {
         const handler = (e) => {
-            const btn = e.target.closest('[data-res-key]');
-            if (btn && DATA[btn.dataset.resKey]) {
-                setData(DATA[btn.dataset.resKey]);
+            // View details — opens modal
+            const viewBtn = e.target.closest('.icon-view[data-res-key]');
+            if (viewBtn) {
+                const key = viewBtn.dataset.resKey;
+                const found = reservationsData[key];
+                if (found) {
+                    setData(found);
+                    setAdminNotes(found.admin_notes || '');
+                }
+                return;
+            }
+
+            // Approve — from row
+            const approveBtn = e.target.closest('.icon-approve');
+            if (approveBtn) {
+                const id = approveBtn.dataset.resId;
+                if (!id) return;
+                if (!confirm('Approve this reservation?')) return;
+
+                setSaving(true);
+                fetch(`/admin/reservations/${id}/approve`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'X-CSRF-TOKEN': csrf(),
+                    },
+                    body: JSON.stringify({ admin_notes: '' }),
+                })
+                    .then(async (res) => {
+                        const result = await res.json();
+                        if (!res.ok) throw new Error(result.message || 'Failed to approve.');
+                        window.location.reload();
+                    })
+                    .catch((err) => alert(err.message))
+                    .finally(() => setSaving(false));
+                return;
+            }
+
+            // Reject — from row
+            const rejectBtn = e.target.closest('.icon-reject');
+            if (rejectBtn) {
+                const id = rejectBtn.dataset.resId;
+                if (!id) return;
+                if (!confirm('Reject this reservation?')) return;
+
+                setSaving(true);
+                fetch(`/admin/reservations/${id}/reject`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'X-CSRF-TOKEN': csrf(),
+                    },
+                    body: JSON.stringify({ admin_notes: '' }),
+                })
+                    .then(async (res) => {
+                        const result = await res.json();
+                        if (!res.ok) throw new Error(result.message || 'Failed to reject.');
+                        window.location.reload();
+                    })
+                    .catch((err) => alert(err.message))
+                    .finally(() => setSaving(false));
+                return;
             }
         };
+
         document.addEventListener('click', handler);
         return () => document.removeEventListener('click', handler);
-    }, []);
+    }, [reservationsData]);
+
+    const closeModal = () => {
+        setData(null);
+        setAdminNotes('');
+    };
+
+    // ============================================================
+    // Modal actions
+    // ============================================================
+    const handleApprove = async () => {
+        if (!data) return;
+        // Find the numeric ID from the reservations map by matching key
+        const entry = Object.values(reservationsData).find((r) => r.key === data.key);
+        if (!entry) return;
+
+        // Find the raw id via a lookup endpoint
+        setSaving(true);
+        try {
+            const res = await fetch(`/admin/reservations/${encodeURIComponent(data.resNumber)}/approve`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': csrf(),
+                },
+                body: JSON.stringify({ admin_notes: adminNotes }),
+            });
+            // Laravel route binding uses ID; adjust to use ID if needed
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err.message || 'Failed to approve.');
+            }
+            closeModal();
+            window.location.reload();
+        } catch (err) {
+            alert(err.message);
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleReject = async () => {
+        if (!data) return;
+        setSaving(true);
+        try {
+            const res = await fetch(`/admin/reservations/${encodeURIComponent(data.resNumber)}/reject`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': csrf(),
+                },
+                body: JSON.stringify({ admin_notes: adminNotes }),
+            });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err.message || 'Failed to reject.');
+            }
+            closeModal();
+            window.location.reload();
+        } catch (err) {
+            alert(err.message);
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleDelete = async () => {
+        if (!data) return;
+        if (!confirm('Delete this reservation permanently?')) return;
+        setSaving(true);
+        try {
+            const res = await fetch(`/admin/reservations/${encodeURIComponent(data.resNumber)}`, {
+                method: 'DELETE',
+                headers: {
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': csrf(),
+                },
+            });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err.message || 'Failed to delete.');
+            }
+            closeModal();
+            window.location.reload();
+        } catch (err) {
+            alert(err.message);
+        } finally {
+            setSaving(false);
+        }
+    };
 
     if (!data) return null;
 
+    const isPending = data.statusText === 'Pending';
+
     return (
-        <Modal onClose={() => setData(null)} maxWidth="max-w-[520px]">
+        <Modal onClose={closeModal} maxWidth="max-w-[520px]">
             <div className="p-5 pb-4 flex items-center justify-between border-b border-slate-100">
                 <h2 className="text-lg font-bold text-slate-900">Reservation Details</h2>
-                <button onClick={() => setData(null)} className="text-slate-400 hover:text-slate-700 text-lg">
+                <button onClick={closeModal} className="text-slate-400 hover:text-slate-700 text-lg">
                     <i className="fa-solid fa-xmark"></i>
                 </button>
             </div>
@@ -104,7 +210,7 @@ export default function ReservationsModals() {
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3.5">
                         <div className={`w-12 h-12 rounded-full ${data.bg} ${data.color} flex items-center justify-center text-lg font-bold`}>
-                            {data.avatar}
+                            {data.initial}
                         </div>
                         <div>
                             <h3 className="text-base font-bold text-slate-900">{data.name}</h3>
@@ -149,7 +255,7 @@ export default function ReservationsModals() {
 
                 <div className="bg-slate-50 rounded-xl p-4">
                     <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Request Details</div>
-                    <p className="text-[13px] text-slate-700 leading-snug">{data.requestDetails}</p>
+                    <p className="text-[13px] text-slate-700 leading-snug">{data.requestDetails || '—'}</p>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
@@ -186,19 +292,47 @@ export default function ReservationsModals() {
 
                 <div>
                     <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Admin Notes</div>
-                    <textarea placeholder="Add notes..." className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-[13px] outline-none resize-y min-h-[60px]"></textarea>
+                    <textarea
+                        value={adminNotes}
+                        onChange={(e) => setAdminNotes(e.target.value)}
+                        placeholder="Add notes..."
+                        className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-[13px] outline-none resize-y min-h-[60px] focus:border-slate-400"
+                    />
                 </div>
             </div>
 
             <div className="p-5 border-t border-slate-100 flex items-center justify-end gap-3">
-                <button className="text-rose-600 text-[13px] font-semibold mr-auto">Delete</button>
-                <button className="bg-emerald-600 text-white px-4 py-2 rounded-lg text-[13px] font-semibold inline-flex items-center gap-1.5">
-                    <i className="fa-regular fa-circle-check"></i> Approve
+                <button
+                    onClick={handleDelete}
+                    disabled={saving}
+                    className="text-rose-600 hover:text-rose-700 disabled:opacity-50 text-[13px] font-semibold mr-auto"
+                >
+                    Delete
                 </button>
-                <button className="bg-rose-50 text-rose-600 px-4 py-2 rounded-lg text-[13px] font-semibold inline-flex items-center gap-1.5">
-                    <i className="fa-regular fa-circle-xmark"></i> Reject
-                </button>
-                <button onClick={() => setData(null)} className="bg-[#02122c] text-white px-4 py-2 rounded-lg text-[13px] font-semibold">
+                {isPending && (
+                    <>
+                        <button
+                            onClick={handleApprove}
+                            disabled={saving}
+                            className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-[13px] font-semibold inline-flex items-center gap-1.5"
+                        >
+                            <i className="fa-regular fa-circle-check"></i>
+                            {saving ? 'Saving…' : 'Approve'}
+                        </button>
+                        <button
+                            onClick={handleReject}
+                            disabled={saving}
+                            className="bg-rose-50 hover:bg-rose-100 disabled:opacity-50 text-rose-600 px-4 py-2 rounded-lg text-[13px] font-semibold inline-flex items-center gap-1.5"
+                        >
+                            <i className="fa-regular fa-circle-xmark"></i>
+                            Reject
+                        </button>
+                    </>
+                )}
+                <button
+                    onClick={closeModal}
+                    className="bg-[#02122c] text-white px-4 py-2 rounded-lg text-[13px] font-semibold"
+                >
                     Close
                 </button>
             </div>

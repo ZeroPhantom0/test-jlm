@@ -42,8 +42,32 @@
             </thead>
             <tbody>
                 @foreach([
-                    ['title' => 'Leaky Faucet', 'desc' => 'Kitchen sink is dripping constantly.'],
-                    ['title' => 'Broken Window Lock', 'desc' => 'Bedroom window lock is stuck.'],
+                    [
+                        'id'          => 1,
+                        'ref'         => 'sr-1',
+                        'title'       => 'Leaky Faucet',
+                        'desc'        => 'Kitchen sink is dripping constantly.',
+                        'category'    => 'Plumbing',
+                        'priority'    => 'MEDIUM',
+                        'submitted'   => 'Mar 20, 2026',
+                        'staff'       => null,
+                        'scheduled'   => null,
+                        'unit'        => 'Room 101',
+                        'status'      => 'Pending',
+                    ],
+                    [
+                        'id'          => 2,
+                        'ref'         => 'sr-2',
+                        'title'       => 'Broken Window Lock',
+                        'desc'        => 'Bedroom window lock is stuck.',
+                        'category'    => 'General',
+                        'priority'    => 'HIGH',
+                        'submitted'   => 'Mar 20, 2026',
+                        'staff'       => null,
+                        'scheduled'   => null,
+                        'unit'        => 'Room 101',
+                        'status'      => 'Pending',
+                    ],
                 ] as $r)
                 <tr class="border-b border-slate-50 last:border-0">
                     <td class="py-4 px-2">
@@ -59,7 +83,8 @@
                     <td class="py-4 px-2 text-slate-600 text-[13px]">Mar 20, 2026</td>
                     <td class="py-4 px-2">
                         <div class="flex items-center gap-3 text-slate-400">
-                            <i class="fa-regular fa-eye cursor-pointer hover:text-slate-600"></i>
+                            <i class="fa-regular fa-eye cursor-pointer hover:text-slate-600 view-details-btn"
+                               data-request-id="{{ $r['id'] }}"></i>
                             <i class="fa-regular fa-circle-xmark cursor-pointer hover:text-slate-600"></i>
                         </div>
                     </td>
@@ -70,6 +95,34 @@
     </div>
 </div>
 
-{{-- Modals mounted by React --}}
-<div id="services-maintenance-root"></div>
+{{-- React Modal Mount Point --}}
+<div id="tenant-maintenance-modals"
+     data-requests="{{ json_encode([
+        1 => [
+            'id'        => 1,
+            'ref'       => 'sr-1',
+            'title'     => 'Leaky Faucet',
+            'desc'      => 'Kitchen sink is dripping constantly.',
+            'category'  => 'Plumbing',
+            'priority'  => 'MEDIUM',
+            'submitted' => 'Mar 20, 2026',
+            'staff'     => null,
+            'scheduled' => null,
+            'unit'      => 'Room 101',
+            'status'    => 'Pending',
+        ],
+        2 => [
+            'id'        => 2,
+            'ref'       => 'sr-2',
+            'title'     => 'Broken Window Lock',
+            'desc'      => 'Bedroom window lock is stuck.',
+            'category'  => 'General',
+            'priority'  => 'HIGH',
+            'submitted' => 'Mar 20, 2026',
+            'staff'     => null,
+            'scheduled' => null,
+            'unit'      => 'Room 101',
+            'status'    => 'Pending',
+        ],
+     ], JSON_HEX_APOS | JSON_HEX_QUOT) }}"></div>
 @endsection

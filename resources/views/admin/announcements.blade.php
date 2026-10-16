@@ -24,158 +24,101 @@
     <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div class="bg-white rounded-2xl px-5 py-4 border border-slate-100 shadow-sm">
             <div class="text-[13.5px] font-semibold text-slate-500">Total</div>
-            <div class="text-2xl font-extrabold text-slate-900 mt-1.5">4</div>
+            <div class="text-2xl font-extrabold text-slate-900 mt-1.5">{{ $metrics['total'] }}</div>
         </div>
         <div class="bg-white rounded-2xl px-5 py-4 border border-slate-100 shadow-sm">
             <div class="text-[13.5px] font-semibold text-slate-500">Pinned</div>
-            <span class="inline-flex items-center justify-center bg-amber-100 text-amber-700 text-sm font-bold rounded-full px-2 h-7 min-w-7 mt-1.5">2</span>
+            <span class="inline-flex items-center justify-center bg-amber-100 text-amber-700 text-sm font-bold rounded-full px-2 h-7 min-w-7 mt-1.5">{{ $metrics['pinned'] }}</span>
         </div>
         <div class="bg-white rounded-2xl px-5 py-4 border border-slate-100 shadow-sm">
             <div class="text-[13.5px] font-semibold text-slate-500">Important</div>
-            <span class="inline-flex items-center justify-center bg-amber-100 text-amber-700 text-sm font-bold rounded-full px-2 h-7 min-w-7 mt-1.5">2</span>
+            <span class="inline-flex items-center justify-center bg-amber-100 text-amber-700 text-sm font-bold rounded-full px-2 h-7 min-w-7 mt-1.5">{{ $metrics['important'] }}</span>
         </div>
         <div class="bg-white rounded-2xl px-5 py-4 border border-slate-100 shadow-sm">
             <div class="text-[13.5px] font-semibold text-slate-500">Urgent</div>
-            <span class="inline-flex items-center justify-center bg-rose-100 text-rose-600 text-sm font-bold rounded-full px-2 h-7 min-w-7 mt-1.5">0</span>
+            <span class="inline-flex items-center justify-center bg-rose-100 text-rose-600 text-sm font-bold rounded-full px-2 h-7 min-w-7 mt-1.5">{{ $metrics['urgent'] }}</span>
         </div>
     </div>
 
     {{-- Filter --}}
-    <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 flex flex-col md:flex-row items-center gap-4">
+    <form method="GET" action="{{ route('admin.announcements') }}" class="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 flex flex-col md:flex-row items-center gap-4">
         <div class="flex-1 w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-2.5 flex items-center gap-2.5">
             <i class="fa-solid fa-magnifying-glass text-slate-400 text-sm"></i>
-            <input type="text" placeholder="Search by title or keyword..." class="w-full text-[13.5px] outline-none bg-transparent">
+            <input type="text" name="search" value="{{ $filters['search'] ?? '' }}" placeholder="Search by title or keyword..." class="w-full text-[13.5px] outline-none bg-transparent">
         </div>
-        <select class="bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-[13.5px] font-medium text-slate-700 outline-none cursor-pointer w-full md:w-[180px]">
-            <option>All Priorities</option>
-            <option>Urgent</option>
-            <option>Important</option>
-            <option>Normal</option>
+        <select name="priority" onchange="this.form.submit()" class="bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-[13.5px] font-medium text-slate-700 outline-none cursor-pointer w-full md:w-[180px]">
+            <option value="">All Priorities</option>
+            <option value="Urgent"    {{ ($filters['priority'] ?? '') === 'Urgent'    ? 'selected' : '' }}>Urgent</option>
+            <option value="Important" {{ ($filters['priority'] ?? '') === 'Important' ? 'selected' : '' }}>Important</option>
+            <option value="Normal"    {{ ($filters['priority'] ?? '') === 'Normal'    ? 'selected' : '' }}>Normal</option>
         </select>
-    </div>
+    </form>
 
     {{-- List --}}
     <div class="flex flex-col gap-4">
-
-        {{-- Card 1 --}}
-        <div class="bg-white border-[1.5px] border-amber-300 rounded-2xl p-5 flex gap-4">
-            <div class="w-11 h-11 rounded-xl bg-yellow-100 text-amber-600 flex items-center justify-center text-lg font-bold shrink-0">
-                <i class="fa-solid fa-exclamation"></i>
+        @forelse($announcements as $ann)
+        <div class="bg-white {{ $ann->box_class }} rounded-2xl p-5 flex gap-4">
+            <div class="w-11 h-11 rounded-xl {{ $ann->icon_bg }} flex items-center justify-center text-lg font-bold shrink-0">
+                <i class="{{ $ann->priority_icon }}"></i>
             </div>
             <div class="flex-1 min-w-0">
                 <div class="flex flex-wrap justify-between items-center gap-3 mb-2.5">
                     <div class="flex items-center gap-2.5 flex-wrap">
-                        <span class="text-lg font-bold text-slate-900">Water Maintenance Scheduled</span>
+                        <span class="text-lg font-bold text-slate-900">{{ $ann->title }}</span>
+                        @if($ann->is_pinned)
                         <span class="inline-flex items-center gap-1.5 bg-yellow-100 text-amber-700 text-[11px] font-bold px-2 py-0.5 rounded-xl uppercase">
                             <i class="fa-solid fa-thumbtack text-[10px]"></i> Pinned
                         </span>
+                        @endif
                     </div>
                     <div class="flex items-center gap-3.5 text-slate-400">
-                        <button class="hover:text-slate-600 transition toggle-pin-btn"><i class="fa-solid fa-map-pin text-[15px]"></i></button>
-                        <button class="hover:text-slate-600 transition"><i class="fa-regular fa-pen-to-square text-[15px]"></i></button>
-                        <button class="hover:text-rose-500 transition"><i class="fa-regular fa-trash-can text-[15px]"></i></button>
+                        <button
+                            type="button"
+                            class="hover:text-slate-600 transition toggle-pin-btn"
+                            data-ann-id="{{ $ann->id }}"
+                            title="{{ $ann->is_pinned ? 'Unpin' : 'Pin' }}"
+                        >
+                            <i class="fa-solid fa-map-pin text-[15px]"></i>
+                        </button>
+                        <button
+                            type="button"
+                            class="hover:text-slate-600 transition icon-edit"
+                            data-ann-id="{{ $ann->id }}"
+                            title="Edit"
+                        >
+                            <i class="fa-regular fa-pen-to-square text-[15px]"></i>
+                        </button>
+                        <button
+                            type="button"
+                            class="hover:text-rose-500 transition icon-delete"
+                            data-ann-id="{{ $ann->id }}"
+                            title="Delete"
+                        >
+                            <i class="fa-regular fa-trash-can text-[15px]"></i>
+                        </button>
                     </div>
                 </div>
                 <div class="text-sm text-slate-600 leading-relaxed mb-2.5">
-                    Water supply will be interrupted on Saturday, March 25 from 8 AM to 12 PM for routine maintenance. Please store water in advance.
+                    {{ $ann->content }}
                 </div>
                 <div class="flex items-center gap-4 text-[13px]">
-                    <span class="inline-flex items-center gap-1.5 bg-orange-100 text-orange-600 text-xs font-semibold px-3 py-1 rounded-[14px]">
-                        <i class="fa-solid fa-circle-info text-[10px]"></i> Important
+                    <span class="inline-flex items-center gap-1.5 {{ $ann->priority_class }} text-xs font-semibold px-3 py-1 rounded-[14px]">
+                        <i class="fa-solid fa-circle-info text-[10px]"></i> {{ $ann->priority }}
                     </span>
-                    <span class="text-slate-400 font-medium">By Leah Administrator</span>
-                    <span class="text-slate-400">Mar 24, 2026</span>
+                    <span class="text-slate-400 font-medium">By {{ $ann->author->name ?? 'Unknown' }}</span>
+                    <span class="text-slate-400">{{ $ann->created_at?->format('M d, Y') }}</span>
                 </div>
             </div>
         </div>
-
-        {{-- Card 2 --}}
-        <div class="bg-white border-[1.5px] border-amber-300 rounded-2xl p-5 flex gap-4">
-            <div class="w-11 h-11 rounded-xl bg-slate-100 text-slate-600 flex items-center justify-center text-lg font-bold shrink-0">
-                <i class="fa-solid fa-circle-info"></i>
-            </div>
-            <div class="flex-1 min-w-0">
-                <div class="flex flex-wrap justify-between items-center gap-3 mb-2.5">
-                    <div class="flex items-center gap-2.5 flex-wrap">
-                        <span class="text-lg font-bold text-slate-900">Quiet Hours Reminder</span>
-                        <span class="inline-flex items-center gap-1.5 bg-yellow-100 text-amber-700 text-[11px] font-bold px-2 py-0.5 rounded-xl uppercase">
-                            <i class="fa-solid fa-thumbtack text-[10px]"></i> Pinned
-                        </span>
-                    </div>
-                    <div class="flex items-center gap-3.5 text-slate-400">
-                        <button class="hover:text-slate-600 transition toggle-pin-btn"><i class="fa-solid fa-map-pin text-[15px]"></i></button>
-                        <button class="hover:text-slate-600 transition"><i class="fa-regular fa-pen-to-square text-[15px]"></i></button>
-                        <button class="hover:text-rose-500 transition"><i class="fa-regular fa-trash-can text-[15px]"></i></button>
-                    </div>
-                </div>
-                <div class="text-sm text-slate-600 leading-relaxed mb-2.5">
-                    Please observe quiet hours between 10 PM and 6 AM on weekdays to respect fellow residents.
-                </div>
-                <div class="flex items-center gap-4 text-[13px]">
-                    <span class="inline-flex items-center gap-1.5 bg-slate-100 text-slate-600 text-xs font-semibold px-3 py-1 rounded-[14px]">
-                        <i class="fa-solid fa-circle-info text-[10px]"></i> Normal
-                    </span>
-                    <span class="text-slate-400 font-medium">By Leah Administrator</span>
-                    <span class="text-slate-400">Mar 20, 2026</span>
-                </div>
-            </div>
+        @empty
+        <div class="bg-white border border-slate-200 rounded-2xl p-12 text-center text-slate-400">
+            <i class="fa-solid fa-bullhorn text-4xl mb-3"></i>
+            <p class="text-sm">No announcements found.</p>
         </div>
-
-        {{-- Card 3 --}}
-        <div class="bg-white border border-slate-200 rounded-2xl p-5 flex gap-4">
-            <div class="w-11 h-11 rounded-xl bg-yellow-100 text-amber-600 flex items-center justify-center text-lg font-bold shrink-0">
-                <i class="fa-solid fa-exclamation"></i>
-            </div>
-            <div class="flex-1 min-w-0">
-                <div class="flex flex-wrap justify-between items-center gap-3 mb-2.5">
-                    <span class="text-lg font-bold text-slate-900">Monthly Rent Due Reminder</span>
-                    <div class="flex items-center gap-3.5 text-slate-400">
-                        <button class="hover:text-slate-600 transition toggle-pin-btn"><i class="fa-solid fa-thumbtack text-[15px]"></i></button>
-                        <button class="hover:text-slate-600 transition"><i class="fa-regular fa-pen-to-square text-[15px]"></i></button>
-                        <button class="hover:text-rose-500 transition"><i class="fa-regular fa-trash-can text-[15px]"></i></button>
-                    </div>
-                </div>
-                <div class="text-sm text-slate-600 leading-relaxed mb-2.5">
-                    Rent for April is due by April 5. Please pay on time via GCash or cash at the office to avoid late fees.
-                </div>
-                <div class="flex items-center gap-4 text-[13px]">
-                    <span class="inline-flex items-center gap-1.5 bg-orange-100 text-orange-600 text-xs font-semibold px-3 py-1 rounded-[14px]">
-                        <i class="fa-solid fa-circle-info text-[10px]"></i> Important
-                    </span>
-                    <span class="text-slate-400 font-medium">By Leah Administrator</span>
-                    <span class="text-slate-400">Mar 18, 2026</span>
-                </div>
-            </div>
-        </div>
-
-        {{-- Card 4 --}}
-        <div class="bg-white border border-slate-200 rounded-2xl p-5 flex gap-4">
-            <div class="w-11 h-11 rounded-xl bg-slate-100 text-slate-600 flex items-center justify-center text-lg font-bold shrink-0">
-                <i class="fa-solid fa-circle-info"></i>
-            </div>
-            <div class="flex-1 min-w-0">
-                <div class="flex flex-wrap justify-between items-center gap-3 mb-2.5">
-                    <span class="text-lg font-bold text-slate-900">Common Area Cleaning Schedule</span>
-                    <div class="flex items-center gap-3.5 text-slate-400">
-                        <button class="hover:text-slate-600 transition toggle-pin-btn"><i class="fa-solid fa-thumbtack text-[15px]"></i></button>
-                        <button class="hover:text-slate-600 transition"><i class="fa-regular fa-pen-to-square text-[15px]"></i></button>
-                        <button class="hover:text-rose-500 transition"><i class="fa-regular fa-trash-can text-[15px]"></i></button>
-                    </div>
-                </div>
-                <div class="text-sm text-slate-600 leading-relaxed mb-2.5">
-                    Deep cleaning of the hallway and kitchen areas will take place every Wednesday morning between 9 AM and 11 AM.
-                </div>
-                <div class="flex items-center gap-4 text-[13px]">
-                    <span class="inline-flex items-center gap-1.5 bg-slate-100 text-slate-600 text-xs font-semibold px-3 py-1 rounded-[14px]">
-                        <i class="fa-solid fa-circle-info text-[10px]"></i> Normal
-                    </span>
-                    <span class="text-slate-400 font-medium">By Leah Administrator</span>
-                    <span class="text-slate-400">Mar 15, 2026</span>
-                </div>
-            </div>
-        </div>
+        @endforelse
     </div>
 </div>
 
-<div id="admin-announcements-modals"></div>
+{{-- React Modal Mount Point with data --}}
+<div id="admin-announcements-modals" data-announcements='@json($announcementsForReact)'></div>
 @endsection

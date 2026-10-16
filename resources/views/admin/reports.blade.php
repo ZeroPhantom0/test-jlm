@@ -2,6 +2,10 @@
 @section('title', 'Reports')
 
 @section('content')
+@php
+    $fmt = fn ($n) => '₱' . number_format((float) $n, 0);
+    $pct = fn ($n) => number_format((float) $n, 1);
+@endphp
 <div class="p-4 md:p-8 max-w-[1400px] mx-auto space-y-5">
 
     {{-- Page Title + Controls --}}
@@ -11,7 +15,7 @@
                 <i class="fa-regular fa-file-lines"></i>
             </div>
             <div>
-                <h2 class="text-[22px] font-extrabold text-slate-900">Reports & Analytics</h2>
+                <h2 class="text-[22px] font-extrabold text-slate-900">Reports &amp; Analytics</h2>
                 <p class="text-[13px] text-slate-500 mt-0.5">Data insights for JLM Cozy Cabin</p>
             </div>
         </div>
@@ -31,45 +35,51 @@
     {{-- 4 Metric Cards --}}
     <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div class="bg-emerald-50 border border-emerald-200 rounded-2xl px-4 py-4">
-            <div class="text-xs font-semibold text-emerald-600">Total Revenue (Mar)</div>
-            <div class="text-[26px] font-extrabold text-emerald-600 leading-tight mt-2">₱156,700</div>
-            <div class="text-[11.5px] text-emerald-500 mt-2">+10.4% vs last month</div>
+            <div class="text-xs font-semibold text-emerald-600">Total Revenue ({{ now()->format('M') }})</div>
+            <div class="text-[26px] font-extrabold text-emerald-600 leading-tight mt-2">{{ $fmt($summary['revenue']) }}</div>
+            <div class="text-[11.5px] text-emerald-500 mt-2">
+                {{ $summary['revenue_change'] >= 0 ? '+' : '' }}{{ $pct($summary['revenue_change']) }}% vs last month
+            </div>
         </div>
         <div class="bg-sky-50 border border-sky-200 rounded-2xl px-4 py-4">
             <div class="text-xs font-semibold text-sky-600">Occupancy Rate</div>
-            <div class="text-[26px] font-extrabold text-sky-600 leading-tight mt-2">75%</div>
-            <div class="text-[11.5px] text-sky-400 mt-2">9 of 12 rooms occupied</div>
+            <div class="text-[26px] font-extrabold text-sky-600 leading-tight mt-2">{{ $summary['occupancy_rate'] }}%</div>
+            <div class="text-[11.5px] text-sky-400 mt-2">
+                {{ $summary['occupied_rooms'] }} of {{ $summary['total_rooms'] }} rooms occupied
+            </div>
         </div>
         <div class="bg-violet-50 border border-violet-200 rounded-2xl px-4 py-4">
             <div class="text-xs font-semibold text-violet-700">Active Tenants</div>
-            <div class="text-[26px] font-extrabold text-violet-700 leading-tight mt-2">4</div>
+            <div class="text-[26px] font-extrabold text-violet-700 leading-tight mt-2">{{ $summary['active_tenants'] }}</div>
             <div class="text-[11.5px] text-violet-400 mt-2">Currently residing</div>
         </div>
         <div class="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-4">
             <div class="text-xs font-semibold text-amber-700">Open Requests</div>
-            <div class="text-[26px] font-extrabold text-amber-700 leading-tight mt-2">3</div>
+            <div class="text-[26px] font-extrabold text-amber-700 leading-tight mt-2">{{ $summary['open_requests'] }}</div>
             <div class="text-[11.5px] text-amber-500 mt-2">Pending maintenance</div>
         </div>
     </div>
 
     {{-- Tabs Card --}}
     <div class="bg-white border border-slate-200 rounded-2xl overflow-hidden">
-        <div class="flex border-b border-slate-100">
-            <button class="reports-tab-btn active px-6 py-4 text-[13.5px] font-semibold text-emerald-500 border-b-2 border-emerald-500 bg-emerald-50/50 inline-flex items-center gap-2" data-tab="occupancy">
+        <div class="flex border-b border-slate-100 overflow-x-auto">
+            <button class="reports-tab-btn active px-6 py-4 text-[13.5px] font-semibold text-emerald-500 border-b-2 border-emerald-500 bg-emerald-50/50 inline-flex items-center gap-2 whitespace-nowrap" data-tab="occupancy">
                 <i class="fa-solid fa-house"></i> Occupancy
             </button>
-            <button class="reports-tab-btn px-6 py-4 text-[13.5px] font-semibold text-slate-600 border-b-2 border-transparent inline-flex items-center gap-2" data-tab="revenue">
+            <button class="reports-tab-btn px-6 py-4 text-[13.5px] font-semibold text-slate-600 border-b-2 border-transparent inline-flex items-center gap-2 whitespace-nowrap" data-tab="revenue">
                 <i class="fa-solid fa-peso-sign"></i> Revenue
             </button>
-            <button class="reports-tab-btn px-6 py-4 text-[13.5px] font-semibold text-slate-600 border-b-2 border-transparent inline-flex items-center gap-2" data-tab="service">
+            <button class="reports-tab-btn px-6 py-4 text-[13.5px] font-semibold text-slate-600 border-b-2 border-transparent inline-flex items-center gap-2 whitespace-nowrap" data-tab="service">
                 <i class="fa-solid fa-wrench"></i> Service Requests
             </button>
-            <button class="reports-tab-btn px-6 py-4 text-[13.5px] font-semibold text-slate-600 border-b-2 border-transparent inline-flex items-center gap-2" data-tab="payments">
+            <button class="reports-tab-btn px-6 py-4 text-[13.5px] font-semibold text-slate-600 border-b-2 border-transparent inline-flex items-center gap-2 whitespace-nowrap" data-tab="payments">
                 <i class="fa-solid fa-chart-line"></i> Payments
             </button>
         </div>
 
-        {{-- Tab 1: Occupancy --}}
+        {{-- ============================================ --}}
+        {{-- TAB 1: OCCUPANCY --}}
+        {{-- ============================================ --}}
         <div class="reports-panel p-6" id="panel-occupancy">
             <h3 class="text-base font-bold text-slate-900">Monthly Occupancy Trend</h3>
             <p class="text-xs text-slate-500 mt-0.5 mb-5">Number of rooms by status per month</p>
@@ -81,14 +91,7 @@
             </div>
 
             <div class="flex items-end justify-around h-[180px] border-b border-dashed border-slate-300 pl-6 gap-3">
-                @foreach([
-                    ['label' => 'Oct 25', 'vacant' => 25, 'reserved' => 15, 'occupied' => 60],
-                    ['label' => 'Nov 25', 'vacant' => 20, 'reserved' => 15, 'occupied' => 65],
-                    ['label' => 'Dec 25', 'vacant' => 20, 'reserved' => 15, 'occupied' => 65],
-                    ['label' => 'Jan 26', 'vacant' => 20, 'reserved' => 10, 'occupied' => 70],
-                    ['label' => 'Feb 26', 'vacant' => 20, 'reserved' => 15, 'occupied' => 65],
-                    ['label' => 'Mar 26', 'vacant' => 20, 'reserved' => 15, 'occupied' => 65],
-                ] as $bar)
+                @foreach ($occupancyTrend as $bar)
                 <div class="flex flex-col items-center gap-2">
                     <div class="w-[50px] h-[160px] flex flex-col justify-end rounded-md overflow-hidden">
                         <div class="w-full bg-slate-200" style="height: {{ $bar['vacant'] }}%"></div>
@@ -114,89 +117,244 @@
                             </tr>
                         </thead>
                         <tbody>
-                            @foreach([
-                                ['type' => 'Solo Room', 'occ' => 5, 'res' => 0, 'vac' => 1, 'total' => 6],
-                                ['type' => 'Barkada Room', 'occ' => 3, 'res' => 2, 'vac' => 1, 'total' => 6],
-                                ['type' => 'Bedspace', 'occ' => 1, 'res' => 0, 'vac' => 1, 'total' => 2],
-                            ] as $row)
+                            @forelse ($occupancyByType as $row)
                             <tr class="border-b border-slate-50">
                                 <td class="py-3.5 px-4 text-slate-800">{{ $row['type'] }}</td>
-                                <td class="py-3.5 px-4"><span class="bg-emerald-100 text-emerald-700 w-6 h-6 rounded-full inline-flex items-center justify-center text-[11px] font-bold">{{ $row['occ'] }}</span></td>
-                                <td class="py-3.5 px-4"><span class="bg-indigo-100 text-indigo-700 w-6 h-6 rounded-full inline-flex items-center justify-center text-[11px] font-bold">{{ $row['res'] }}</span></td>
-                                <td class="py-3.5 px-4"><span class="bg-slate-100 text-slate-600 w-6 h-6 rounded-full inline-flex items-center justify-center text-[11px] font-bold">{{ $row['vac'] }}</span></td>
+                                <td class="py-3.5 px-4"><span class="bg-emerald-100 text-emerald-700 w-6 h-6 rounded-full inline-flex items-center justify-center text-[11px] font-bold">{{ $row['occupied'] }}</span></td>
+                                <td class="py-3.5 px-4"><span class="bg-indigo-100 text-indigo-700 w-6 h-6 rounded-full inline-flex items-center justify-center text-[11px] font-bold">{{ $row['reserved'] }}</span></td>
+                                <td class="py-3.5 px-4"><span class="bg-slate-100 text-slate-600 w-6 h-6 rounded-full inline-flex items-center justify-center text-[11px] font-bold">{{ $row['vacant'] }}</span></td>
                                 <td class="py-3.5 px-4 font-bold text-slate-900">{{ $row['total'] }}</td>
                             </tr>
-                            @endforeach
+                            @empty
+                            <tr><td colspan="5" class="py-8 text-center text-slate-400 text-sm">No rooms found.</td></tr>
+                            @endforelse
                         </tbody>
                     </table>
                 </div>
             </div>
         </div>
 
-        {{-- Tab 2: Revenue (hidden by default) --}}
+        {{-- ============================================ --}}
+        {{-- TAB 2: REVENUE --}}
+        {{-- ============================================ --}}
         <div class="reports-panel p-6 hidden" id="panel-revenue">
             <h3 class="text-base font-bold text-slate-900">Monthly Revenue Breakdown</h3>
             <p class="text-xs text-slate-500 mt-0.5 mb-5">Rent, utilities and other income in ₱</p>
 
-            <div class="mt-6 overflow-x-auto">
-                <table class="w-full text-left text-[13px]">
-                    <thead>
-                        <tr class="bg-slate-50 text-[11px] text-slate-500 uppercase tracking-wide">
-                            <th class="py-3 px-4">Month</th>
-                            <th class="py-3 px-4">Rent</th>
-                            <th class="py-3 px-4">Utilities</th>
-                            <th class="py-3 px-4">Other</th>
-                            <th class="py-3 px-4">Total</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach([
-                            ['month' => 'Oct 25', 'rent' => '₱76,200', 'util' => '₱12,000', 'other' => '₱5,000', 'total' => '₱93,200'],
-                            ['month' => 'Nov 25', 'rent' => '₱84,700', 'util' => '₱14,500', 'other' => '₱3,200', 'total' => '₱102,400'],
-                            ['month' => 'Dec 25', 'rent' => '₱88,300', 'util' => '₱15,200', 'other' => '₱6,100', 'total' => '₱109,600'],
-                            ['month' => 'Jan 26', 'rent' => '₱92,400', 'util' => '₱13,800', 'other' => '₱4,500', 'total' => '₱110,700'],
-                            ['month' => 'Feb 26', 'rent' => '₱96,000', 'util' => '₱14,200', 'other' => '₱5,800', 'total' => '₱116,000'],
-                            ['month' => 'Mar 26', 'rent' => '₱130,000', 'util' => '₱16,200', 'other' => '₱10,500', 'total' => '₱156,700'],
-                        ] as $row)
-                        <tr class="border-b border-slate-50">
-                            <td class="py-3.5 px-4 text-slate-800">{{ $row['month'] }}</td>
-                            <td class="py-3.5 px-4 text-slate-700">{{ $row['rent'] }}</td>
-                            <td class="py-3.5 px-4 text-slate-700">{{ $row['util'] }}</td>
-                            <td class="py-3.5 px-4 text-slate-700">{{ $row['other'] }}</td>
-                            <td class="py-3.5 px-4 font-bold text-slate-900">{{ $row['total'] }}</td>
-                        </tr>
-                        @endforeach
-                        <tr class="bg-[#02122b] text-white font-bold">
-                            <td class="py-3.5 px-4">TOTAL</td>
-                            <td class="py-3.5 px-4">₱567,600</td>
-                            <td class="py-3.5 px-4">₱85,900</td>
-                            <td class="py-3.5 px-4">₱35,100</td>
-                            <td class="py-3.5 px-4 text-emerald-400">₱688,600</td>
-                        </tr>
-                    </tbody>
-                </table>
+            @php
+                // Max value for bar chart scaling
+                $revMax = 1;
+                foreach ($revenueBreakdown as $r) {
+                    $revMax = max($revMax, (float) $r['total']);
+                }
+            @endphp
+
+            <div class="flex items-center justify-center gap-5 text-xs text-slate-500 mb-4">
+                <div class="flex items-center gap-1.5"><div class="w-2.5 h-2.5 rounded-sm bg-emerald-500"></div> Rent</div>
+                <div class="flex items-center gap-1.5"><div class="w-2.5 h-2.5 rounded-sm bg-indigo-500"></div> Utilities</div>
+                <div class="flex items-center gap-1.5"><div class="w-2.5 h-2.5 rounded-sm bg-amber-500"></div> Other</div>
+            </div>
+
+            <div class="flex items-end justify-around h-[180px] border-b border-dashed border-slate-300 pl-9 gap-3">
+                @foreach ($revenueBreakdown as $bar)
+                <div class="flex flex-col items-center gap-2">
+                    <div class="flex items-end gap-1 h-[160px]">
+                        <div class="w-3.5 rounded-t-sm bg-emerald-500" style="height: {{ ($bar['rent'] / $revMax) * 100 }}%"></div>
+                        <div class="w-3.5 rounded-t-sm bg-indigo-500" style="height: {{ ($bar['util'] / $revMax) * 100 }}%"></div>
+                        <div class="w-3.5 rounded-t-sm bg-amber-500"  style="height: {{ ($bar['other'] / $revMax) * 100 }}%"></div>
+                    </div>
+                    <span class="text-[11px] text-slate-500">{{ $bar['label'] }}</span>
+                </div>
+                @endforeach
+            </div>
+
+            <div class="mt-8">
+                <h4 class="text-base font-bold text-slate-900 mb-4">Revenue Summary Table</h4>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-[13px]">
+                        <thead>
+                            <tr class="bg-slate-50 text-[11px] text-slate-500 uppercase tracking-wide">
+                                <th class="py-3 px-4">Month</th>
+                                <th class="py-3 px-4">Rent</th>
+                                <th class="py-3 px-4">Utilities</th>
+                                <th class="py-3 px-4">Other</th>
+                                <th class="py-3 px-4">Total</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @php
+                                $tRent = 0; $tUtil = 0; $tOther = 0; $tTotal = 0;
+                            @endphp
+                            @foreach ($revenueBreakdown as $row)
+                            @php
+                                $tRent  += $row['rent'];
+                                $tUtil  += $row['util'];
+                                $tOther += $row['other'];
+                                $tTotal += $row['total'];
+                            @endphp
+                            <tr class="border-b border-slate-50">
+                                <td class="py-3.5 px-4 text-slate-800">{{ $row['label'] }}</td>
+                                <td class="py-3.5 px-4 text-slate-700">{{ $fmt($row['rent']) }}</td>
+                                <td class="py-3.5 px-4 text-slate-700">{{ $fmt($row['util']) }}</td>
+                                <td class="py-3.5 px-4 text-slate-700">{{ $fmt($row['other']) }}</td>
+                                <td class="py-3.5 px-4 font-bold text-slate-900">{{ $fmt($row['total']) }}</td>
+                            </tr>
+                            @endforeach
+                            <tr class="bg-[#02122b] text-white font-bold">
+                                <td class="py-3.5 px-4">TOTAL</td>
+                                <td class="py-3.5 px-4">{{ $fmt($tRent) }}</td>
+                                <td class="py-3.5 px-4">{{ $fmt($tUtil) }}</td>
+                                <td class="py-3.5 px-4">{{ $fmt($tOther) }}</td>
+                                <td class="py-3.5 px-4 text-emerald-400">{{ $fmt($tTotal) }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
 
-        {{-- Tab 3: Service (hidden) --}}
+        {{-- ============================================ --}}
+        {{-- TAB 3: SERVICE REQUESTS --}}
+        {{-- ============================================ --}}
         <div class="reports-panel p-6 hidden" id="panel-service">
             <h3 class="text-base font-bold text-slate-900">Monthly Service Requests by Category</h3>
             <p class="text-xs text-slate-500 mt-0.5 mb-5">Breakdown of maintenance issues reported</p>
-            <div class="text-center py-12 text-slate-400 text-sm">
-                <i class="fa-solid fa-chart-column text-4xl mb-3 opacity-30"></i>
-                <p>Service request chart — data visualization placeholder</p>
+
+            <div class="flex flex-col gap-4 mt-3">
+                {{-- Chart canvas area --}}
+                <div class="relative h-[200px] pl-10 flex flex-col justify-end">
+                    {{-- Gridlines --}}
+                    <div class="absolute top-0 left-10 right-0 bottom-0 flex flex-col justify-between pointer-events-none">
+                        <div class="w-full border-b border-dashed border-slate-100"></div>
+                        <div class="w-full border-b border-dashed border-slate-100"></div>
+                        <div class="w-full border-b border-dashed border-slate-100"></div>
+                        <div class="w-full border-b border-dashed border-slate-300"></div>
+                    </div>
+
+                    {{-- Y-Axis --}}
+                    <div class="absolute left-0 -top-1.5 bottom-0 flex flex-col justify-between text-[11px] text-slate-400">
+                        <span>{{ $serviceMax }}</span>
+                        <span>{{ round($serviceMax * 2 / 3) }}</span>
+                        <span>{{ round($serviceMax / 3) }}</span>
+                        <span>0</span>
+                    </div>
+
+                    {{-- Bars --}}
+                    <div class="flex items-end justify-around h-full relative z-10">
+                        @foreach ($serviceByCategory as $month)
+                            <div class="flex flex-col items-center h-full justify-end">
+                                <div class="flex items-end gap-1.5 h-full">
+                                    <div class="w-3.5 rounded-t-sm transition-opacity hover:opacity-85"
+                                         style="background:#6366f1; height: {{ ($month['plumbing'] / $serviceMax) * 100 }}%;"
+                                         title="Plumbing: {{ $month['plumbing'] }}"></div>
+                                    <div class="w-3.5 rounded-t-sm transition-opacity hover:opacity-85"
+                                         style="background:#f59e0b; height: {{ ($month['electrical'] / $serviceMax) * 100 }}%;"
+                                         title="Electrical: {{ $month['electrical'] }}"></div>
+                                    <div class="w-3.5 rounded-t-sm transition-opacity hover:opacity-85"
+                                         style="background:#10b981; height: {{ ($month['hvac'] / $serviceMax) * 100 }}%;"
+                                         title="HVAC: {{ $month['hvac'] }}"></div>
+                                    <div class="w-3.5 rounded-t-sm transition-opacity hover:opacity-85"
+                                         style="background:#94a3b8; height: {{ ($month['general'] / $serviceMax) * 100 }}%;"
+                                         title="General: {{ $month['general'] }}"></div>
+                                </div>
+                            </div>
+                        @endforeach
+                    </div>
+                </div>
+
+                {{-- X-Axis Labels --}}
+                <div class="flex justify-around pl-10">
+                    @foreach ($serviceByCategory as $month)
+                        <span class="text-[11px] text-slate-500 font-medium text-center w-20">{{ $month['label'] }}</span>
+                    @endforeach
+                </div>
+
+                {{-- Legend --}}
+                <div class="flex items-center justify-center gap-5 text-xs text-slate-500 mt-4">
+                    <div class="flex items-center gap-1.5"><div class="w-2.5 h-2.5 rounded-sm" style="background:#6366f1;"></div> Plumbing</div>
+                    <div class="flex items-center gap-1.5"><div class="w-2.5 h-2.5 rounded-sm" style="background:#f59e0b;"></div> Electrical</div>
+                    <div class="flex items-center gap-1.5"><div class="w-2.5 h-2.5 rounded-sm" style="background:#10b981;"></div> HVAC</div>
+                    <div class="flex items-center gap-1.5"><div class="w-2.5 h-2.5 rounded-sm" style="background:#94a3b8;"></div> General</div>
+                </div>
             </div>
         </div>
 
-        {{-- Tab 4: Payments (hidden) --}}
+        {{-- ============================================ --}}
+        {{-- TAB 4: PAYMENTS --}}
+        {{-- ============================================ --}}
+        @php
+            $gcash  = $paymentMethods['gcash'];
+            $bank   = $paymentMethods['bank'];
+            $otc    = $paymentMethods['otc'];
+            $gcashEnd   = $gcash;
+            $bankEnd    = $gcash + $bank;
+            // otc always fills the rest to 100%
+        @endphp
         <div class="reports-panel p-6 hidden" id="panel-payments">
-            <h3 class="text-base font-bold text-slate-900">Payment Methods Distribution</h3>
-            <p class="text-xs text-slate-500 mt-0.5 mb-5">Percentage of payments by method</p>
-            <div class="text-center py-12 text-slate-400 text-sm">
-                <i class="fa-solid fa-chart-pie text-4xl mb-3 opacity-30"></i>
-                <p>Payment distribution chart — data visualization placeholder</p>
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
+
+                {{-- LEFT: Donut Chart --}}
+                <div class="flex flex-col items-center justify-center gap-5">
+                    <div>
+                        <h3 class="text-base font-bold text-slate-900 text-center">Payment Methods Distribution</h3>
+                        <p class="text-xs text-slate-500 mt-0.5 mb-5 text-center">Percentage of payments by method</p>
+                    </div>
+
+                    <div class="w-[180px] h-[180px] rounded-full relative flex items-center justify-center"
+                         style="background: conic-gradient(
+                            #6366f1 0% {{ $gcashEnd }}%,
+                            #10b981 {{ $gcashEnd }}% {{ $bankEnd }}%,
+                            #f59e0b {{ $bankEnd }}% 100%
+                         );">
+                        <div class="w-[110px] h-[110px] bg-white rounded-full"></div>
+                    </div>
+
+                    <div class="flex gap-4 text-xs text-slate-600 flex-wrap justify-center">
+                        <div><span style="color:#6366f1;" class="font-bold">●</span> GCash <strong>{{ $gcash }}%</strong></div>
+                        <div><span style="color:#10b981;" class="font-bold">●</span> Bank Transfer <strong>{{ $bank }}%</strong></div>
+                        <div><span style="color:#f59e0b;" class="font-bold">●</span> OTC <strong>{{ $otc }}%</strong></div>
+                    </div>
+                </div>
+
+                {{-- RIGHT: Payment Status Summary --}}
+                <div class="flex flex-col gap-3">
+                    <h3 class="text-base font-bold text-slate-900">Payment Status Summary</h3>
+
+                    <div class="bg-slate-50 rounded-xl px-4 py-3 flex items-center justify-between">
+                        <div class="flex items-center gap-3 text-[13px] font-semibold text-slate-700">
+                            <span class="w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 inline-flex items-center justify-center text-[11px] font-bold">{{ $paymentSummary['Paid']['count'] }}</span>
+                            <span>Paid</span>
+                        </div>
+                        <div class="text-[13px] font-bold text-slate-900">{{ $fmt($paymentSummary['Paid']['amount']) }}</div>
+                    </div>
+
+                    <div class="bg-slate-50 rounded-xl px-4 py-3 flex items-center justify-between">
+                        <div class="flex items-center gap-3 text-[13px] font-semibold text-slate-700">
+                            <span class="w-6 h-6 rounded-full bg-amber-100 text-amber-700 inline-flex items-center justify-center text-[11px] font-bold">{{ $paymentSummary['Unpaid']['count'] }}</span>
+                            <span>Unpaid</span>
+                        </div>
+                        <div class="text-[13px] font-bold text-slate-900">{{ $fmt($paymentSummary['Unpaid']['amount']) }}</div>
+                    </div>
+
+                    <div class="bg-slate-50 rounded-xl px-4 py-3 flex items-center justify-between">
+                        <div class="flex items-center gap-3 text-[13px] font-semibold text-slate-700">
+                            <span class="w-6 h-6 rounded-full inline-flex items-center justify-center text-[11px] font-bold" style="background:#ffe4e6; color:#e11d48;">{{ $paymentSummary['Overdue']['count'] }}</span>
+                            <span>Overdue</span>
+                        </div>
+                        <div class="text-[13px] font-bold text-slate-900">{{ $fmt($paymentSummary['Overdue']['amount']) }}</div>
+                    </div>
+
+                    <div class="bg-slate-50 rounded-xl px-4 py-3 flex items-center justify-between">
+                        <div class="flex items-center gap-3 text-[13px] font-semibold text-slate-700">
+                            <span class="w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 inline-flex items-center justify-center text-[11px] font-bold">{{ $paymentSummary['Pending']['count'] }}</span>
+                            <span>Pending Verification</span>
+                        </div>
+                        <div class="text-[13px] font-bold text-slate-900">{{ $fmt($paymentSummary['Pending']['amount']) }}</div>
+                    </div>
+                </div>
             </div>
         </div>
+
     </div>
 </div>
 @endsection

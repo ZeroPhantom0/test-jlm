@@ -24,6 +24,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
     @vite(['resources/css/app.css', 'resources/js/app.jsx'])
+    @stack('styles') {{-- ✅ Added so future pages can push styles --}}
 </head>
 
 {{-- Hidden logout form (POST + CSRF) --}}

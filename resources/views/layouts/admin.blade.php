@@ -36,7 +36,7 @@
 
     {{-- Mobile backdrop --}}
     <div id="admin-sidebar-overlay"
-         class="fixed inset-0 bg-slate-900/50 z-[999] hidden md:hidden backdrop-blur-sm"></div>
+         class="fixed inset-0 bg-slate-900/50 z-999 hidden md:hidden backdrop-blur-sm"></div>
 
     {{-- SIDEBAR (React) --}}
     <div data-react="admin-sidebar"
