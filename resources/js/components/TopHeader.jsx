@@ -1,27 +1,25 @@
+// resources/js/components/TopHeader.jsx
 import React, { useState, useEffect, useRef } from "react";
 import { logout } from "../utils/logout";
 
 export default function TopHeader({
-    title = "Dashboard",
-    userName = "Elle Dela Cruz",
-    userRole = "Tenant",
-    avatar = "https://i.pravatar.cc/100?img=47",
+    title     = "Dashboard",
+    userName  = "Tenant",
+    userRole  = "Tenant",
+    userEmail = "",
+    avatar    = "https://i.pravatar.cc/100?img=47",
 }) {
     const [dropdownOpen, setDropdownOpen] = useState(false);
     const dropdownRef = useRef(null);
 
     useEffect(() => {
         const handleClickOutside = (e) => {
-            if (
-                dropdownRef.current &&
-                !dropdownRef.current.contains(e.target)
-            ) {
+            if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
                 setDropdownOpen(false);
             }
         };
         document.addEventListener("mousedown", handleClickOutside);
-        return () =>
-            document.removeEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
     }, []);
 
     return (
@@ -30,16 +28,12 @@ export default function TopHeader({
                 <button
                     type="button"
                     className="md:hidden text-slate-800 text-lg p-1.5 rounded-md hover:bg-slate-100"
-                    onClick={() =>
-                        window.dispatchEvent(new Event("open-mobile-sidebar"))
-                    }
+                    onClick={() => window.dispatchEvent(new Event("open-mobile-sidebar"))}
                     aria-label="Open menu"
                 >
                     <i className="fa-solid fa-bars" />
                 </button>
-                <h1 className="text-lg md:text-xl font-bold text-slate-800">
-                    {title}
-                </h1>
+                <h1 className="text-lg md:text-xl font-bold text-slate-800">{title}</h1>
             </div>
 
             <div className="flex items-center gap-5 md:gap-6">
@@ -53,7 +47,7 @@ export default function TopHeader({
                     />
                 </div>
 
-                {/* Announcement Notification Bell */}
+                {/* Announcement Bell */}
                 <div className="relative cursor-pointer p-1 text-slate-500 hover:text-slate-700">
                     <i className="fa-solid fa-bullhorn text-base" />
                     <span className="absolute top-1 right-1 w-[6px] h-[6px] bg-red-500 rounded-full" />
@@ -76,7 +70,7 @@ export default function TopHeader({
                         <img
                             src={avatar}
                             alt={userName}
-                            className="w-[34px] h-[34px] rounded-full object-cover"
+                            className="w-[34px] h-[34px] rounded-full object-cover border border-slate-200"
                         />
                         <i className="fa-solid fa-chevron-down text-[10px] text-slate-400" />
                     </div>
@@ -94,7 +88,7 @@ export default function TopHeader({
                                         {userName}
                                     </h4>
                                     <p className="text-[11px] text-slate-400 truncate">
-                                        elledelacruz@gmail.com
+                                        {userEmail || `${userRole.toLowerCase()}@jlmcozycabin.com`}
                                     </p>
                                 </div>
                             </div>

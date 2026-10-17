@@ -1,5 +1,5 @@
 // resources/js/pages/Admin/ReservationsModals.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Modal from '../../components/Modal';
 
 const csrf = () =>
@@ -7,9 +7,9 @@ const csrf = () =>
     document.querySelector('input[name="_token"]')?.value;
 
 export default function ReservationsModals() {
-    const [data, setData] = useState(null);
-    const [adminNotes, setAdminNotes] = useState('');
-    const [saving, setSaving] = useState(false);
+    const [data, setData]                         = useState(null);
+    const [adminNotes, setAdminNotes]             = useState('');
+    const [saving, setSaving]                     = useState(false);
     const [reservationsData, setReservationsData] = useState({});
 
     // ============================================================
@@ -27,6 +27,29 @@ export default function ReservationsModals() {
     }, []);
 
     // ============================================================
+    // Shared request helper
+    // ============================================================
+    const sendAction = useCallback(async (id, action, body = {}) => {
+        const url = action === 'delete'
+            ? `/admin/reservations/${id}`
+            : `/admin/reservations/${id}/${action}`;
+
+        const res = await fetch(url, {
+            method: action === 'delete' ? 'DELETE' : 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'X-CSRF-TOKEN': csrf(),
+            },
+            body: action === 'delete' ? undefined : JSON.stringify(body),
+        });
+
+        const result = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(result.message || `Failed to ${action}.`);
+        return result;
+    }, []);
+
+    // ============================================================
     // Event delegation for row actions
     // ============================================================
     useEffect(() => {
@@ -34,11 +57,11 @@ export default function ReservationsModals() {
             // View details — opens modal
             const viewBtn = e.target.closest('.icon-view[data-res-key]');
             if (viewBtn) {
-                const key = viewBtn.dataset.resKey;
+                const key   = viewBtn.dataset.resKey;
                 const found = reservationsData[key];
                 if (found) {
                     setData(found);
-                    setAdminNotes(found.admin_notes || '');
+                    setAdminNotes(found.adminNotes || '');
                 }
                 return;
             }
@@ -51,20 +74,8 @@ export default function ReservationsModals() {
                 if (!confirm('Approve this reservation?')) return;
 
                 setSaving(true);
-                fetch(`/admin/reservations/${id}/approve`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Accept': 'application/json',
-                        'X-CSRF-TOKEN': csrf(),
-                    },
-                    body: JSON.stringify({ admin_notes: '' }),
-                })
-                    .then(async (res) => {
-                        const result = await res.json();
-                        if (!res.ok) throw new Error(result.message || 'Failed to approve.');
-                        window.location.reload();
-                    })
+                sendAction(id, 'approve', { admin_notes: '' })
+                    .then(() => window.location.reload())
                     .catch((err) => alert(err.message))
                     .finally(() => setSaving(false));
                 return;
@@ -78,20 +89,8 @@ export default function ReservationsModals() {
                 if (!confirm('Reject this reservation?')) return;
 
                 setSaving(true);
-                fetch(`/admin/reservations/${id}/reject`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Accept': 'application/json',
-                        'X-CSRF-TOKEN': csrf(),
-                    },
-                    body: JSON.stringify({ admin_notes: '' }),
-                })
-                    .then(async (res) => {
-                        const result = await res.json();
-                        if (!res.ok) throw new Error(result.message || 'Failed to reject.');
-                        window.location.reload();
-                    })
+                sendAction(id, 'reject', { admin_notes: '' })
+                    .then(() => window.location.reload())
                     .catch((err) => alert(err.message))
                     .finally(() => setSaving(false));
                 return;
@@ -100,7 +99,7 @@ export default function ReservationsModals() {
 
         document.addEventListener('click', handler);
         return () => document.removeEventListener('click', handler);
-    }, [reservationsData]);
+    }, [reservationsData, sendAction]);
 
     const closeModal = () => {
         setData(null);
@@ -108,31 +107,13 @@ export default function ReservationsModals() {
     };
 
     // ============================================================
-    // Modal actions
+    // Modal actions — use the numeric ID from the payload
     // ============================================================
-    const handleApprove = async () => {
+    const runModalAction = async (action, extra = {}) => {
         if (!data) return;
-        // Find the numeric ID from the reservations map by matching key
-        const entry = Object.values(reservationsData).find((r) => r.key === data.key);
-        if (!entry) return;
-
-        // Find the raw id via a lookup endpoint
         setSaving(true);
         try {
-            const res = await fetch(`/admin/reservations/${encodeURIComponent(data.resNumber)}/approve`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    'X-CSRF-TOKEN': csrf(),
-                },
-                body: JSON.stringify({ admin_notes: adminNotes }),
-            });
-            // Laravel route binding uses ID; adjust to use ID if needed
-            if (!res.ok) {
-                const err = await res.json().catch(() => ({}));
-                throw new Error(err.message || 'Failed to approve.');
-            }
+            await sendAction(data.id, action, { admin_notes: adminNotes, ...extra });
             closeModal();
             window.location.reload();
         } catch (err) {
@@ -142,48 +123,15 @@ export default function ReservationsModals() {
         }
     };
 
-    const handleReject = async () => {
-        if (!data) return;
-        setSaving(true);
-        try {
-            const res = await fetch(`/admin/reservations/${encodeURIComponent(data.resNumber)}/reject`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    'X-CSRF-TOKEN': csrf(),
-                },
-                body: JSON.stringify({ admin_notes: adminNotes }),
-            });
-            if (!res.ok) {
-                const err = await res.json().catch(() => ({}));
-                throw new Error(err.message || 'Failed to reject.');
-            }
-            closeModal();
-            window.location.reload();
-        } catch (err) {
-            alert(err.message);
-        } finally {
-            setSaving(false);
-        }
-    };
+    const handleApprove = () => runModalAction('approve');
+    const handleReject  = () => runModalAction('reject');
 
     const handleDelete = async () => {
         if (!data) return;
         if (!confirm('Delete this reservation permanently?')) return;
         setSaving(true);
         try {
-            const res = await fetch(`/admin/reservations/${encodeURIComponent(data.resNumber)}`, {
-                method: 'DELETE',
-                headers: {
-                    'Accept': 'application/json',
-                    'X-CSRF-TOKEN': csrf(),
-                },
-            });
-            if (!res.ok) {
-                const err = await res.json().catch(() => ({}));
-                throw new Error(err.message || 'Failed to delete.');
-            }
+            await sendAction(data.id, 'delete');
             closeModal();
             window.location.reload();
         } catch (err) {
@@ -207,6 +155,7 @@ export default function ReservationsModals() {
             </div>
 
             <div className="p-6 overflow-y-auto flex flex-col gap-5">
+                {/* Header */}
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3.5">
                         <div className={`w-12 h-12 rounded-full ${data.bg} ${data.color} flex items-center justify-center text-lg font-bold`}>
@@ -227,6 +176,7 @@ export default function ReservationsModals() {
                     <div className="text-[13px] font-bold text-teal-600">{data.resNumber}</div>
                 </div>
 
+                {/* Contact */}
                 <div className="bg-slate-50 rounded-xl p-4 flex flex-col gap-2.5">
                     <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Contact Information</div>
                     <div className="flex items-center gap-2.5 text-[13px] text-slate-700">
@@ -237,27 +187,55 @@ export default function ReservationsModals() {
                     </div>
                 </div>
 
+                {/* Reservation Details — with Move-in → Move-out pair */}
                 <div className="bg-slate-50 rounded-xl p-4 flex flex-col gap-2.5">
                     <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Reservation Details</div>
+
                     <div className="flex items-center gap-2.5 text-[13px] text-slate-700">
                         <i className="fa-solid fa-house w-4 text-slate-400"></i> {data.desiredRoom}
                     </div>
                     <div className="flex items-center gap-2.5 text-[13px] text-slate-700">
                         <i className="fa-solid fa-bed w-4 text-slate-400"></i> {data.bedId}
                     </div>
+
+                    {/* Move-in */}
                     <div className="flex items-center gap-2.5 text-[13px] text-slate-700">
-                        <i className="fa-regular fa-calendar w-4 text-slate-400"></i> {data.moveIn}
+                        <i className="fa-solid fa-right-to-bracket w-4 text-slate-400"></i> 
+                        Move-in: {data.formattedCheckIn}
                     </div>
+
+                    {/* Move-out */}
                     <div className="flex items-center gap-2.5 text-[13px] text-slate-700">
-                        <i className="fa-regular fa-calendar-check w-4 text-slate-400"></i> {data.submitted}
+                        <i className="fa-solid fa-right-from-bracket w-4 text-slate-400"></i>
+                        Move-out: {data.formattedCheckOut}
                     </div>
+
+                    {/* Submitted */}
+                    <div className="flex items-center gap-2.5 text-[13px] text-slate-700">
+                        <i className="fa-regular fa-calendar-plus w-4 text-slate-400"></i> {data.submitted}
+                    </div>
+
+                    {/* Stay duration */}
+                    {data.stayDuration != null && (
+                        <div className="flex items-center gap-2.5 text-[13px] text-slate-700">
+                            <i className="fa-regular fa-clock w-4 text-slate-400"></i>
+                            Stay: {data.stayPeriod} ({data.stayDuration} {data.stayDuration === 1 ? 'day' : 'days'})
+                        </div>
+                    )}
                 </div>
 
+                {/* Request Details */}
                 <div className="bg-slate-50 rounded-xl p-4">
                     <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">Request Details</div>
                     <p className="text-[13px] text-slate-700 leading-snug">{data.requestDetails || '—'}</p>
+                    {data.hasCompanion && (
+                        <p className="text-[11px] text-slate-500 mt-1.5">
+                            <i className="fa-solid fa-user-group mr-1"></i> With companion (+₱150)
+                        </p>
+                    )}
                 </div>
 
+                {/* Charges */}
                 <div className="grid grid-cols-2 gap-3">
                     <div className="bg-[#02122b] text-white rounded-xl p-3.5">
                         <div className="text-[11px] text-slate-400">Total Charges</div>
@@ -277,19 +255,31 @@ export default function ReservationsModals() {
                     </div>
                 </div>
 
+                {/* Proof of Payment */}
                 <div>
                     <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Uploaded Proof of Payment</div>
-                    <div className="bg-lime-200 rounded-xl p-4 flex flex-col items-center justify-center">
-                        <div className="bg-white p-2.5 rounded-md shadow-sm w-[120px] text-[8px] text-slate-600">
-                            <div className="text-[9px] font-extrabold text-center mb-1.5">CASH RECEIPT</div>
-                            <p>Receipt No: ______</p>
-                            <p>Amount: ₱500.00</p>
-                            <p>Paid By: {data.name}</p>
+                    {data.proofUrl ? (
+                        <a
+                            href={data.proofUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="bg-lime-200 rounded-xl p-4 flex flex-col items-center justify-center hover:bg-lime-300 transition block"
+                        >
+                            <img
+                                src={data.proofUrl}
+                                alt="Proof of payment"
+                                className="max-h-48 rounded-md shadow-sm"
+                            />
+                            <span className="text-[11px] text-slate-600 mt-2">Click to expand</span>
+                        </a>
+                    ) : (
+                        <div className="bg-slate-100 rounded-xl p-4 text-center text-[12px] text-slate-500 italic">
+                            No proof of payment uploaded.
                         </div>
-                        <span className="text-[11px] text-slate-600 mt-2">Click to expand</span>
-                    </div>
+                    )}
                 </div>
 
+                {/* Admin Notes */}
                 <div>
                     <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Admin Notes</div>
                     <textarea
@@ -301,6 +291,7 @@ export default function ReservationsModals() {
                 </div>
             </div>
 
+            {/* Footer */}
             <div className="p-5 border-t border-slate-100 flex items-center justify-end gap-3">
                 <button
                     onClick={handleDelete}

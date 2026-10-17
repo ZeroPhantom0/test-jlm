@@ -6,6 +6,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Invoice;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 
 class BillingController extends Controller
@@ -21,7 +22,6 @@ class BillingController extends Controller
             ->latest()
             ->get();
 
-        // Calculate monthly summary
         $startOfMonth = now()->startOfMonth();
 
         $metrics = [
@@ -34,7 +34,6 @@ class BillingController extends Controller
                 ->sum('balance'),
         ];
 
-        // Pass data for React modals
         $invoicesForReact = $invoices->mapWithKeys(function ($inv) {
             return [$inv->transaction_no => $inv->toReactArray()];
         })->toArray();
@@ -60,11 +59,10 @@ class BillingController extends Controller
             'payment_method' => ['nullable', Rule::in(['Not Set', 'GCash', 'Over The Counter', 'Bank Transfer'])],
         ]);
 
-        $total = $validated['rate_per_day'] * $validated['days'];
-        $paid  = $validated['amount_paid'] ?? 0;
+        $total   = $validated['rate_per_day'] * $validated['days'];
+        $paid    = $validated['amount_paid'] ?? 0;
         $balance = max(0, $total - $paid);
 
-        // Determine status based on payment
         $status = 'Unpaid';
         if ($paid >= $total && $total > 0) {
             $status = 'Paid';
@@ -119,7 +117,6 @@ class BillingController extends Controller
             'status'         => ['sometimes', Rule::in(['Unpaid', 'Overdue', 'Partial', 'Pending', 'Paid'])],
         ]);
 
-        // Recalculate totals if rate/days/paid changed
         $rate    = $validated['rate_per_day'] ?? $invoice->rate_per_day;
         $days    = $validated['days'] ?? $invoice->days;
         $paid    = $validated['amount_paid'] ?? $invoice->amount_paid;
@@ -127,7 +124,6 @@ class BillingController extends Controller
         $total   = $rate * $days;
         $balance = max(0, $total - $paid);
 
-        // Auto-update status if not explicitly provided
         if (!isset($validated['status'])) {
             if ($paid >= $total && $total > 0) {
                 $validated['status'] = 'Paid';
@@ -138,7 +134,6 @@ class BillingController extends Controller
             }
         }
 
-        // When status becomes Paid, record verified info
         if (($validated['status'] ?? null) === 'Paid' && $invoice->status !== 'Paid') {
             $validated['verified_by'] = $request->user()->id;
             $validated['verified_at'] = now();
@@ -164,6 +159,9 @@ class BillingController extends Controller
      */
     public function destroy(Invoice $invoice)
     {
+        if ($invoice->receipt_path) {
+            Storage::disk('public')->delete($invoice->receipt_path);
+        }
         $invoice->delete();
 
         return response()->json([
@@ -173,7 +171,7 @@ class BillingController extends Controller
     }
 
     /**
-     * Mark an invoice as paid.
+     * Mark an invoice as paid (manual override).
      */
     public function markPaid(Request $request, Invoice $invoice)
     {
@@ -200,12 +198,75 @@ class BillingController extends Controller
     }
 
     /**
+     * Verify a tenant-submitted payment (invoice.status === 'Pending').
+     */
+    public function verifyPayment(Request $request, Invoice $invoice)
+    {
+        if ($invoice->status !== 'Pending') {
+            return response()->json([
+                'message' => 'Only pending payments can be verified.',
+            ], 422);
+        }
+
+        $validated = $request->validate([
+            'admin_notes' => ['nullable', 'string'],
+        ]);
+
+        $invoice->update([
+            'amount_paid' => $invoice->total_amount,
+            'balance'     => 0,
+            'status'      => 'Paid',
+            'date_paid'   => now()->toDateString(),
+            'receipt_no'  => $invoice->receipt_no
+                ?? 'OTC-' . now()->format('Ymd') . '-' . str_pad($invoice->id, 4, '0', STR_PAD_LEFT),
+            'verified_by' => $request->user()->id,
+            'verified_at' => now(),
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Payment verified and invoice marked as paid.',
+            'data'    => $invoice->fresh()->toReactArray(),
+        ]);
+    }
+
+    /**
+     * Reject a tenant-submitted payment and revert to unpaid/partial.
+     */
+    public function rejectPayment(Request $request, Invoice $invoice)
+    {
+        if ($invoice->status !== 'Pending') {
+            return response()->json([
+                'message' => 'Only pending payments can be rejected.',
+            ], 422);
+        }
+
+        $validated = $request->validate([
+            'admin_notes' => ['required', 'string'],
+        ]);
+
+        // Clean up the uploaded receipt
+        if ($invoice->receipt_path) {
+            Storage::disk('public')->delete($invoice->receipt_path);
+        }
+
+        $invoice->update([
+            'status'       => $invoice->amount_paid > 0 ? 'Partial' : 'Unpaid',
+            'receipt_path' => null,
+        ]);
+
+        return response()->json([
+            'success'     => true,
+            'message'     => 'Payment rejected.',
+            'admin_notes' => $validated['admin_notes'],
+        ]);
+    }
+
+    /**
      * Send a reminder for an invoice (placeholder).
      */
     public function sendReminder(Request $request, Invoice $invoice)
     {
-        // TODO: Implement actual notification sending
-
         return response()->json([
             'success' => true,
             'message' => 'Reminder sent to ' . $invoice->tenant_name . '.',

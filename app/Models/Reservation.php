@@ -24,6 +24,10 @@ class Reservation extends Model
         'desired_room',
         'room_bed_id',
         'check_in',
+        'check_in_time',
+        'check_out',
+        'check_out_time',
+        'has_companion',
         'move_in',
         'total_charges',
         'reservation_fee',
@@ -40,15 +44,17 @@ class Reservation extends Model
     ];
 
     protected $casts = [
-        'check_in'       => 'date',
-        'move_in'        => 'datetime',
-        'processed_at'   => 'datetime',
-        'expires_at'     => 'datetime',
-        'total_charges'  => 'decimal:2',
+        'check_in'        => 'date',
+        'check_out'       => 'date',
+        'move_in'         => 'datetime',
+        'processed_at'    => 'datetime',
+        'expires_at'      => 'datetime',
+        'total_charges'   => 'decimal:2',
         'reservation_fee' => 'decimal:2',
-        'remaining'      => 'decimal:2',
-        'created_at'     => 'datetime',
-        'updated_at'     => 'datetime',
+        'remaining'       => 'decimal:2',
+        'has_companion'   => 'boolean',
+        'created_at'      => 'datetime',
+        'updated_at'      => 'datetime',
     ];
 
     // ============================================================
@@ -111,6 +117,75 @@ class Reservation extends Model
         return '₱' . number_format((float) $this->reservation_fee, 0);
     }
 
+    /**
+     * Human-readable stay range: "Jun 1, 2026 – Jun 30, 2026"
+     */
+    public function getStayPeriodAttribute(): string
+    {
+        $in  = $this->check_in?->format('M j, Y')  ?? '—';
+        $out = $this->check_out?->format('M j, Y') ?? 'Open-ended';
+
+        return $in . ' – ' . $out;
+    }
+
+    /**
+     * Duration in days (inclusive of check-in day). Returns null if no check-out.
+     */
+    public function getStayDurationAttribute(): ?int
+    {
+        if (! $this->check_in || ! $this->check_out) {
+            return null;
+        }
+
+        return max(1, $this->check_in->diffInDays($this->check_out) + 1);
+    }
+
+    /**
+     * Formatted move-in date (actual move-in, may differ from check-in).
+     */
+    public function getFormattedMoveInAttribute(): string
+    {
+        return $this->move_in?->format('F j, Y') ?? '—';
+    }
+
+    /**
+     * Formatted check-in (date + optional time).
+     */
+    public function getFormattedCheckInAttribute(): string
+    {
+        $date = $this->check_in?->format('M j, Y') ?? '—';
+
+        return $this->check_in_time
+            ? $date . ' · ' . $this->check_in_time
+            : $date;
+    }
+
+    /**
+     * Formatted check-out (date + optional time).
+     */
+    public function getFormattedCheckOutAttribute(): string
+    {
+        if (! $this->check_out) {
+            return 'Open-ended';
+        }
+
+        $date = $this->check_out->format('M j, Y');
+
+        return $this->check_out_time
+            ? $date . ' · ' . $this->check_out_time
+            : $date;
+    }
+
+    /**
+     * Proof-of-payment URL (if uploaded).
+     */
+    public function getProofUrlAttribute(): ?string
+    {
+        return $this->proof_of_payment
+            ? asset('storage/' . $this->proof_of_payment)
+            : null;
+    }
+
     // ============================================================
     // SCOPES
     // ============================================================
@@ -141,10 +216,10 @@ class Reservation extends Model
             ->when($filters['search'] ?? null, function ($q, $search) {
                 $q->where(function ($q) use ($search) {
                     $q->where('tenant_name', 'like', "%{$search}%")
-                      ->orWhere('email', 'like', "%{$search}%")
-                      ->orWhere('desired_room', 'like', "%{$search}%")
-                      ->orWhere('reference_no', 'like', "%{$search}%")
-                      ->orWhere('reservation_number', 'like', "%{$search}%");
+                        ->orWhere('email', 'like', "%{$search}%")
+                        ->orWhere('desired_room', 'like', "%{$search}%")
+                        ->orWhere('reference_no', 'like', "%{$search}%")
+                        ->orWhere('reservation_number', 'like', "%{$search}%");
                 });
             })
             ->when($filters['status'] ?? null, function ($q, $status) {
@@ -173,16 +248,15 @@ class Reservation extends Model
     {
         $initial = strtoupper(substr($name, 0, 1));
 
-        // Rotate through a small palette based on first letter
         $palette = [
-            'bg-teal-100'  => 'text-teal-600',
-            'bg-sky-100'   => 'text-sky-600',
-            'bg-green-100' => 'text-green-600',
-            'bg-purple-100'=> 'text-purple-600',
-            'bg-amber-100' => 'text-amber-600',
+            'bg-teal-100'   => 'text-teal-600',
+            'bg-sky-100'    => 'text-sky-600',
+            'bg-green-100'  => 'text-green-600',
+            'bg-purple-100' => 'text-purple-600',
+            'bg-amber-100'  => 'text-amber-600',
         ];
 
-        $keys = array_keys($palette);
+        $keys  = array_keys($palette);
         $index = ord($initial) % count($keys);
 
         return [
@@ -192,6 +266,9 @@ class Reservation extends Model
         ];
     }
 
+    /**
+     * Normalised payload for the React modal.
+     */
     public function toReactArray(): array
     {
         return [
@@ -208,7 +285,12 @@ class Reservation extends Model
             'bedId'           => $this->room_bed_id ? 'Room/Bed ID: ' . $this->room_bed_id : 'Room/Bed ID: N/A',
             'room'            => $this->desired_room,
             'checkin'         => $this->check_in?->format('M j, Y') ?? '-',
+            'checkout'        => $this->check_out?->format('M j, Y') ?? 'Open-ended',
             'moveIn'          => 'Move-in: ' . ($this->move_in?->format('F j, Y') ?? '-'),
+            'stayPeriod'      => $this->stay_period,
+            'stayDuration'    => $this->stay_duration,
+            'formattedCheckIn'=> $this->formatted_check_in,
+            'formattedCheckOut' => $this->formatted_check_out,
             'submitted'       => 'Submitted: ' . $this->created_at?->format('F j, Y'),
             'requestDetails'  => $this->request_details ?? '',
             'totalCharges'    => $this->formatted_total_charges,
@@ -216,10 +298,12 @@ class Reservation extends Model
             'remaining'       => $this->formatted_remaining,
             'paymentMethod'   => $this->payment_method,
             'fee'             => $this->formatted_fee,
+            'hasCompanion'    => $this->has_companion,
             'statusText'      => $this->status,
             'statusClass'     => $this->status_class,
             'statusIcon'      => $this->status_icon,
-            'admin_notes'     => $this->admin_notes ?? '',
+            'adminNotes'      => $this->admin_notes ?? '',
+            'proofUrl'        => $this->proof_url,
         ];
     }
 }

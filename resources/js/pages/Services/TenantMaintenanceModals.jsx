@@ -63,6 +63,15 @@ export default function TenantMaintenanceModals() {
                 }
                 return;
             }
+
+            // Cancel Request (from row)
+            const cancelBtn = e.target.closest('.cancel-request-btn');
+            if (cancelBtn) {
+                const id = cancelBtn.dataset.requestId;
+                if (!id) return;
+                handleCancel(id);
+                return;
+            }
         };
 
         document.addEventListener('click', handler);
@@ -70,6 +79,31 @@ export default function TenantMaintenanceModals() {
     }, [requestsData]);
 
     const updateField = (key, value) => setForm((f) => ({ ...f, [key]: value }));
+
+    // ============================================================
+    // Cancel a pending request
+    // ============================================================
+    const handleCancel = async (id) => {
+        if (!confirm('Cancel this maintenance request?')) return;
+        setSaving(true);
+        try {
+            const res = await fetch(`/tenants/services/maintenance/${id}/cancel`, {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': csrf(),
+                },
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.message || 'Failed to cancel request.');
+            setShowDetails(false);
+            window.location.reload();
+        } catch (err) {
+            alert(err.message);
+        } finally {
+            setSaving(false);
+        }
+    };
 
     // ============================================================
     // Create new maintenance request
@@ -102,30 +136,11 @@ export default function TenantMaintenanceModals() {
     };
 
     // ============================================================
-    // Cancel a pending request
+    // Cancel a pending request (from modal footer)
     // ============================================================
     const handleCancelRequest = async () => {
         if (!request) return;
-        if (!confirm('Cancel this maintenance request?')) return;
-
-        setSaving(true);
-        try {
-            const res = await fetch(`/tenants/services/maintenance/${request.id}/cancel`, {
-                method: 'POST',
-                headers: {
-                    'Accept': 'application/json',
-                    'X-CSRF-TOKEN': csrf(),
-                },
-            });
-            const data = await res.json().catch(() => ({}));
-            if (!res.ok) throw new Error(data.message || 'Failed to cancel request.');
-            setShowDetails(false);
-            window.location.reload();
-        } catch (err) {
-            alert(err.message);
-        } finally {
-            setSaving(false);
-        }
+        await handleCancel(request.id);
     };
 
     return (
@@ -172,6 +187,7 @@ export default function TenantMaintenanceModals() {
                                     <option>General</option>
                                     <option>Plumbing</option>
                                     <option>Electrical</option>
+                                    <option>HVAC</option>
                                 </select>
                             </div>
                             <div>
@@ -181,9 +197,10 @@ export default function TenantMaintenanceModals() {
                                     onChange={(e) => updateField('priority', e.target.value)}
                                     className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-[13px] outline-none bg-white"
                                 >
-                                    <option>Critical</option>
-                                    <option>Medium</option>
-                                    <option>Low</option>
+                                    <option value="Low">Low</option>
+                                    <option value="Medium">Medium</option>
+                                    <option value="High">High</option>
+                                    <option value="Critical">Critical</option>
                                 </select>
                             </div>
                         </div>

@@ -18,7 +18,17 @@ use App\Http\Controllers\Admin\BillingController;
 use App\Http\Controllers\Admin\ReservationController;
 use App\Http\Controllers\Admin\AnnouncementController;
 use App\Http\Controllers\Admin\HistoryController;
-use App\Http\Controllers\Admin\ReportsController; // ← ADDED
+use App\Http\Controllers\Admin\ReportsController;
+use App\Http\Controllers\Admin\MessageController;
+use App\Http\Controllers\Tenant\TenantDashboardController;
+use App\Http\Controllers\Tenant\TenantBillingController;
+use App\Http\Controllers\Tenant\TenantMaintenanceController;
+use App\Http\Controllers\Tenant\TenantRoomChangeController;
+use App\Http\Controllers\Tenant\TenantStayExtensionController;
+use App\Http\Controllers\Tenant\TenantAnnouncementController;
+use App\Http\Controllers\Tenant\TenantHistoryController;
+use App\Http\Controllers\Tenant\TenantMessageController;
+use App\Http\Controllers\Tenant\TenantReservationController;
 use App\Models\TourScene;
 use App\Models\VirtualTour;
 
@@ -69,18 +79,52 @@ Route::middleware('auth')->group(function () {
 // TENANT PORTAL
 // ============================================================
 Route::middleware('auth')->prefix('tenants')->name('tenants.')->group(function () {
-    Route::view('/',               'tenants.dashboard')->name('dashboard');
-    Route::view('/billing',        'tenants.billing')->name('billing');
-    Route::view('/reservations',   'tenants.reservations')->name('reservations');
-    Route::view('/messages',       'tenants.messages')->name('messages');
-    Route::view('/announcements',  'tenants.announcements')->name('announcements');
-    Route::view('/history',        'tenants.history')->name('history');
-    Route::view('/settings',       'tenants.settings')->name('settings');
 
+    // ---------- Dashboard ----------
+    Route::get('/', [TenantDashboardController::class, 'index'])->name('dashboard');
+
+    // ---------- Billing ----------
+    Route::get('/billing',         [TenantBillingController::class, 'index'])->name('billing');
+    Route::post('/billing/pay',    [TenantBillingController::class, 'pay'])->name('billing.pay');
+    Route::post('/billing/cancel', [TenantBillingController::class, 'cancelPayment'])->name('billing.cancel');
+
+    // ---------- Reservations ----------
+    Route::get('/reservations',                       [TenantReservationController::class, 'index'])->name('reservations');
+    Route::post('/reservations',                      [TenantReservationController::class, 'store'])->name('reservations.store');
+    Route::post('/reservations/{reservation}/cancel', [TenantReservationController::class, 'cancel'])->name('reservations.cancel');
+
+    // ---------- Messages ----------
+    Route::get('/messages',                       [TenantMessageController::class, 'index'])->name('messages');
+    Route::post('/messages',                      [TenantMessageController::class, 'store'])->name('messages.store');
+    Route::get('/messages/{conversation}',        [TenantMessageController::class, 'show'])->name('messages.show');
+    Route::post('/messages/{conversation}/reply', [TenantMessageController::class, 'reply'])->name('messages.reply');
+
+    // Message-level actions (delete + react)
+    Route::delete('/messages/{message}',           [TenantMessageController::class, 'deleteMessage'])->name('messages.delete');
+    Route::post('/messages/{message}/react',       [TenantMessageController::class, 'reactToMessage'])->name('messages.react');
+
+    // Whole-conversation delete
+    Route::delete('/messages/conversation/{conversation}', [TenantMessageController::class, 'deleteConversation'])->name('messages.conversation.delete');
+
+    // ---------- Announcements / History / Settings ----------
+    Route::get('/announcements', [TenantAnnouncementController::class, 'index'])->name('announcements');
+    Route::get('/history',       [TenantHistoryController::class, 'index'])->name('history');
+    Route::view('/settings',     'tenants.settings')->name('settings');
+
+    // ---------- Services ----------
     Route::prefix('services')->name('services.')->group(function () {
-        Route::view('/maintenance',    'tenants.services.maintenance')->name('maintenance');
-        Route::view('/room-change',    'tenants.services.room-change')->name('room-change');
-        Route::view('/stay-extension', 'tenants.services.stay-extension')->name('stay-extension');
+
+        Route::get('/maintenance',                               [TenantMaintenanceController::class, 'index'])->name('maintenance');
+        Route::post('/maintenance',                              [TenantMaintenanceController::class, 'store'])->name('maintenance.store');
+        Route::post('/maintenance/{maintenanceRequest}/cancel',  [TenantMaintenanceController::class, 'cancel'])->name('maintenance.cancel');
+
+        Route::get('/room-change',                               [TenantRoomChangeController::class, 'index'])->name('room-change');
+        Route::post('/room-change',                              [TenantRoomChangeController::class, 'store'])->name('room-change.store');
+        Route::post('/room-change/{roomChangeRequest}/cancel',   [TenantRoomChangeController::class, 'cancel'])->name('room-change.cancel');
+
+        Route::get('/stay-extension',                               [TenantStayExtensionController::class, 'index'])->name('stay-extension');
+        Route::post('/stay-extension',                              [TenantStayExtensionController::class, 'store'])->name('stay-extension.store');
+        Route::post('/stay-extension/{stayExtensionRequest}/cancel', [TenantStayExtensionController::class, 'cancel'])->name('stay-extension.cancel');
     });
 });
 
@@ -112,13 +156,15 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
     Route::post('/billing/{invoice}/mark-paid', [BillingController::class, 'markPaid'])->name('billing.mark-paid');
     Route::post('/billing/{invoice}/remind',    [BillingController::class, 'sendReminder'])->name('billing.remind');
 
+    Route::post('/billing/{invoice}/verify-payment', [BillingController::class, 'verifyPayment'])->name('billing.verify-payment');
+    Route::post('/billing/{invoice}/reject-payment', [BillingController::class, 'rejectPayment'])->name('billing.reject-payment');
+
     // ---------- Reservations CRUD ----------
     Route::get('/reservations',                        [ReservationController::class, 'index'])->name('reservations');
     Route::post('/reservations',                       [ReservationController::class, 'store'])->name('reservations.store');
     Route::get('/reservations/{reservation}',          [ReservationController::class, 'show'])->name('reservations.show');
     Route::put('/reservations/{reservation}',          [ReservationController::class, 'update'])->name('reservations.update');
     Route::delete('/reservations/{reservation}',       [ReservationController::class, 'destroy'])->name('reservations.destroy');
-
     Route::post('/reservations/{reservation}/approve', [ReservationController::class, 'approve'])->name('reservations.approve');
     Route::post('/reservations/{reservation}/reject',  [ReservationController::class, 'reject'])->name('reservations.reject');
 
@@ -128,49 +174,53 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
     Route::get('/announcements/{announcement}',             [AnnouncementController::class, 'show'])->name('announcements.show');
     Route::put('/announcements/{announcement}',             [AnnouncementController::class, 'update'])->name('announcements.update');
     Route::delete('/announcements/{announcement}',          [AnnouncementController::class, 'destroy'])->name('announcements.destroy');
-
     Route::post('/announcements/{announcement}/toggle-pin', [AnnouncementController::class, 'togglePin'])->name('announcements.toggle-pin');
 
-    // ---------- History (aggregate view) ----------
-    Route::get('/history', [HistoryController::class, 'index'])->name('history');
+    // ---------- Messages ----------
+    Route::get('/messages',                       [MessageController::class, 'index'])->name('messages');
+    Route::post('/messages',                      [MessageController::class, 'store'])->name('messages.store');
+    Route::get('/messages/{conversation}',        [MessageController::class, 'show'])->name('messages.show');
+    Route::post('/messages/{conversation}/reply', [MessageController::class, 'reply'])->name('messages.reply');
 
-    // ---------- Reports (aggregate view) ----------
+    // Message-level actions (delete + react)
+    Route::delete('/messages/{message}',           [MessageController::class, 'deleteMessage'])->name('messages.delete');
+    Route::post('/messages/{message}/react',       [MessageController::class, 'reactToMessage'])->name('messages.react');
+
+    // Whole-conversation delete
+    Route::delete('/messages/conversation/{conversation}', [MessageController::class, 'deleteConversation'])->name('messages.conversation.delete');
+
+    // ---------- History / Reports ----------
+    Route::get('/history', [HistoryController::class, 'index'])->name('history');
     Route::get('/reports', [ReportsController::class, 'index'])->name('reports');
 
     // ---------- Static views ----------
-    Route::view('/messages',      'admin.messages')->name('messages');
-    Route::view('/audit-logs',    'admin.audit-logs')->name('audit-logs');
-    Route::view('/settings',      'admin.settings')->name('settings');
+    Route::view('/audit-logs', 'admin.audit-logs')->name('audit-logs');
+    Route::view('/settings',   'admin.settings')->name('settings');
 
     // ============================================================
     // SERVICES
     // ============================================================
     Route::prefix('services')->name('services.')->group(function () {
 
-        // ---------- Maintenance Requests CRUD ----------
         Route::get('/maintenance',                      [MaintenanceController::class, 'index'])->name('maintenance');
         Route::post('/maintenance',                     [MaintenanceController::class, 'store'])->name('maintenance.store');
         Route::get('/maintenance/{maintenanceRequest}', [MaintenanceController::class, 'show'])->name('maintenance.show');
         Route::put('/maintenance/{maintenanceRequest}', [MaintenanceController::class, 'update'])->name('maintenance.update');
         Route::delete('/maintenance/{maintenanceRequest}', [MaintenanceController::class, 'destroy'])->name('maintenance.destroy');
 
-        // ---------- Room Change Requests CRUD ----------
         Route::get('/room-change',                          [RoomChangeController::class, 'index'])->name('room-change');
         Route::post('/room-change',                         [RoomChangeController::class, 'store'])->name('room-change.store');
         Route::get('/room-change/{roomChangeRequest}',      [RoomChangeController::class, 'show'])->name('room-change.show');
         Route::put('/room-change/{roomChangeRequest}',      [RoomChangeController::class, 'update'])->name('room-change.update');
         Route::delete('/room-change/{roomChangeRequest}',   [RoomChangeController::class, 'destroy'])->name('room-change.destroy');
-
         Route::post('/room-change/{roomChangeRequest}/approve', [RoomChangeController::class, 'approve'])->name('room-change.approve');
         Route::post('/room-change/{roomChangeRequest}/reject',  [RoomChangeController::class, 'reject'])->name('room-change.reject');
 
-        // ---------- Stay Extension Requests CRUD ----------
         Route::get('/stay-extension',                            [StayExtensionController::class, 'index'])->name('stay-extension');
         Route::post('/stay-extension',                           [StayExtensionController::class, 'store'])->name('stay-extension.store');
         Route::get('/stay-extension/{stayExtensionRequest}',     [StayExtensionController::class, 'show'])->name('stay-extension.show');
         Route::put('/stay-extension/{stayExtensionRequest}',     [StayExtensionController::class, 'update'])->name('stay-extension.update');
         Route::delete('/stay-extension/{stayExtensionRequest}',  [StayExtensionController::class, 'destroy'])->name('stay-extension.destroy');
-
         Route::post('/stay-extension/{stayExtensionRequest}/approve', [StayExtensionController::class, 'approve'])->name('stay-extension.approve');
         Route::post('/stay-extension/{stayExtensionRequest}/reject',  [StayExtensionController::class, 'reject'])->name('stay-extension.reject');
     });

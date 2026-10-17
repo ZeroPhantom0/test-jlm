@@ -4,7 +4,8 @@ import Modal from '../../components/Modal';
 
 const csrf = () =>
     document.querySelector('meta[name="csrf-token"]')?.content ||
-    document.querySelector('input[name="_token"]')?.value;
+    document.querySelector('input[name="_token"]')?.value ||
+    '';
 
 const FALLBACK_ROOM = {
     id:          null,
@@ -20,19 +21,20 @@ const FALLBACK_ROOM = {
     description: 'Cozy room with modern finishes, private CR and city views. Perfect for working professionals and students.',
     estDate:     'March 25, 2026',
     estApprox:   'Approx. 2 days',
+    tourId:      null,
 };
 
 export default function ReservationsModal() {
-    // Modal state
+    // ---------- Modal state ----------
     const [showDetails, setShowDetails] = useState(false);
     const [showReserve, setShowReserve] = useState(false);
     const [room, setRoom]               = useState(FALLBACK_ROOM);
     const [saving, setSaving]           = useState(false);
 
-    // Reservations data passed from Blade
+    // ---------- Reservations data passed from Blade ----------
     const [reservationsData, setReservationsData] = useState({});
 
-    // ---- Reserve form state ----
+    // ---------- Reserve form state ----------
     const [form, setForm] = useState({
         check_in_date:  '',
         check_in_time:  '',
@@ -46,7 +48,7 @@ export default function ReservationsModal() {
     });
 
     // ============================================================
-    // Read data from mount element
+    // Read reservations map from the Blade mount element
     // ============================================================
     useEffect(() => {
         const el = document.getElementById('tenant-reservations-modals');
@@ -62,11 +64,11 @@ export default function ReservationsModal() {
     }, []);
 
     // ============================================================
-    // Event delegation
+    // Event delegation: open Details / Reserve modals
     // ============================================================
     useEffect(() => {
         const handler = (e) => {
-            // Open details modal
+            // ---- Details ----
             const detailsBtn = e.target.closest('.open-room-details-btn');
             if (detailsBtn) {
                 const data = JSON.parse(detailsBtn.dataset.room || '{}');
@@ -75,7 +77,7 @@ export default function ReservationsModal() {
                 return;
             }
 
-            // Open reserve modal
+            // ---- Reserve ----
             const reserveBtn = e.target.closest('.open-reserve-modal-btn');
             if (reserveBtn) {
                 const data = JSON.parse(reserveBtn.dataset.room || '{}');
@@ -100,6 +102,20 @@ export default function ReservationsModal() {
         return () => document.removeEventListener('click', handler);
     }, []);
 
+    // ============================================================
+    // Cancel a pending reservation (via .cancel-reservation-btn)
+    // ============================================================
+    useEffect(() => {
+        const handler = (e) => {
+            const btn = e.target.closest('.cancel-reservation-btn');
+            if (!btn) return;
+            handleCancelReservation(btn.dataset.resKey);
+        };
+        document.addEventListener('click', handler);
+        return () => document.removeEventListener('click', handler);
+        // eslint-disable-next-line
+    }, [reservationsData]);
+
     const closeDetails = () => setShowDetails(false);
     const closeReserve = () => setShowReserve(false);
 
@@ -112,7 +128,6 @@ export default function ReservationsModal() {
     const roomRate     = Number(room.price) || 0;
     const companionFee = form.has_companion ? 150 : 0;
 
-    // Simple day diff (fallback to 1 if invalid)
     const computeDays = () => {
         const inD  = new Date(form.check_in_date);
         const outD = new Date(form.check_out_date);
@@ -120,6 +135,7 @@ export default function ReservationsModal() {
         const diff = Math.ceil((outD - inD) / (1000 * 60 * 60 * 24));
         return diff > 0 ? diff : 1;
     };
+
     const days         = computeDays();
     const roomSubtotal = roomRate * days;
     const totalCharges = roomSubtotal + companionFee;
@@ -179,7 +195,9 @@ export default function ReservationsModal() {
         }
     };
 
+    // ============================================================
     // Copy GCash number
+    // ============================================================
     const handleCopyGCash = () => {
         navigator.clipboard?.writeText('0917-123-4567');
         alert('GCash number copied!');
@@ -212,17 +230,6 @@ export default function ReservationsModal() {
         }
     };
 
-    // Expose cancel via data attribute click
-    useEffect(() => {
-        const handler = (e) => {
-            const btn = e.target.closest('.cancel-reservation-btn');
-            if (btn) handleCancelReservation(btn.dataset.resKey);
-        };
-        document.addEventListener('click', handler);
-        return () => document.removeEventListener('click', handler);
-        // eslint-disable-next-line
-    }, [reservationsData]);
-
     return (
         <>
             {/* ============================================================ */}
@@ -250,9 +257,16 @@ export default function ReservationsModal() {
                                 {room.status}
                             </span>
 
-                            <span className="absolute top-3 right-3 bg-black/60 text-white text-[10px] font-semibold px-2.5 py-1 rounded-full backdrop-blur">
-                                360° Tour
-                            </span>
+                            {room.tourId && (
+                                <a
+                                    href={`/tour/${room.tourId}`}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="absolute top-3 right-3 bg-black/60 hover:bg-black/80 text-white text-[10px] font-semibold px-2.5 py-1 rounded-full backdrop-blur transition"
+                                >
+                                    <i className="fa-solid fa-camera mr-1"></i> 360° Tour
+                                </a>
+                            )}
 
                             <span className="absolute bottom-3 left-3 bg-blue-50 text-blue-600 text-[10px] font-extrabold uppercase px-2.5 py-1 rounded-md">
                                 {room.roomNumber}
@@ -273,12 +287,12 @@ export default function ReservationsModal() {
                         <div className="text-[13px] font-bold text-slate-900">Room Specifications</div>
                         <div className="grid grid-cols-3 gap-2.5">
                             {[
-                                { label: 'ROOM TYPE', value: room.name },
-                                { label: 'MAX CAPACITY', value: room.pax },
-                                { label: 'BEDS', value: room.beds },
-                                { label: 'AVAILABLE SLOTS', value: room.status === 'Available' ? '1' : '0' },
-                                { label: 'DAILY RENT', value: `₱${roomRate.toLocaleString()}` },
-                                { label: 'FLOOR', value: room.floor },
+                                { label: 'ROOM TYPE',      value: room.name },
+                                { label: 'MAX CAPACITY',   value: room.pax },
+                                { label: 'BEDS',           value: room.beds },
+                                { label: 'AVAILABLE SLOTS',value: room.status === 'Available' ? '1' : '0' },
+                                { label: 'DAILY RENT',     value: `₱${roomRate.toLocaleString()}` },
+                                { label: 'FLOOR',          value: room.floor },
                             ].map((s, i) => (
                                 <div key={i} className="bg-slate-50 rounded-lg p-3 text-center">
                                     <div className="text-[9.5px] font-bold text-slate-400 uppercase mb-1">{s.label}</div>

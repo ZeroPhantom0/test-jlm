@@ -68,6 +68,15 @@ export default function StayExtensionModals() {
                 }
                 return;
             }
+
+            // Cancel request (from row)
+            const cancelBtn = e.target.closest('.cancel-stay-extension-btn');
+            if (cancelBtn) {
+                const id = cancelBtn.dataset.requestId;
+                if (!id) return;
+                handleCancel(id);
+                return;
+            }
         };
 
         document.addEventListener('click', handler);
@@ -99,7 +108,6 @@ export default function StayExtensionModals() {
                     'X-CSRF-TOKEN': csrf(),
                 },
                 body: JSON.stringify({
-                    room_number:         roomNumber,
                     current_lease_end:   form.current_lease_end,
                     requested_lease_end: form.requested_lease_end,
                     reason:              form.reason,
@@ -119,13 +127,12 @@ export default function StayExtensionModals() {
     // ============================================================
     // Cancel a pending request
     // ============================================================
-    const handleCancelRequest = async () => {
-        if (!request) return;
+    const handleCancel = async (id) => {
         if (!confirm('Cancel this stay extension request?')) return;
 
         setSaving(true);
         try {
-            const res = await fetch(`/tenants/services/stay-extension/${request.id}/cancel`, {
+            const res = await fetch(`/tenants/services/stay-extension/${id}/cancel`, {
                 method: 'POST',
                 headers: {
                     'Accept': 'application/json',
@@ -141,6 +148,11 @@ export default function StayExtensionModals() {
         } finally {
             setSaving(false);
         }
+    };
+
+    const handleCancelRequest = async () => {
+        if (!request) return;
+        await handleCancel(request.id);
     };
 
     return (

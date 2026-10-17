@@ -27,10 +27,8 @@ export default function RoomChangeModals() {
         const el = document.getElementById('services-room-change-root');
         if (!el) return;
 
-        // Current room from the row
         setCurrentRoom(el.dataset.currentRoom || '');
 
-        // Requests map
         if (el.dataset.requests) {
             try {
                 setRequestsData(JSON.parse(el.dataset.requests));
@@ -63,6 +61,15 @@ export default function RoomChangeModals() {
                 }
                 return;
             }
+
+            // Cancel request (from row)
+            const cancelBtn = e.target.closest('.cancel-room-change-btn');
+            if (cancelBtn) {
+                const id = cancelBtn.dataset.requestId;
+                if (!id) return;
+                handleCancel(id);
+                return;
+            }
         };
 
         document.addEventListener('click', handler);
@@ -91,7 +98,6 @@ export default function RoomChangeModals() {
                     'X-CSRF-TOKEN': csrf(),
                 },
                 body: JSON.stringify({
-                    current_room:   currentRoom,
                     requested_room: form.requested_room,
                     reason:         form.reason,
                 }),
@@ -110,13 +116,12 @@ export default function RoomChangeModals() {
     // ============================================================
     // Cancel a pending request
     // ============================================================
-    const handleCancelRequest = async () => {
-        if (!request) return;
+    const handleCancel = async (id) => {
         if (!confirm('Cancel this room change request?')) return;
 
         setSaving(true);
         try {
-            const res = await fetch(`/tenants/services/room-change/${request.id}/cancel`, {
+            const res = await fetch(`/tenants/services/room-change/${id}/cancel`, {
                 method: 'POST',
                 headers: {
                     'Accept': 'application/json',
@@ -132,6 +137,11 @@ export default function RoomChangeModals() {
         } finally {
             setSaving(false);
         }
+    };
+
+    const handleCancelRequest = async () => {
+        if (!request) return;
+        await handleCancel(request.id);
     };
 
     return (
@@ -154,13 +164,11 @@ export default function RoomChangeModals() {
                     <form onSubmit={handleSubmit}>
                         <div className="p-6 overflow-y-auto flex flex-col gap-4">
 
-                            {/* Info banner */}
                             <div className="bg-blue-50 rounded-lg p-3 flex gap-2.5 text-[13px] text-blue-600 leading-snug">
                                 <i className="fa-regular fa-circle-info mt-0.5"></i>
                                 <span>Request a room change by providing your desired unit and reason.</span>
                             </div>
 
-                            {/* Current Room */}
                             <div>
                                 <label className="block text-[12.5px] font-semibold text-slate-700 mb-1.5">
                                     Current Room / Bed
@@ -173,7 +181,6 @@ export default function RoomChangeModals() {
                                 />
                             </div>
 
-                            {/* Requested Room */}
                             <div>
                                 <label className="block text-[12.5px] font-semibold text-slate-700 mb-1.5">
                                     Requested Room <span className="text-rose-500">*</span>
@@ -187,7 +194,6 @@ export default function RoomChangeModals() {
                                 />
                             </div>
 
-                            {/* Reason */}
                             <div>
                                 <label className="block text-[12.5px] font-semibold text-slate-700 mb-1.5">
                                     Reason <span className="text-rose-500">*</span>
@@ -249,10 +255,8 @@ export default function RoomChangeModals() {
 
                     <div className="p-6 overflow-y-auto flex flex-col gap-4">
 
-                        {/* Reference */}
                         <div className="text-xs text-slate-400 -mt-1">{request.ref}</div>
 
-                        {/* Details grid */}
                         <div className="grid grid-cols-2 gap-3">
                             <div className="bg-slate-50 rounded-lg p-3">
                                 <div className="text-[11px] text-slate-400 mb-1">Current Room / Bed ID</div>
@@ -272,14 +276,12 @@ export default function RoomChangeModals() {
                             </div>
                         </div>
 
-                        {/* Reason */}
                         <div className="bg-slate-50 rounded-lg p-3">
                             <div className="text-[11px] text-slate-400 mb-1">Reason:</div>
                             <div className="text-[13px] text-slate-700">{request.reason}</div>
                         </div>
                     </div>
 
-                    {/* Footer */}
                     <div className="p-5 border-t border-slate-100 flex justify-between items-center">
                         {request.status === 'Pending' && (
                             <button

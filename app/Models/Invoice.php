@@ -28,6 +28,7 @@ class Invoice extends Model
         'payment_method',
         'status',
         'receipt_no',
+        'receipt_path',
         'date_paid',
         'verified_by',
         'verified_at',
@@ -70,6 +71,13 @@ class Invoice extends Model
     // ============================================================
     // ACCESSORS
     // ============================================================
+
+    public function getReceiptUrlAttribute(): ?string
+    {
+        return $this->receipt_path
+            ? asset('storage/' . $this->receipt_path)
+            : null;
+    }
 
     public function getStatusClassAttribute(): string
     {
@@ -178,6 +186,7 @@ class Invoice extends Model
             'check_in'       => $this->check_in?->format('m-d-Y h:i A') ?? '-',
             'check_out'      => $this->check_out?->format('m-d-Y h:i A') ?? '-',
             'payment_method' => $this->payment_method,
+            'receipt_url'    => $this->receipt_url,
         ];
     }
 }

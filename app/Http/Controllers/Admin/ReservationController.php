@@ -5,7 +5,9 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Reservation;
+use App\Models\Tenant;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 class ReservationController extends Controller
@@ -29,7 +31,6 @@ class ReservationController extends Controller
             'expired'  => Reservation::expired()->count(),
         ];
 
-        // Pass data for React modals
         $reservationsForReact = $reservations->mapWithKeys(function ($res) {
             return [$res->reference_no => $res->toReactArray()];
         })->toArray();
@@ -120,6 +121,15 @@ class ReservationController extends Controller
 
     /**
      * Approve a reservation.
+     *
+     * On approval:
+     *   1. The reserved room is marked as "Reserved".
+     *   2. A `tenants` record is created for the reserving user — this is
+     *      the ONLY point where a user becomes a Tenant.
+     *   3. The reservation status flips to "Approved".
+     *
+     * Steps 1–3 are wrapped in a transaction so a partial failure can't
+     * leave a room "Reserved" without an approved reservation.
      */
     public function approve(Request $request, Reservation $reservation)
     {
@@ -127,20 +137,38 @@ class ReservationController extends Controller
             'admin_notes' => ['nullable', 'string'],
         ]);
 
-        // Mark the requested room as Reserved (if a room_id exists)
-        if ($reservation->room_id) {
-            $reservation->room?->update([
-                'status'      => 'Reserved',
-                'tenant_name' => $reservation->tenant_name,
-            ]);
-        }
+        DB::transaction(function () use ($request, $reservation, $validated) {
+            // 1. Mark the room as Reserved (if a room_id exists)
+            if ($reservation->room_id) {
+                $reservation->room?->update([
+                    'status'      => 'Reserved',
+                    'tenant_name' => $reservation->tenant_name,
+                ]);
+            }
 
-        $reservation->update([
-            'status'       => 'Approved',
-            'admin_notes'  => $validated['admin_notes'] ?? $reservation->admin_notes,
-            'processed_by' => $request->user()->id,
-            'processed_at' => now(),
-        ]);
+            // 2. Create the Tenant record if the user is linked and
+            //    doesn't already have one. firstOrCreate keeps it idempotent.
+            if ($reservation->user_id) {
+                Tenant::firstOrCreate(
+                    ['user_id' => $reservation->user_id],
+                    [
+                        'room_id'       => $reservation->room_id,
+                        'move_in_date'  => $reservation->check_in,
+                        'move_in_time'  => '07:00:00',
+                        'rent_rate'     => $reservation->total_charges,
+                        'status'        => 'active',
+                    ]
+                );
+            }
+
+            // 3. Approve the reservation
+            $reservation->update([
+                'status'       => 'Approved',
+                'admin_notes'  => $validated['admin_notes'] ?? $reservation->admin_notes,
+                'processed_by' => $request->user()->id,
+                'processed_at' => now(),
+            ]);
+        });
 
         return response()->json([
             'success' => true,

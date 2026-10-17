@@ -21,59 +21,95 @@
         <span><strong>Note:</strong> You can cancel a request while it is <strong>Pending</strong>. Once approved, it becomes view-only.</span>
     </div>
 
+    {{-- No-tenant warning --}}
+    @if (!$tenant || !$tenant->room)
+        <div class="bg-amber-50 border border-amber-200 rounded-lg px-5 py-4 text-[13px] text-amber-800 flex items-start gap-2.5 mb-5">
+            <i class="fa-regular fa-circle-info mt-0.5"></i>
+            <div>
+                <strong>You're not yet assigned to a room.</strong>
+                Please contact the admin to be assigned before submitting room change requests.
+            </div>
+        </div>
+    @endif
+
     {{-- Card --}}
     <div class="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
 
         <div class="flex justify-between items-center mb-5">
-            <span class="text-[13.5px] text-slate-500">1 request(s)</span>
+            <span class="text-[13.5px] text-slate-500">
+                {{ $requests->count() }} request{{ $requests->count() === 1 ? '' : 's' }}
+            </span>
             <button id="open-new-room-change"
-                    class="bg-[#001838] hover:bg-[#0d2347] text-white px-4 py-2.5 rounded-lg font-medium text-[13px] inline-flex items-center gap-2">
+                    class="bg-[#001838] hover:bg-[#0d2347] disabled:opacity-50 text-white px-4 py-2.5 rounded-lg font-medium text-[13px] inline-flex items-center gap-2"
+                    {{ (!$tenant || !$tenant->room) ? 'disabled' : '' }}>
                 <i class="fa-solid fa-plus"></i> New Request
             </button>
         </div>
 
-        {{-- Request Row --}}
-        <div class="bg-slate-50 border border-slate-200 rounded-xl p-5 relative">
-            <div class="flex items-center gap-2 mb-2.5">
-                <div class="text-[15px] font-bold text-slate-900">
-                    R101-B1-U <span class="text-slate-400 font-normal mx-0.5">&rarr;</span>
-                    <span class="text-emerald-600">R301-B1-U</span>
-                </div>
-                <span class="bg-amber-100 text-amber-700 text-[11px] font-semibold px-2 py-0.5 rounded-full inline-flex items-center gap-1">
-                    <i class="fa-regular fa-clock"></i> Pending
-                </span>
+        @if ($requests->isEmpty())
+            <div class="text-center py-12 text-slate-400 text-sm">
+                <i class="fa-solid fa-inbox text-3xl mb-3"></i>
+                <p>No room change requests yet.</p>
             </div>
+        @else
+            <div class="flex flex-col gap-4">
+                @foreach ($requests as $r)
+                    @php
+                        $statusClass = match ($r->status) {
+                            'Pending'  => 'bg-amber-100 text-amber-700',
+                            'Approved' => 'bg-emerald-100 text-emerald-600',
+                            'Rejected' => 'bg-rose-100 text-rose-600',
+                            default    => 'bg-slate-100 text-slate-500',
+                        };
+                        $statusIcon = match ($r->status) {
+                            'Pending'  => 'fa-regular fa-clock',
+                            'Approved' => 'fa-regular fa-circle-check',
+                            'Rejected' => 'fa-regular fa-circle-xmark',
+                            default    => 'fa-regular fa-circle',
+                        };
+                        $availabilityLabel = ucfirst(strtolower($r->availability ?? 'Available'));
+                    @endphp
 
-            <div class="absolute right-5 top-4 flex gap-3 text-slate-400 text-sm">
-                <i class="fa-regular fa-eye cursor-pointer hover:text-slate-600 view-room-change-details-btn"
-                   data-request-id="1"
-                   title="View Details"></i>
-                <i class="fa-regular fa-circle-xmark cursor-pointer hover:text-slate-600"
-                   title="Cancel Request"></i>
-            </div>
+                    <div class="bg-slate-50 border border-slate-200 rounded-xl p-5 relative">
+                        <div class="flex items-center gap-2 mb-2.5">
+                            <div class="text-[15px] font-bold text-slate-900">
+                                {{ $r->current_room }}
+                                <span class="text-slate-400 font-normal mx-0.5">&rarr;</span>
+                                <span class="text-emerald-600">{{ $r->requested_room }}</span>
+                            </div>
+                            <span class="{{ $statusClass }} text-[11px] font-semibold px-2 py-0.5 rounded-full inline-flex items-center gap-1">
+                                <i class="{{ $statusIcon }}"></i> {{ $r->status }}
+                            </span>
+                        </div>
 
-            <div class="text-slate-600 text-[13.5px] mb-3">Need more space for family.</div>
-            <div class="flex gap-4 text-xs text-slate-400">
-                <span class="flex items-center gap-1.5"><i class="fa-regular fa-calendar"></i> Mar 21, 2026</span>
-                <span>Availability: Available</span>
+                        <div class="absolute right-5 top-4 flex gap-3 text-slate-400 text-sm">
+                            <i class="fa-regular fa-eye cursor-pointer hover:text-slate-600 view-room-change-details-btn"
+                               data-request-id="{{ $r->id }}"
+                               title="View Details"></i>
+                            @if ($r->status === 'Pending')
+                                <i class="fa-regular fa-circle-xmark cursor-pointer hover:text-rose-600 cancel-room-change-btn"
+                                   data-request-id="{{ $r->id }}"
+                                   title="Cancel Request"></i>
+                            @endif
+                        </div>
+
+                        <div class="text-slate-600 text-[13.5px] mb-3">{{ $r->reason }}</div>
+                        <div class="flex gap-4 text-xs text-slate-400">
+                            <span class="flex items-center gap-1.5">
+                                <i class="fa-regular fa-calendar"></i>
+                                {{ $r->created_at?->format('M d, Y') }}
+                            </span>
+                            <span>Availability: {{ $availabilityLabel }}</span>
+                        </div>
+                    </div>
+                @endforeach
             </div>
-        </div>
+        @endif
     </div>
 </div>
 
 {{-- React Modal Mount Point with data --}}
 <div id="services-room-change-root"
-     data-current-room="R101-B1-U"
-     data-requests="{{ json_encode([
-        1 => [
-            'id'             => 1,
-            'ref'            => 'rc-1',
-            'current_room'   => 'R101-B1-U',
-            'requested_room' => 'R301-B1-U',
-            'submitted'      => 'Mar 21, 2026',
-            'availability'   => 'Available',
-            'reason'         => 'Need more space for family.',
-            'status'         => 'Pending',
-        ],
-     ], JSON_HEX_APOS | JSON_HEX_QUOT) }}"></div>
+     data-current-room="{{ $currentRoom }}"
+     data-requests='@json($requestsForReact)'></div>
 @endsection
