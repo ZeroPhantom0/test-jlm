@@ -11,7 +11,12 @@ class RoomController extends Controller
 {
     public function index()
     {
-        $rooms = Room::orderBy('floor')->orderBy('room_number')->get();
+        $rooms = Room::withCount([
+                'tenants as tenants_count' => fn ($q) => $q->where('status', 'active'),
+            ])
+            ->orderBy('floor')
+            ->orderBy('room_number')
+            ->get();
 
         $metrics = [
             'total'     => Room::count(),
@@ -38,6 +43,10 @@ class RoomController extends Controller
 
     public function show(Room $room)
     {
+        $room->loadCount([
+            'tenants as tenants_count' => fn ($q) => $q->where('status', 'active'),
+        ]);
+
         return response()->json(['room' => $room]);
     }
 

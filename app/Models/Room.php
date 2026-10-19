@@ -4,7 +4,8 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\HasOne; 
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Room extends Model
 {
@@ -32,17 +33,73 @@ class Room extends Model
         'lower_deck' => 'integer',
     ];
 
-    // Helpers used in views
-    public function getOccupancyLabelAttribute(): string
+    // ============================================================
+    // RELATIONSHIPS
+    // ============================================================
+
+    public function virtualTour(): HasOne
     {
-        return ($this->total_beds - $this->available_slots) . '/' . $this->total_beds;
+        return $this->hasOne(VirtualTour::class);
     }
 
+    /**
+     * All tenants (users) currently assigned to this room.
+     * This is the single source of truth for occupancy.
+     */
+    public function tenants(): HasMany
+    {
+        return $this->hasMany(Tenant::class);
+    }
+
+    // ============================================================
+    // OCCUPANCY (real — based on tenants.count)
+    // ============================================================
+
+    /**
+     * Number of tenants currently assigned to this room.
+     * Uses the eager-loaded `tenants_count` when available,
+     * otherwise hits the DB.
+     */
+    public function getOccupiedCountAttribute(): int
+    {
+        if (array_key_exists('tenants_count', $this->attributes)) {
+            return (int) $this->attributes['tenants_count'];
+        }
+
+        return (int) $this->tenants()->count();
+    }
+
+    /**
+     * Remaining slots = total_beds - occupied.
+     */
     public function getAvailableSlotsAttribute(): int
     {
-        // You can compute from bookings later; for now derive from status
-        return $this->status === 'Occupied' ? 0 : $this->total_beds;
+        return max(0, (int) $this->total_beds - $this->occupied_count);
     }
+
+    /**
+     * "2/3" style label — occupied / total.
+     */
+    public function getOccupancyLabelAttribute(): string
+    {
+        return $this->occupied_count . '/' . $this->total_beds;
+    }
+
+    /**
+     * 0–100 — percentage full.
+     */
+    public function getOccupancyPercentAttribute(): int
+    {
+        if ($this->total_beds <= 0) {
+            return 0;
+        }
+
+        return (int) round(($this->occupied_count / $this->total_beds) * 100);
+    }
+
+    // ============================================================
+    // STATUS HELPERS
+    // ============================================================
 
     public function getStatusIconAttribute(): string
     {
@@ -72,8 +129,31 @@ class Room extends Model
         };
     }
 
-    public function virtualTour(): HasOne
+    // ============================================================
+    // SERIALIZATION FOR THE REACT MODALS
+    // ============================================================
+
+    public function toRowArray(): array
     {
-        return $this->hasOne(VirtualTour::class);
+        return [
+            'id'               => $this->id,
+            'room_number'      => $this->room_number,
+            'floor'            => $this->floor,
+            'room_type'        => $this->room_type,
+            'description'      => $this->description,
+            'total_beds'       => $this->total_beds,
+            'upper_deck'       => $this->upper_deck,
+            'lower_deck'       => $this->lower_deck,
+            'daily_rent'       => (float) $this->daily_rent,
+            'status'           => $this->status,
+            'room_bed_id'      => $this->room_bed_id,
+            'tenant_name'      => $this->tenant_name,
+
+            // Real occupancy values
+            'occupied_count'   => $this->occupied_count,
+            'available_slots'  => $this->available_slots,
+            'occupancy_label'  => $this->occupancy_label,
+            'occupancy_percent'=> $this->occupancy_percent,
+        ];
     }
 }

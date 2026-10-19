@@ -134,7 +134,7 @@
     </div>
 
     {{-- Hidden data for React modal --}}
-    <<div id="vt-rooms-data"
+    <div id="vt-rooms-data"
      data-rooms="{{ json_encode($roomsForReact, JSON_HEX_APOS | JSON_HEX_QUOT) }}"
      class="hidden"></div>
 

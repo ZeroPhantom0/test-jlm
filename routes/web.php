@@ -145,7 +145,8 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
     Route::delete('/rooms/{room}', [RoomController::class, 'destroy'])->name('rooms.destroy');
 
     // ---------- Tenants ----------
-    Route::get('/tenants', [TenantController::class, 'index'])->name('tenants');
+    Route::get('/tenants',              [TenantController::class, 'index'])->name('tenants');
+    Route::put('/tenants/{tenant}',     [TenantController::class, 'update'])->name('tenants.update');
 
     // ---------- Billing & Payments CRUD ----------
     Route::get('/billing',                      [BillingController::class, 'index'])->name('billing');

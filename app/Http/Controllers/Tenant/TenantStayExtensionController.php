@@ -20,9 +20,11 @@ class TenantStayExtensionController extends Controller
         $user = Auth::user();
 
         // Tenant record for the logged-in user
-        $tenant = Tenant::with('room')
+        $tenant = Tenant::with(['room', 'approvedReservation'])
             ->where('user_id', $user->id)
             ->first();
+
+        $currentLeaseEnd = $tenant?->approvedReservation?->check_out?->format('M j, Y') ?? 'Open-ended';
 
         // Only this tenant's stay extension requests
         $requests = StayExtensionRequest::with('room')

@@ -77,7 +77,10 @@
                 <tbody id="rooms-tbody">
                     @forelse ($rooms as $room)
                         <tr class="border-b border-slate-50 last:border-0"
-                            data-room='@json($room)'>
+                            data-room='@json($room->toRowArray())'
+                            data-search="{{ strtolower($room->room_number . ' ' . ($room->tenant_name ?? '') . ' ' . $room->room_bed_id) }}"
+                            data-status="{{ $room->status }}"
+                            data-type="{{ $room->room_type }}">
                             <td class="py-4 px-4">
                                 <div class="text-sm font-bold text-slate-900">Room {{ $room->room_number }}</div>
                                 <div class="text-[11px] text-slate-400 mt-0.5">Floor {{ $room->floor }} • {{ $room->room_bed_id ?? 'R'.$room->room_number }}</div>

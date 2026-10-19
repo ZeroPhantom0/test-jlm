@@ -31,7 +31,6 @@ class TenantReservationController extends Controller
             ->latest()
             ->get();
 
-        // Format the list for the Blade cards
         $reservationCards = $myReservations->map(function ($r) {
             $statusClass = match ($r->status) {
                 'Approved' => 'bg-emerald-100 text-emerald-600',
@@ -54,6 +53,7 @@ class TenantReservationController extends Controller
                 'statusClass' => $statusClass,
                 'statusIcon'  => $statusIcon,
                 'move_in'     => $r->check_in?->format('M j, Y') ?? '—',
+                'move_out'    => $r->check_out?->format('M j, Y') ?? '—',
                 'submitted'   => $r->created_at?->format('M j, Y') ?? '—',
                 'deposit'     => number_format((float) $r->reservation_fee, 2),
                 'note'        => $r->admin_notes,
@@ -90,7 +90,6 @@ class TenantReservationController extends Controller
                 ];
             });
 
-        // Map for React
         $myReservationsForReact = $myReservations->mapWithKeys(function ($r) {
             return [
                 $r->reference_no => [
@@ -160,10 +159,8 @@ class TenantReservationController extends Controller
             : $totalCharges;
         $remaining = $totalCharges - $payNow;
 
-        // ---------- Save uploaded receipt ----------
         $receiptPath = $request->file('receipt')->store('reservations/' . $user->id, 'public');
 
-        // ---------- Create the reservation ----------
         $avatar = Reservation::makeAvatar($user->name);
 
         $reservation = Reservation::create([
@@ -179,8 +176,10 @@ class TenantReservationController extends Controller
             'phone'              => $user->phone,
             'desired_room'       => $room->room_number,
             'room_bed_id'        => $room->room_bed_id,
+            // ✅ CHECK-IN (becomes move_in_* on the tenant record)
             'check_in'           => $validated['check_in_date'],
             'check_in_time'      => $validated['check_in_time'] ?? null,
+            // ✅ CHECK-OUT (becomes move_out_* on the tenant record)
             'check_out'          => $validated['check_out_date'],
             'check_out_time'     => $validated['check_out_time'] ?? null,
             'has_companion'      => (bool) ($validated['has_companion'] ?? false),
@@ -220,7 +219,6 @@ class TenantReservationController extends Controller
             ], 422);
         }
 
-        // Clean up uploaded proof
         if ($reservation->proof_of_payment) {
             Storage::disk('public')->delete($reservation->proof_of_payment);
         }

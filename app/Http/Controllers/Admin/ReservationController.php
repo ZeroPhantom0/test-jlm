@@ -52,6 +52,7 @@ class ReservationController extends Controller
             'desired_room'     => ['required', 'string', 'max:120'],
             'room_bed_id'      => ['nullable', 'string', 'max:50'],
             'check_in'         => ['required', 'date'],
+            'check_out'        => ['nullable', 'date', 'after:check_in'],
             'move_in'          => ['nullable', 'date'],
             'total_charges'    => ['required', 'numeric', 'min:0'],
             'reservation_fee'  => ['nullable', 'numeric', 'min:0'],
@@ -128,6 +129,10 @@ class ReservationController extends Controller
      *      the ONLY point where a user becomes a Tenant.
      *   3. The reservation status flips to "Approved".
      *
+     * IMPORTANT: The `tenants` table stores the same dates the reservation
+     * holds — but under `move_in_*` / `move_out_*` naming. So we copy
+     * BOTH sides (check-in → move_in, check-out → move_out) here.
+     *
      * Steps 1–3 are wrapped in a transaction so a partial failure can't
      * leave a room "Reserved" without an approved reservation.
      */
@@ -138,7 +143,7 @@ class ReservationController extends Controller
         ]);
 
         DB::transaction(function () use ($request, $reservation, $validated) {
-            // 1. Mark the room as Reserved (if a room_id exists)
+            // 1. Mark the reserved room
             if ($reservation->room_id) {
                 $reservation->room?->update([
                     'status'      => 'Reserved',
@@ -146,28 +151,28 @@ class ReservationController extends Controller
                 ]);
             }
 
-            // 2. Create the Tenant record if the user is linked and
-            //    doesn't already have one. firstOrCreate keeps it idempotent.
-            if ($reservation->user_id) {
-                Tenant::firstOrCreate(
-                    ['user_id' => $reservation->user_id],
-                    [
-                        'room_id'       => $reservation->room_id,
-                        'move_in_date'  => $reservation->check_in,
-                        'move_in_time'  => '07:00:00',
-                        'rent_rate'     => $reservation->total_charges,
-                        'status'        => 'active',
-                    ]
-                );
-            }
-
-            // 3. Approve the reservation
+            // 2. Approve the reservation BEFORE creating the tenant,
+            //    so the FK points at a valid (now-approved) reservation.
             $reservation->update([
                 'status'       => 'Approved',
                 'admin_notes'  => $validated['admin_notes'] ?? $reservation->admin_notes,
                 'processed_by' => $request->user()->id,
                 'processed_at' => now(),
             ]);
+
+            // 3. Create (or refresh) the tenant link. Only ONE row per user;
+            //    all lease dates are now read from this reservation.
+            if ($reservation->user_id) {
+                Tenant::updateOrCreate(
+                    ['user_id' => $reservation->user_id],
+                    [
+                        'room_id'                 => $reservation->room_id,
+                        'approved_reservation_id' => $reservation->id,
+                        'rent_rate'               => $reservation->total_charges,
+                        'status'                  => 'active',
+                    ]
+                );
+            }
         });
 
         return response()->json([

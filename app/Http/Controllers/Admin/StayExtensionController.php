@@ -110,17 +110,24 @@ class StayExtensionController extends Controller
     /**
      * Approve a stay extension request.
      */
-    public function approve(Request $request, StayExtensionRequest $stayExtensionRequest)
+        public function approve(Request $request, StayExtensionRequest $stayExtensionRequest)
     {
         $validated = $request->validate([
             'admin_notes' => ['nullable', 'string'],
         ]);
 
-        // Extend the tenant's lease (and room availability if needed)
+        // Extend the SOURCE reservation's check_out — that's the single
+        // source of truth for the tenant's move-out date.
         if ($stayExtensionRequest->tenant) {
-            $stayExtensionRequest->tenant->update([
-                'move_out_date' => $stayExtensionRequest->requested_lease_end,
-            ]);
+            $tenant = $stayExtensionRequest->tenant;
+            $reservation = $tenant->approvedReservation;
+
+            if ($reservation) {
+                $reservation->update([
+                    'check_out'      => $stayExtensionRequest->requested_lease_end,
+                    'check_out_time' => $reservation->check_out_time,
+                ]);
+            }
         }
 
         $stayExtensionRequest->update([

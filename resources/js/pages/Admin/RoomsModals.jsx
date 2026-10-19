@@ -6,14 +6,12 @@ const csrf = () =>
     document.querySelector('meta[name="csrf-token"]')?.content ||
     document.querySelector('input[name="_token"]')?.value;
 
-/** Compute total beds = upper + lower */
 const computeTotalBeds = (upper, lower) => {
     const u = parseInt(upper, 10) || 0;
     const l = parseInt(lower, 10) || 0;
     return u + l;
 };
 
-/** Auto-generate a Room/Bed ID from room number + deck counts */
 const computeRoomBedId = (roomNumber, upper, lower) => {
     const u = parseInt(upper, 10) || 0;
     const l = parseInt(lower, 10) || 0;
@@ -21,23 +19,22 @@ const computeRoomBedId = (roomNumber, upper, lower) => {
 
     if (!roomNumber || total === 0) return '';
 
-    let suffix = 'M';                 // mixed / equal
-    if (u > l) suffix = 'U';          // upper-dominant
-    else if (l > u) suffix = 'L';     // lower-dominant
+    let suffix = 'M';
+    if (u > l) suffix = 'U';
+    else if (l > u) suffix = 'L';
 
     return `R${roomNumber}-B${total}-${suffix}`;
 };
 
-/** Only allow digits while typing */
 const digitsOnly = (val) => String(val).replace(/\D/g, '');
 
 export default function RoomsModals() {
-    const [showAdd, setShowAdd]   = useState(false);
+    const [showAdd, setShowAdd] = useState(false);
     const [showView, setShowView] = useState(false);
     const [showEdit, setShowEdit] = useState(false);
-    const [room, setRoom]         = useState(null);
-    const [form, setForm]         = useState(emptyForm());
-    const [saving, setSaving]     = useState(false);
+    const [room, setRoom] = useState(null);
+    const [form, setForm] = useState(emptyForm());
+    const [saving, setSaving] = useState(false);
 
     function emptyForm() {
         return {
@@ -55,7 +52,7 @@ export default function RoomsModals() {
         };
     }
 
-    // ------- Derived values (auto-calc) -------
+    // ------- Auto-calc -------
     const derivedTotalBeds = useMemo(
         () => computeTotalBeds(form.upper_deck, form.lower_deck),
         [form.upper_deck, form.lower_deck]
@@ -66,7 +63,6 @@ export default function RoomsModals() {
         [form.room_number, form.upper_deck, form.lower_deck]
     );
 
-    // Keep form.total_beds & form.room_bed_id in sync with derived values
     useEffect(() => {
         setForm((f) => {
             if (f.total_beds === derivedTotalBeds && f.room_bed_id === derivedRoomBedId) {
@@ -76,6 +72,70 @@ export default function RoomsModals() {
         });
     }, [derivedTotalBeds, derivedRoomBedId]);
 
+    // ------- Search + filters -------
+    const applyFilters = useCallback(() => {
+        const searchEl = document.getElementById('room-search');
+        const statusEl = document.getElementById('room-filter-status');
+        const typeEl   = document.getElementById('room-filter-type');
+        const tbody    = document.getElementById('rooms-tbody');
+        if (!tbody) return;
+
+        const q      = (searchEl?.value || '').trim().toLowerCase();
+        const status = statusEl?.value || '';
+        const type   = typeEl?.value || '';
+
+        const rows = tbody.querySelectorAll('tr[data-room]');
+        let visibleCount = 0;
+
+        rows.forEach((row) => {
+            const rowSearch = (row.dataset.search || '').toLowerCase();
+            const rowStatus = row.dataset.status || '';
+            const rowType   = row.dataset.type || '';
+
+            const matchSearch = !q || rowSearch.includes(q);
+            const matchStatus = !status || rowStatus === status;
+            const matchType   = !type || rowType === type;
+
+            if (matchSearch && matchStatus && matchType) {
+                row.style.display = '';
+                visibleCount++;
+            } else {
+                row.style.display = 'none';
+            }
+        });
+
+        // Empty-state row toggle
+        let emptyRow = tbody.querySelector('tr[data-empty-state]');
+        if (visibleCount === 0 && rows.length > 0) {
+            if (!emptyRow) {
+                emptyRow = document.createElement('tr');
+                emptyRow.setAttribute('data-empty-state', '1');
+                emptyRow.innerHTML = `<td colspan="7" class="py-10 text-center text-slate-400 text-sm">No rooms match your search or filters.</td>`;
+                tbody.appendChild(emptyRow);
+            }
+            emptyRow.style.display = '';
+        } else if (emptyRow) {
+            emptyRow.style.display = 'none';
+        }
+    }, []);
+
+    useEffect(() => {
+        const searchEl = document.getElementById('room-search');
+        const statusEl = document.getElementById('room-filter-status');
+        const typeEl   = document.getElementById('room-filter-type');
+
+        searchEl?.addEventListener('input', applyFilters);
+        statusEl?.addEventListener('change', applyFilters);
+        typeEl?.addEventListener('change', applyFilters);
+
+        return () => {
+            searchEl?.removeEventListener('input', applyFilters);
+            statusEl?.removeEventListener('change', applyFilters);
+            typeEl?.removeEventListener('change', applyFilters);
+        };
+    }, [applyFilters]);
+
+    // ------- Row data -------
     const getRowData = (id) => {
         const tr = document.querySelector(`.view-room-btn[data-id="${id}"]`)?.closest('tr')
                 || document.querySelector(`.edit-room-btn[data-id="${id}"]`)?.closest('tr');
@@ -119,7 +179,6 @@ export default function RoomsModals() {
 
     const updateField = (key, value) => setForm((f) => ({ ...f, [key]: value }));
 
-    // Special setter for the deck fields — digits only
     const updateDeck = (key, rawValue) => {
         const cleaned = digitsOnly(rawValue);
         updateField(key, cleaned);
@@ -265,7 +324,6 @@ export default function RoomsModals() {
 
                         <h4 className="text-sm font-bold text-slate-900 mb-4">Capacity / Bed Configuration</h4>
                         <div className="grid grid-cols-3 gap-3.5 mb-4">
-                            {/* Total Beds — AUTO / READ-ONLY */}
                             <div>
                                 <label className="block text-xs font-semibold text-slate-600 mb-1.5">
                                     Total Beds
@@ -279,7 +337,6 @@ export default function RoomsModals() {
                                     className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-[13px] bg-slate-50 text-slate-500 cursor-not-allowed"
                                 />
                             </div>
-                            {/* Upper Deck — TYPABLE TEXT */}
                             <div>
                                 <label className="block text-xs font-semibold text-slate-600 mb-1.5">Upper Deck</label>
                                 <input
@@ -292,7 +349,6 @@ export default function RoomsModals() {
                                     className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-[13px] outline-none focus:border-blue-400"
                                 />
                             </div>
-                            {/* Lower Deck — TYPABLE TEXT */}
                             <div>
                                 <label className="block text-xs font-semibold text-slate-600 mb-1.5">Lower Deck</label>
                                 <input
@@ -329,7 +385,6 @@ export default function RoomsModals() {
                                     <option>Reserved</option>
                                 </select>
                             </div>
-                            {/* Room/Bed ID — AUTO / READ-ONLY */}
                             <div>
                                 <label className="block text-xs font-semibold text-slate-600 mb-1.5">
                                     Room / Bed ID
@@ -388,7 +443,7 @@ export default function RoomsModals() {
                                 { label: 'Beds / Position', value: room.total_beds },
                                 { label: 'Room / Bed ID', value: room.room_bed_id || '-' },
                                 { label: 'Floor', value: room.floor },
-                                { label: 'Available Slots', value: `${room.status === 'Available' ? room.total_beds : 0}/${room.total_beds}` },
+                                { label: 'Available Slots', value: `${room.available_slots ?? 0}/${room.total_beds}` },
                                 { label: 'Daily Rate', value: `₱${Number(room.daily_rent).toLocaleString()}` },
                             ].map((spec, i) => (
                                 <div key={i} className="bg-slate-50 rounded-lg p-3 text-center">
@@ -462,7 +517,6 @@ export default function RoomsModals() {
                                 </select>
                             </div>
 
-                            {/* Upper Deck */}
                             <div>
                                 <label className="block text-xs font-semibold text-slate-600 mb-1.5">Upper Deck</label>
                                 <input
@@ -474,7 +528,6 @@ export default function RoomsModals() {
                                     className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-[13px] outline-none"
                                 />
                             </div>
-                            {/* Lower Deck */}
                             <div>
                                 <label className="block text-xs font-semibold text-slate-600 mb-1.5">Lower Deck</label>
                                 <input
@@ -486,7 +539,6 @@ export default function RoomsModals() {
                                     className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-[13px] outline-none"
                                 />
                             </div>
-                            {/* Total Beds — READ ONLY */}
                             <div>
                                 <label className="block text-xs font-semibold text-slate-600 mb-1.5">
                                     Total Beds
@@ -511,7 +563,6 @@ export default function RoomsModals() {
                                     className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-[13px] outline-none"
                                 />
                             </div>
-                            {/* Room/Bed ID — READ ONLY */}
                             <div>
                                 <label className="block text-xs font-semibold text-slate-600 mb-1.5">
                                     Room / Bed ID
