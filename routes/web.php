@@ -149,16 +149,18 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
     Route::put('/tenants/{tenant}',     [TenantController::class, 'update'])->name('tenants.update');
 
     // ---------- Billing & Payments CRUD ----------
-    Route::get('/billing',                      [BillingController::class, 'index'])->name('billing');
-    Route::post('/billing',                     [BillingController::class, 'store'])->name('billing.store');
-    Route::get('/billing/{invoice}',            [BillingController::class, 'show'])->name('billing.show');
-    Route::put('/billing/{invoice}',            [BillingController::class, 'update'])->name('billing.update');
-    Route::delete('/billing/{invoice}',         [BillingController::class, 'destroy'])->name('billing.destroy');
-    Route::post('/billing/{invoice}/mark-paid', [BillingController::class, 'markPaid'])->name('billing.mark-paid');
-    Route::post('/billing/{invoice}/remind',    [BillingController::class, 'sendReminder'])->name('billing.remind');
+    // NOTE: parameter binding uses `transaction_no` because the front-end
+    // sends the transaction number (e.g. `tn-101`), not the numeric ID.
+    Route::get('/billing',                                              [BillingController::class, 'index'])->name('billing');
+    Route::post('/billing',                                             [BillingController::class, 'store'])->name('billing.store');
 
-    Route::post('/billing/{invoice}/verify-payment', [BillingController::class, 'verifyPayment'])->name('billing.verify-payment');
-    Route::post('/billing/{invoice}/reject-payment', [BillingController::class, 'rejectPayment'])->name('billing.reject-payment');
+    Route::get('/billing/{invoice:transaction_no}',                     [BillingController::class, 'show'])->name('billing.show');
+    Route::put('/billing/{invoice:transaction_no}',                     [BillingController::class, 'update'])->name('billing.update');
+    Route::delete('/billing/{invoice:transaction_no}',                  [BillingController::class, 'destroy'])->name('billing.destroy');
+    Route::post('/billing/{invoice:transaction_no}/mark-paid',          [BillingController::class, 'markPaid'])->name('billing.mark-paid');
+    Route::post('/billing/{invoice:transaction_no}/remind',             [BillingController::class, 'sendReminder'])->name('billing.remind');
+    Route::post('/billing/{invoice:transaction_no}/verify-payment',     [BillingController::class, 'verifyPayment'])->name('billing.verify-payment');
+    Route::post('/billing/{invoice:transaction_no}/reject-payment',     [BillingController::class, 'rejectPayment'])->name('billing.reject-payment');
 
     // ---------- Reservations CRUD ----------
     Route::get('/reservations',                        [ReservationController::class, 'index'])->name('reservations');

@@ -28,7 +28,6 @@ class Reservation extends Model
         'check_out',
         'check_out_time',
         'has_companion',
-        'move_in',
         'total_charges',
         'reservation_fee',
         'payment_option',
@@ -46,7 +45,6 @@ class Reservation extends Model
     protected $casts = [
         'check_in'        => 'date',
         'check_out'       => 'date',
-        'move_in'         => 'datetime',
         'processed_at'    => 'datetime',
         'expires_at'      => 'datetime',
         'total_charges'   => 'decimal:2',
@@ -57,28 +55,13 @@ class Reservation extends Model
         'updated_at'      => 'datetime',
     ];
 
-    // ============================================================
-    // RELATIONSHIPS
-    // ============================================================
+    // ---- Relationships ----
 
-    public function user(): BelongsTo
-    {
-        return $this->belongsTo(User::class);
-    }
+    public function user(): BelongsTo       { return $this->belongsTo(User::class); }
+    public function room(): BelongsTo       { return $this->belongsTo(Room::class); }
+    public function processedBy(): BelongsTo { return $this->belongsTo(User::class, 'processed_by'); }
 
-    public function room(): BelongsTo
-    {
-        return $this->belongsTo(Room::class);
-    }
-
-    public function processedBy(): BelongsTo
-    {
-        return $this->belongsTo(User::class, 'processed_by');
-    }
-
-    // ============================================================
-    // ACCESSORS
-    // ============================================================
+    // ---- Accessors ----
 
     public function getStatusClassAttribute(): string
     {
@@ -117,68 +100,32 @@ class Reservation extends Model
         return '₱' . number_format((float) $this->reservation_fee, 0);
     }
 
-    /**
-     * Human-readable stay range: "Jun 1, 2026 – Jun 30, 2026"
-     */
     public function getStayPeriodAttribute(): string
     {
         $in  = $this->check_in?->format('M j, Y')  ?? '—';
         $out = $this->check_out?->format('M j, Y') ?? 'Open-ended';
-
         return $in . ' – ' . $out;
     }
 
-    /**
-     * Duration in days (inclusive of check-in day). Returns null if no check-out.
-     */
     public function getStayDurationAttribute(): ?int
     {
-        if (! $this->check_in || ! $this->check_out) {
-            return null;
-        }
-
+        if (! $this->check_in || ! $this->check_out) return null;
         return max(1, $this->check_in->diffInDays($this->check_out) + 1);
     }
 
-    /**
-     * Formatted move-in date (actual move-in, may differ from check-in).
-     */
-    public function getFormattedMoveInAttribute(): string
-    {
-        return $this->move_in?->format('F j, Y') ?? '—';
-    }
-
-    /**
-     * Formatted check-in (date + optional time).
-     */
     public function getFormattedCheckInAttribute(): string
     {
         $date = $this->check_in?->format('M j, Y') ?? '—';
-
-        return $this->check_in_time
-            ? $date . ' · ' . $this->check_in_time
-            : $date;
+        return $this->check_in_time ? $date . ' · ' . $this->check_in_time : $date;
     }
 
-    /**
-     * Formatted check-out (date + optional time).
-     */
     public function getFormattedCheckOutAttribute(): string
     {
-        if (! $this->check_out) {
-            return 'Open-ended';
-        }
-
+        if (! $this->check_out) return 'Open-ended';
         $date = $this->check_out->format('M j, Y');
-
-        return $this->check_out_time
-            ? $date . ' · ' . $this->check_out_time
-            : $date;
+        return $this->check_out_time ? $date . ' · ' . $this->check_out_time : $date;
     }
 
-    /**
-     * Proof-of-payment URL (if uploaded).
-     */
     public function getProofUrlAttribute(): ?string
     {
         return $this->proof_of_payment
@@ -186,29 +133,12 @@ class Reservation extends Model
             : null;
     }
 
-    // ============================================================
-    // SCOPES
-    // ============================================================
+    // ---- Scopes ----
 
-    public function scopePending($query)
-    {
-        return $query->where('status', 'Pending');
-    }
-
-    public function scopeApproved($query)
-    {
-        return $query->where('status', 'Approved');
-    }
-
-    public function scopeRejected($query)
-    {
-        return $query->where('status', 'Rejected');
-    }
-
-    public function scopeExpired($query)
-    {
-        return $query->where('status', 'Expired');
-    }
+    public function scopePending($query)  { return $query->where('status', 'Pending'); }
+    public function scopeApproved($query) { return $query->where('status', 'Approved'); }
+    public function scopeRejected($query) { return $query->where('status', 'Rejected'); }
+    public function scopeExpired($query)  { return $query->where('status', 'Expired'); }
 
     public function scopeFilter($query, array $filters)
     {
@@ -227,9 +157,7 @@ class Reservation extends Model
             });
     }
 
-    // ============================================================
-    // HELPERS
-    // ============================================================
+    // ---- Helpers ----
 
     public static function generateReferenceNo(): string
     {
@@ -267,8 +195,33 @@ class Reservation extends Model
     }
 
     /**
-     * Normalised payload for the React modal.
+     * Whether the reservation's remaining balance has been fully settled.
      */
+    public function isRemainingSettled(): bool
+    {
+        return (float) $this->remaining <= 0.005;
+    }
+
+    /**
+     * Whether the reservation has an outstanding remaining balance
+     * that has NOT yet been invoiced.
+     */
+    public function hasUnbilledRemaining(): bool
+    {
+        if ((float) $this->remaining <= 0.005) {
+            return false;
+        }
+
+        $billed = (float) \App\Models\Invoice::where('tenant_id', $this->user?->tenant?->id)
+            ->where(function ($q) {
+                $q->where('description', 'like', '%remaining%')
+                  ->orWhere('description', 'like', '%' . $this->reference_no . '%');
+            })
+            ->sum('balance');
+
+        return ($this->remaining - $billed) > 0.005;
+    }
+
     public function toReactArray(): array
     {
         return [
@@ -286,7 +239,6 @@ class Reservation extends Model
             'room'            => $this->desired_room,
             'checkin'         => $this->check_in?->format('M j, Y') ?? '-',
             'checkout'        => $this->check_out?->format('M j, Y') ?? 'Open-ended',
-            'moveIn'          => 'Move-in: ' . ($this->move_in?->format('F j, Y') ?? '-'),
             'stayPeriod'      => $this->stay_period,
             'stayDuration'    => $this->stay_duration,
             'formattedCheckIn'=> $this->formatted_check_in,

@@ -89,27 +89,25 @@
         </div>
     </div>
 
-    {{-- Filters --}}
-    <div class="bg-white rounded-2xl border border-slate-100 p-4 mb-6">
-        <div class="flex gap-4 mb-3.5 flex-col sm:flex-row">
-            <div class="flex-1 bg-slate-50 border border-slate-100 rounded-lg px-3.5 py-2.5 flex items-center gap-2.5">
-                <i class="fa-solid fa-magnifying-glass text-slate-400 text-sm"></i>
+    {{-- Filters — compact toolbar --}}
+    <div class="bg-white rounded-xl border border-slate-200 p-3 mb-5">
+        <div class="flex gap-2.5 mb-3 flex-col sm:flex-row">
+            <div class="relative flex-1">
+                <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-[12px] pointer-events-none"></i>
                 <input id="history-search" type="text" placeholder="Search history..."
-                       class="flex-1 bg-transparent outline-none text-[13px]">
+                       class="w-full h-9 pl-8 pr-3 rounded-lg border border-slate-200 bg-slate-50/60 text-[12.5px] text-slate-800 placeholder-slate-400 outline-none transition focus:border-emerald-400 focus:bg-white focus:ring-2 focus:ring-emerald-100">
             </div>
-            <div class="bg-slate-50 border border-slate-100 rounded-lg px-3.5 py-2.5 flex items-center gap-2.5 text-[13px] font-semibold text-slate-700 cursor-pointer min-w-[150px] justify-between">
-                <div class="flex items-center gap-2">
-                    <i class="fa-regular fa-calendar"></i>
-                    <select id="history-sort" class="bg-transparent outline-none cursor-pointer font-semibold text-slate-700">
-                        <option value="newest">Newest First</option>
-                        <option value="oldest">Oldest First</option>
-                    </select>
-                </div>
-            </div>
+            <select id="history-sort"
+                    class="h-9 pl-3 pr-8 rounded-lg border border-slate-200 bg-slate-50/60 text-[12.5px] font-semibold text-slate-700 outline-none cursor-pointer appearance-none bg-[url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 fill=%22none%22 viewBox=%220 0 24 24%22 stroke=%22%2394a3b8%22 stroke-width=%222%22><path stroke-linecap=%22round%22 stroke-linejoin=%22round%22 d=%22M19 9l-7 7-7-7%22/></svg>')] bg-[length:14px] bg-[right_10px_center] bg-no-repeat transition focus:border-emerald-400 focus:bg-white focus:ring-2 focus:ring-emerald-100 sm:min-w-[150px]">
+                <option value="newest">Newest First</option>
+                <option value="oldest">Oldest First</option>
+            </select>
         </div>
+        
+        {{-- Pills: stretched to fill full width --}}
         <div class="flex gap-2 overflow-x-auto pb-0.5">
-            <div class="history-pill active bg-[#02122c] text-white px-3.5 py-2 rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer whitespace-nowrap" data-category="all">
-                <i class="fa-solid fa-chart-line text-[13px]"></i><span>All History</span>
+            <div class="history-pill active bg-[#02122c] text-white px-3 py-1.5 rounded-md text-[11.5px] font-semibold flex flex-1 items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap" data-category="all">
+                <i class="fa-solid fa-chart-line text-[11px]"></i><span>All History</span>
             </div>
             @foreach([
                 ['key' => 'payments',        'icon' => 'fa-solid fa-peso-sign',       'label' => 'Payments'],
@@ -118,8 +116,8 @@
                 ['key' => 'room-changes',    'icon' => 'fa-solid fa-house',           'label' => 'Room Changes'],
                 ['key' => 'stay-extensions', 'icon' => 'fa-regular fa-calendar-plus', 'label' => 'Stay Extensions'],
             ] as $p)
-            <div class="history-pill bg-slate-100 text-slate-600 px-3.5 py-2 rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer whitespace-nowrap" data-category="{{ $p['key'] }}">
-                <i class="{{ $p['icon'] }} text-[13px]"></i><span>{{ $p['label'] }}</span>
+            <div class="history-pill bg-slate-100 text-slate-600 px-3 py-1.5 rounded-md text-[11.5px] font-semibold flex flex-1 items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap" data-category="{{ $p['key'] }}">
+                <i class="{{ $p['icon'] }} text-[11px]"></i><span>{{ $p['label'] }}</span>
             </div>
             @endforeach
         </div>

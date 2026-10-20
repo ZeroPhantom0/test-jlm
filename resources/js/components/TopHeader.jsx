@@ -8,9 +8,13 @@ export default function TopHeader({
     userRole  = "Tenant",
     userEmail = "",
     avatar    = "https://i.pravatar.cc/100?img=47",
+    isTenant  = false, // ← new
 }) {
     const [dropdownOpen, setDropdownOpen] = useState(false);
     const dropdownRef = useRef(null);
+
+    // "New Tenant" until they have an approved reservation
+    const displayRole = isTenant ? "Tenant" : "New Tenant";
 
     useEffect(() => {
         const handleClickOutside = (e) => {
@@ -37,22 +41,6 @@ export default function TopHeader({
             </div>
 
             <div className="flex items-center gap-5 md:gap-6">
-                {/* Search Bar */}
-                <div className="hidden md:flex bg-[#f1f5f9] rounded-full px-4 py-2 items-center gap-2.5 w-[220px]">
-                    <i className="fa-solid fa-magnifying-glass text-slate-400 text-xs" />
-                    <input
-                        type="text"
-                        placeholder="Search..."
-                        className="bg-transparent border-none outline-none text-[13px] w-full text-slate-800 placeholder-slate-400"
-                    />
-                </div>
-
-                {/* Announcement Bell */}
-                <div className="relative cursor-pointer p-1 text-slate-500 hover:text-slate-700">
-                    <i className="fa-solid fa-bullhorn text-base" />
-                    <span className="absolute top-1 right-1 w-[6px] h-[6px] bg-red-500 rounded-full" />
-                </div>
-
                 {/* Profile Dropdown */}
                 <div className="relative" ref={dropdownRef}>
                     <div
@@ -64,7 +52,7 @@ export default function TopHeader({
                                 {userName}
                             </h4>
                             <p className="text-[11px] text-slate-500 leading-tight">
-                                {userRole}
+                                {displayRole}
                             </p>
                         </div>
                         <img
@@ -88,7 +76,7 @@ export default function TopHeader({
                                         {userName}
                                     </h4>
                                     <p className="text-[11px] text-slate-400 truncate">
-                                        {userEmail || `${userRole.toLowerCase()}@jlmcozycabin.com`}
+                                        {userEmail || `${displayRole.toLowerCase().replace(/\s+/g, "")}@jlmcozycabin.com`}
                                     </p>
                                 </div>
                             </div>

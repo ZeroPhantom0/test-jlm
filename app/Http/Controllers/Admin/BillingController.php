@@ -5,12 +5,15 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Invoice;
+use App\Services\BillingService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 
 class BillingController extends Controller
 {
+    public function __construct(protected BillingService $billing) {}
+
     /**
      * Display the billing & payments list.
      */
@@ -245,7 +248,6 @@ class BillingController extends Controller
             'admin_notes' => ['required', 'string'],
         ]);
 
-        // Clean up the uploaded receipt
         if ($invoice->receipt_path) {
             Storage::disk('public')->delete($invoice->receipt_path);
         }

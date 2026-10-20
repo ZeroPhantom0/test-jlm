@@ -39,24 +39,6 @@ export default function AdminTopHeader({
             </div>
 
             <div className="flex items-center gap-5 relative">
-                {/* Search Bar */}
-                <div className="hidden md:flex bg-slate-100 rounded-full px-4 py-2 items-center gap-2.5 w-[240px]">
-                    <i className="fa-solid fa-magnifying-glass text-slate-400 text-[13px]"></i>
-                    <input
-                        type="text"
-                        placeholder="Search..."
-                        className="bg-transparent border-none outline-none text-[13px] w-full text-slate-800 placeholder-slate-400"
-                    />
-                </div>
-
-                {/* Notification Bell */}
-                <div className="relative cursor-pointer">
-                    <i className="fa-solid fa-bell text-rose-600 text-lg"></i>
-                    <span className="absolute -top-0.5 -right-0.5 w-[7px] h-[7px] bg-rose-600 border border-white rounded-full"></span>
-                </div>
-
-                <div className="hidden md:block w-px h-6 bg-slate-300"></div>
-
                 {/* Profile Dropdown */}
                 <div className="relative" ref={dropdownRef}>
                     <div

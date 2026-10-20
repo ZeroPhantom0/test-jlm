@@ -24,6 +24,11 @@
                 <h3 class="text-xl font-bold text-rose-600 mt-0.5">
                     ₱{{ number_format($summary['total_due'], 0) }}
                 </h3>
+                @if (($summary['reservation_remaining'] ?? 0) > 0)
+                    <p class="text-[10.5px] text-slate-400 mt-0.5">
+                        Includes ₱{{ number_format($summary['reservation_remaining'], 0) }} reservation remaining
+                    </p>
+                @endif
             </div>
         </div>
         <div class="bg-white rounded-xl p-5 border border-slate-100 flex items-center gap-4">
@@ -96,7 +101,49 @@
         </div>
     </div>
 
-    {{-- Pending payment card --}}
+    {{-- Reservation remaining card --}}
+    @if($reservationDue)
+        <div class="bg-white rounded-2xl border border-slate-100 overflow-hidden mb-6">
+            <div class="bg-amber-50 px-6 py-4 border-b border-amber-100 flex items-center gap-2.5">
+                <i class="fa-solid fa-exclamation-circle text-amber-500"></i>
+                <h4 class="text-[15px] font-bold text-amber-900 flex items-center gap-2">
+                    Reservation Remaining Balance
+                </h4>
+            </div>
+            <div class="p-6 flex flex-wrap items-center justify-between gap-4">
+                <div>
+                    <div class="flex items-center gap-3">
+                        <h4 class="text-[15px] font-bold">{{ $reservationDue['title'] }}</h4>
+                        <span class="bg-amber-100 text-amber-700 text-[11px] font-bold px-2.5 py-1 rounded-full inline-flex items-center gap-1">
+                            <i class="fa-regular fa-clock"></i> Unpaid
+                        </span>
+                    </div>
+                    <div class="text-xs text-slate-400 flex items-center gap-1.5 mt-1.5">
+                        <i class="fa-regular fa-calendar"></i>
+                        <span>Reference: {{ $reservationDue['reference'] }}</span>
+                    </div>
+                </div>
+                <div class="flex items-center gap-5">
+                    <div class="text-2xl font-extrabold text-slate-800">
+                        ₱{{ number_format($reservationDue['amount'], 0) }}
+                    </div>
+                    <button id="open-payment-modal"
+                            data-invoice="{{ json_encode([
+                                'reference'    => $reservationDue['reference'],
+                                'title'        => $reservationDue['title'],
+                                'amount'       => $reservationDue['amount'],
+                                'due_date'     => $reservationDue['due_date']?->format('M j, Y') ?? '—',
+                                'gcash_number' => '0917-123-4567',
+                            ], JSON_HEX_APOS | JSON_HEX_QUOT) }}"
+                            class="bg-[#00a86b] hover:bg-emerald-700 text-white px-5 py-2.5 rounded-lg font-bold text-[13px] inline-flex items-center gap-2">
+                        <i class="fa-regular fa-credit-card"></i> Pay Now
+                    </button>
+                </div>
+            </div>
+        </div>
+    @endif
+
+    {{-- Pending payments --}}
     @if($pendingInvoices->count() > 0)
         @php $next = $pendingInvoices->first(); @endphp
         <div class="bg-white rounded-2xl border border-slate-100 overflow-hidden mb-6">
@@ -130,6 +177,13 @@
                         ₱{{ number_format($next->balance, 0) }}
                     </div>
                     <button id="open-payment-modal"
+                            data-invoice="{{ json_encode([
+                                'reference'    => $next->transaction_no,
+                                'title'        => $next->description,
+                                'amount'       => (float) $next->balance,
+                                'due_date'     => $next->due_date?->format('M j, Y') ?? '—',
+                                'gcash_number' => '0917-123-4567',
+                            ], JSON_HEX_APOS | JSON_HEX_QUOT) }}"
                             class="bg-[#00a86b] hover:bg-emerald-700 text-white px-5 py-2.5 rounded-lg font-bold text-[13px] inline-flex items-center gap-2">
                         <i class="fa-regular fa-credit-card"></i> Pay Now
                     </button>

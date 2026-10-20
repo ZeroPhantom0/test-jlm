@@ -19,36 +19,20 @@
         </div>
     </div>
 
-    {{-- Metrics --}}
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-        <div class="bg-white border border-slate-200 rounded-xl px-5 py-4">
-            <div class="text-xs text-slate-500 font-medium">Total</div>
-            <div class="text-2xl font-bold text-slate-900 mt-1">{{ $metrics['total'] }}</div>
-        </div>
-        <div class="bg-white border border-slate-200 rounded-xl px-5 py-4">
-            <div class="text-xs text-slate-500 font-medium">Pinned</div>
-            <div class="text-2xl font-bold text-indigo-600 mt-1">{{ $metrics['pinned'] }}</div>
-        </div>
-        <div class="bg-white border border-slate-200 rounded-xl px-5 py-4">
-            <div class="text-xs text-slate-500 font-medium">Urgent</div>
-            <div class="text-2xl font-bold text-red-600 mt-1">{{ $metrics['urgent'] }}</div>
-        </div>
-    </div>
-
     {{-- Filter --}}
-    <div class="bg-white border border-slate-200 rounded-xl p-3 flex flex-col sm:flex-row gap-3 mb-6">
+    <div class="bg-white border border-slate-200 rounded-xl p-2.5 flex flex-col sm:flex-row gap-2.5 mb-6">
         <div class="relative flex-1">
-            <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
+            <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-[12px]"></i>
             <input
                 type="text"
                 id="searchInput"
                 placeholder="Search announcements..."
-                class="w-full bg-slate-50 border border-slate-100 py-2.5 pl-10 pr-3.5 rounded-lg text-[13px] outline-none focus:border-blue-300"
+                class="w-full h-9 bg-slate-50 border border-slate-200 py-0 pl-8 pr-3 rounded-lg text-[12.5px] text-slate-800 placeholder-slate-400 outline-none transition focus:border-blue-300 focus:bg-white focus:ring-2 focus:ring-blue-100"
             />
         </div>
         <select
             id="prioritySelect"
-            class="bg-white border border-slate-200 rounded-lg px-4 py-2.5 text-[13px] sm:min-w-[140px] outline-none"
+            class="h-9 bg-white border border-slate-200 rounded-lg px-3 pr-8 text-[12.5px] text-slate-700 outline-none cursor-pointer appearance-none bg-[url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 fill=%22none%22 viewBox=%220 0 24 24%22 stroke=%22%2394a3b8%22 stroke-width=%222%22><path stroke-linecap=%22round%22 stroke-linejoin=%22round%22 d=%22M19 9l-7 7-7-7%22/></svg>')] bg-[length:14px] bg-[right_10px_center] bg-no-repeat transition focus:border-blue-300 focus:ring-2 focus:ring-blue-100 sm:min-w-[140px]"
         >
             <option value="all">All Priorities</option>
             <option value="important">Important</option>

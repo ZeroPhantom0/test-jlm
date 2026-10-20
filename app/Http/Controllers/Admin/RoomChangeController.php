@@ -15,12 +15,9 @@ class RoomChangeController extends Controller
     /**
      * Display the room change requests list.
      */
-    public function index(Request $request)
+    public function index()
     {
-        $filters = $request->only(['search', 'status']);
-
         $requests = RoomChangeRequest::with(['tenant.user', 'currentRoom', 'requestedRoom'])
-            ->filter($filters)
             ->latest()
             ->get();
 
@@ -31,12 +28,11 @@ class RoomChangeController extends Controller
             'rejected' => RoomChangeRequest::rejected()->count(),
         ];
 
-        // Pass data for React modals
         $requestsForReact = $requests->mapWithKeys(function ($req) {
             return [$req->id => $req->toReactArray()];
         })->toArray();
 
-        return view('admin.services.room-change', compact('requests', 'metrics', 'filters', 'requestsForReact'));
+        return view('admin.services.room-change', compact('requests', 'metrics', 'requestsForReact'));
     }
 
     /**
@@ -53,7 +49,6 @@ class RoomChangeController extends Controller
             'reason'            => ['required', 'string'],
         ]);
 
-        // Determine availability of requested room
         $availability = 'AVAILABLE';
         if (!empty($validated['requested_room_id'])) {
             $room = Room::find($validated['requested_room_id']);
@@ -103,7 +98,6 @@ class RoomChangeController extends Controller
             'status'      => ['sometimes', Rule::in(['Pending', 'Approved', 'Rejected'])],
         ]);
 
-        // If approving/rejecting, record who processed it
         if (isset($validated['status']) && in_array($validated['status'], ['Approved', 'Rejected'])) {
             $validated['processed_by'] = $request->user()->id;
             $validated['processed_at'] = now();
@@ -120,6 +114,10 @@ class RoomChangeController extends Controller
 
     /**
      * Approve a room change request.
+     *
+     * - Move the tenant to the new room.
+     * - Recompute status for BOTH rooms by real occupancy
+     *   (Reserved only when full, otherwise Available).
      */
     public function approve(Request $request, RoomChangeRequest $roomChangeRequest)
     {
@@ -127,24 +125,20 @@ class RoomChangeController extends Controller
             'admin_notes' => ['nullable', 'string'],
         ]);
 
-        // Update tenant's room if approved
         if ($roomChangeRequest->tenant && $roomChangeRequest->requested_room_id) {
             $oldRoom = $roomChangeRequest->currentRoom;
+            $newRoom = Room::find($roomChangeRequest->requested_room_id);
 
-            // Free up old room
-            if ($oldRoom) {
-                $oldRoom->update(['status' => 'Available', 'tenant_name' => null]);
+            if ($newRoom) {
+                $roomChangeRequest->tenant->update(['room_id' => $newRoom->id]);
             }
 
-            // Assign new room
-            $newRoom = Room::find($roomChangeRequest->requested_room_id);
+            // Re-sync BOTH rooms based on actual occupancy.
+            if ($oldRoom) {
+                $oldRoom->syncStatus();
+            }
             if ($newRoom) {
-                $newRoom->update([
-                    'status'      => 'Occupied',
-                    'tenant_name' => $roomChangeRequest->tenant->user->name ?? null,
-                ]);
-
-                $roomChangeRequest->tenant->update(['room_id' => $newRoom->id]);
+                $newRoom->syncStatus();
             }
         }
 

@@ -4,10 +4,10 @@
 namespace App\Http\Controllers\Tenant;
 
 use App\Http\Controllers\Controller;
+use App\Models\Invoice;
 use App\Models\Reservation;
 use App\Models\Room;
 use App\Models\Tenant;
-use App\Models\VirtualTour;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -112,12 +112,6 @@ class TenantReservationController extends Controller
 
     /**
      * Store a new reservation (tenant-initiated).
-     *
-     * NOTE: A user does NOT need an existing `tenants` row to submit a
-     * reservation. The Tenant record is created by the admin when the
-     * reservation is approved — see Admin\ReservationController::approve().
-     *
-     * The reservation is linked via `user_id`, not `tenant_id`.
      */
     public function store(Request $request)
     {
@@ -176,10 +170,8 @@ class TenantReservationController extends Controller
             'phone'              => $user->phone,
             'desired_room'       => $room->room_number,
             'room_bed_id'        => $room->room_bed_id,
-            // ✅ CHECK-IN (becomes move_in_* on the tenant record)
             'check_in'           => $validated['check_in_date'],
             'check_in_time'      => $validated['check_in_time'] ?? null,
-            // ✅ CHECK-OUT (becomes move_out_* on the tenant record)
             'check_out'          => $validated['check_out_date'],
             'check_out_time'     => $validated['check_out_time'] ?? null,
             'has_companion'      => (bool) ($validated['has_companion'] ?? false),
@@ -191,6 +183,32 @@ class TenantReservationController extends Controller
             'request_details'    => $validated['notes'] ?? null,
             'proof_of_payment'   => $receiptPath,
             'status'             => 'Pending',
+        ]);
+
+        // ============================================================
+        // FIX: Create the Invoice immediately so it shows in Admin Billing
+        // ============================================================
+        $tenant = Tenant::where('user_id', $user->id)->first();
+
+        Invoice::create([
+            'transaction_no' => Invoice::generateTransactionNo(),
+            'tenant_id'      => $tenant?->id,
+            'room_id'        => $reservation->room_id,
+            'tenant_name'    => $reservation->tenant_name,
+            'room_number'    => $room->room_number,
+            'description'    => 'Reservation Down Payment — ' . $reservation->reference_no,
+            'check_in'       => $reservation->check_in,
+            'check_out'      => $reservation->check_out,
+            'rate_per_day'   => $roomRate,
+            'days'           => $days,
+            'total_amount'   => $totalCharges,
+            'amount_paid'    => $payNow,
+            'balance'        => $remaining,
+            'due_date'       => now()->addDays(7)->toDateString(),
+            'payment_method' => 'GCash',
+            'status'         => 'Pending', // Pending admin verification
+            'receipt_no'     => $validated['reference_no'],
+            'receipt_path'   => $receiptPath, 
         ]);
 
         return response()->json([
@@ -226,6 +244,14 @@ class TenantReservationController extends Controller
         $reservation->update([
             'status' => 'Rejected',
         ]);
+
+        // Also cancel the associated invoice
+        Invoice::where('tenant_name', $reservation->tenant_name)
+            ->where('description', 'like', '%' . $reservation->reference_no . '%')
+            ->update([
+                'status' => 'Unpaid',
+                'receipt_path' => null,
+            ]);
 
         return response()->json([
             'success' => true,

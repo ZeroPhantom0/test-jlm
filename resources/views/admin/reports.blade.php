@@ -19,16 +19,63 @@
                 <p class="text-[13px] text-slate-500 mt-0.5">Data insights for JLM Cozy Cabin</p>
             </div>
         </div>
+
         <div class="flex items-center gap-2.5 flex-wrap">
-            <button class="bg-white border border-slate-300 rounded-[10px] px-3.5 py-2 text-[13px] font-medium text-slate-700 flex items-center gap-2">
-                Last 6 Months <i class="fa-solid fa-chevron-down text-xs"></i>
-            </button>
-            <button class="bg-white border border-slate-300 rounded-[10px] px-4 py-2 text-[13px] font-semibold text-emerald-500 flex items-center gap-2">
-                <i class="fa-solid fa-file-excel"></i> Export CSV
-            </button>
-            <button class="bg-[#021838] text-white rounded-[10px] px-4.5 py-2 text-[13px] font-semibold flex items-center gap-2">
-                <i class="fa-solid fa-download"></i> Export PDF
-            </button>
+
+            {{-- Date-range dropdown --}}
+            <div class="relative" data-dropdown="range">
+                <button type="button"
+                    class="js-dropdown-toggle bg-white border border-slate-300 rounded-[10px] px-3.5 py-2 text-[13px] font-medium text-slate-700 flex items-center gap-2 hover:bg-slate-50 transition">
+                    <i class="fa-regular fa-calendar text-slate-500"></i>
+                    <span id="range-label">Last 6 Months</span>
+                    <i class="fa-solid fa-chevron-down text-[10px] text-slate-400"></i>
+                </button>
+                <div class="js-dropdown-menu hidden absolute right-0 mt-2 w-44 bg-white border border-slate-200 rounded-xl shadow-lg p-1.5 z-[2000]">
+                    <button type="button" class="range-option w-full text-left px-3 py-2 rounded-lg text-[13px] text-slate-700 hover:bg-slate-100">Daily</button>
+                    <button type="button" class="range-option w-full text-left px-3 py-2 rounded-lg text-[13px] text-slate-700 hover:bg-slate-100">Weekly</button>
+                    <button type="button" class="range-option w-full text-left px-3 py-2 rounded-lg text-[13px] text-slate-700 hover:bg-slate-100">Monthly</button>
+                    <button type="button" class="range-option w-full text-left px-3 py-2 rounded-lg text-[13px] text-slate-700 hover:bg-slate-100">Yearly</button>
+                </div>
+            </div>
+
+            {{-- Export dropdown --}}
+            <div class="relative" data-dropdown="export">
+                <button type="button"
+                    class="js-dropdown-toggle bg-[#021838] text-white rounded-[10px] px-4 py-2 text-[13px] font-semibold flex items-center gap-2 hover:bg-[#0a2a55] transition">
+                    <i class="fa-solid fa-download"></i>
+                    Export
+                    <i class="fa-solid fa-chevron-down text-[10px] text-white/70"></i>
+                </button>
+                <div class="js-dropdown-menu hidden absolute right-0 mt-2 w-60 bg-white border border-slate-200 rounded-xl shadow-lg p-1.5 z-[2000]">
+                    <div class="px-3 pt-1.5 pb-2 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Export Section</div>
+
+                    <label class="flex items-center gap-2 px-3 py-2 rounded-lg text-[13px] text-slate-700 hover:bg-slate-100 cursor-pointer">
+                        <input type="checkbox" class="export-section" value="all" checked> All Sections
+                    </label>
+                    <label class="flex items-center gap-2 px-3 py-2 rounded-lg text-[13px] text-slate-700 hover:bg-slate-100 cursor-pointer">
+                        <input type="checkbox" class="export-section" value="occupancy"> Occupancy
+                    </label>
+                    <label class="flex items-center gap-2 px-3 py-2 rounded-lg text-[13px] text-slate-700 hover:bg-slate-100 cursor-pointer">
+                        <input type="checkbox" class="export-section" value="revenue"> Revenue
+                    </label>
+                    <label class="flex items-center gap-2 px-3 py-2 rounded-lg text-[13px] text-slate-700 hover:bg-slate-100 cursor-pointer">
+                        <input type="checkbox" class="export-section" value="service"> Service Requests
+                    </label>
+                    <label class="flex items-center gap-2 px-3 py-2 rounded-lg text-[13px] text-slate-700 hover:bg-slate-100 cursor-pointer">
+                        <input type="checkbox" class="export-section" value="payments"> Payments
+                    </label>
+
+                    <div class="border-t border-slate-100 mt-1.5 pt-1.5">
+                        <button type="button" id="export-csv" class="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-[13px] font-semibold text-emerald-600 hover:bg-emerald-50">
+                            <i class="fa-solid fa-file-excel"></i> Export CSV
+                        </button>
+                        <button type="button" id="export-pdf" class="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-[13px] font-semibold text-rose-600 hover:bg-rose-50">
+                            <i class="fa-solid fa-file-pdf"></i> Export PDF
+                        </button>
+                    </div>
+                </div>
+            </div>
+
         </div>
     </div>
 
@@ -142,7 +189,6 @@
             <p class="text-xs text-slate-500 mt-0.5 mb-5">Rent, utilities and other income in ₱</p>
 
             @php
-                // Max value for bar chart scaling
                 $revMax = 1;
                 foreach ($revenueBreakdown as $r) {
                     $revMax = max($revMax, (float) $r['total']);
@@ -221,9 +267,7 @@
             <p class="text-xs text-slate-500 mt-0.5 mb-5">Breakdown of maintenance issues reported</p>
 
             <div class="flex flex-col gap-4 mt-3">
-                {{-- Chart canvas area --}}
                 <div class="relative h-[200px] pl-10 flex flex-col justify-end">
-                    {{-- Gridlines --}}
                     <div class="absolute top-0 left-10 right-0 bottom-0 flex flex-col justify-between pointer-events-none">
                         <div class="w-full border-b border-dashed border-slate-100"></div>
                         <div class="w-full border-b border-dashed border-slate-100"></div>
@@ -231,7 +275,6 @@
                         <div class="w-full border-b border-dashed border-slate-300"></div>
                     </div>
 
-                    {{-- Y-Axis --}}
                     <div class="absolute left-0 -top-1.5 bottom-0 flex flex-col justify-between text-[11px] text-slate-400">
                         <span>{{ $serviceMax }}</span>
                         <span>{{ round($serviceMax * 2 / 3) }}</span>
@@ -239,7 +282,6 @@
                         <span>0</span>
                     </div>
 
-                    {{-- Bars --}}
                     <div class="flex items-end justify-around h-full relative z-10">
                         @foreach ($serviceByCategory as $month)
                             <div class="flex flex-col items-center h-full justify-end">
@@ -262,14 +304,12 @@
                     </div>
                 </div>
 
-                {{-- X-Axis Labels --}}
                 <div class="flex justify-around pl-10">
                     @foreach ($serviceByCategory as $month)
                         <span class="text-[11px] text-slate-500 font-medium text-center w-20">{{ $month['label'] }}</span>
                     @endforeach
                 </div>
 
-                {{-- Legend --}}
                 <div class="flex items-center justify-center gap-5 text-xs text-slate-500 mt-4">
                     <div class="flex items-center gap-1.5"><div class="w-2.5 h-2.5 rounded-sm" style="background:#6366f1;"></div> Plumbing</div>
                     <div class="flex items-center gap-1.5"><div class="w-2.5 h-2.5 rounded-sm" style="background:#f59e0b;"></div> Electrical</div>
@@ -288,12 +328,10 @@
             $otc    = $paymentMethods['otc'];
             $gcashEnd   = $gcash;
             $bankEnd    = $gcash + $bank;
-            // otc always fills the rest to 100%
         @endphp
         <div class="reports-panel p-6 hidden" id="panel-payments">
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
 
-                {{-- LEFT: Donut Chart --}}
                 <div class="flex flex-col items-center justify-center gap-5">
                     <div>
                         <h3 class="text-base font-bold text-slate-900 text-center">Payment Methods Distribution</h3>
@@ -316,7 +354,6 @@
                     </div>
                 </div>
 
-                {{-- RIGHT: Payment Status Summary --}}
                 <div class="flex flex-col gap-3">
                     <h3 class="text-base font-bold text-slate-900">Payment Status Summary</h3>
 
@@ -362,6 +399,7 @@
 @push('scripts')
 <script>
 (function () {
+    /* -------------------- Tabs -------------------- */
     const tabs = document.querySelectorAll('.reports-tab-btn');
     const panels = document.querySelectorAll('.reports-panel');
 
@@ -376,6 +414,24 @@
         panels.forEach(p => p.classList.add('hidden'));
         document.getElementById('panel-' + tab.dataset.tab).classList.remove('hidden');
     }));
+
+    /* -------------------- Dropdowns (UI only) -------------------- */
+    document.querySelectorAll('[data-dropdown]').forEach(wrap => {
+        const toggle = wrap.querySelector('.js-dropdown-toggle');
+        const menu   = wrap.querySelector('.js-dropdown-menu');
+
+        toggle.addEventListener('click', (e) => {
+            e.stopPropagation();
+            document.querySelectorAll('.js-dropdown-menu').forEach(m => {
+                if (m !== menu) m.classList.add('hidden');
+            });
+            menu.classList.toggle('hidden');
+        });
+    });
+
+    document.addEventListener('click', () => {
+        document.querySelectorAll('.js-dropdown-menu').forEach(m => m.classList.add('hidden'));
+    });
 })();
 </script>
 @endpush

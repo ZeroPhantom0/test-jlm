@@ -1,4 +1,5 @@
 <?php
+// app/Models/Room.php
 
 namespace App\Models;
 
@@ -42,52 +43,34 @@ class Room extends Model
         return $this->hasOne(VirtualTour::class);
     }
 
-    /**
-     * All tenants (users) currently assigned to this room.
-     * This is the single source of truth for occupancy.
-     */
     public function tenants(): HasMany
     {
         return $this->hasMany(Tenant::class);
     }
 
     // ============================================================
-    // OCCUPANCY (real — based on tenants.count)
+    // OCCUPANCY
     // ============================================================
 
-    /**
-     * Number of tenants currently assigned to this room.
-     * Uses the eager-loaded `tenants_count` when available,
-     * otherwise hits the DB.
-     */
     public function getOccupiedCountAttribute(): int
     {
         if (array_key_exists('tenants_count', $this->attributes)) {
             return (int) $this->attributes['tenants_count'];
         }
 
-        return (int) $this->tenants()->count();
+        return (int) $this->tenants()->where('status', 'active')->count();
     }
 
-    /**
-     * Remaining slots = total_beds - occupied.
-     */
     public function getAvailableSlotsAttribute(): int
     {
         return max(0, (int) $this->total_beds - $this->occupied_count);
     }
 
-    /**
-     * "2/3" style label — occupied / total.
-     */
     public function getOccupancyLabelAttribute(): string
     {
         return $this->occupied_count . '/' . $this->total_beds;
     }
 
-    /**
-     * 0–100 — percentage full.
-     */
     public function getOccupancyPercentAttribute(): int
     {
         if ($this->total_beds <= 0) {
@@ -95,6 +78,79 @@ class Room extends Model
         }
 
         return (int) round(($this->occupied_count / $this->total_beds) * 100);
+    }
+
+    // ============================================================
+    // TENANT NAME FORMATTING (For the Table UI)
+    // ============================================================
+
+    /**
+     * Returns an array of all active tenant names.
+     */
+    public function getActiveTenantNamesAttribute(): array
+    {
+        return $this->tenants()
+            ->where('status', 'active')
+            ->with('user')
+            ->get()
+            ->pluck('user.name')
+            ->filter()
+            ->values()
+            ->toArray();
+    }
+
+    /**
+     * The formatted string to show in the table.
+     * Example: "Zen Phantom, Elle D..."
+     */
+    public function getTenantDisplayAttribute(): ?string
+    {
+        $names = $this->active_tenant_names;
+        
+        if (empty($names)) {
+            return null;
+        }
+
+        if (count($names) === 1) {
+            return $names[0];
+        }
+
+        // Show first name fully, and a hint of the rest
+        return $names[0] . ', ' . substr($names[1], 0, 7) . '...';
+    }
+
+    /**
+     * The full comma-separated string for the hover tooltip.
+     * Example: "Zen Phantom, Elle Dela Cruz, John Doe"
+     */
+    public function getTenantTooltipAttribute(): string
+    {
+        return implode(', ', $this->active_tenant_names);
+    }
+
+    // ============================================================
+    // AUTO STATUS
+    // ============================================================
+
+    public function syncStatus(): void
+    {
+        $names   = $this->active_tenant_names;
+        $occupied = count($names);
+
+        $newStatus = ($this->total_beds > 0 && $occupied >= $this->total_beds)
+            ? 'Reserved'
+            : 'Available';
+
+        // Build a comma-separated string for the `tenant_name` DB column
+        // so it stores actual names instead of user IDs.
+        $newTenantName = empty($names) ? null : implode(', ', $names);
+
+        if ($this->status !== $newStatus || $this->tenant_name !== $newTenantName) {
+            $this->update([
+                'status'      => $newStatus,
+                'tenant_name' => $newTenantName,
+            ]);
+        }
     }
 
     // ============================================================
@@ -130,7 +186,7 @@ class Room extends Model
     }
 
     // ============================================================
-    // SERIALIZATION FOR THE REACT MODALS
+    // SERIALIZATION
     // ============================================================
 
     public function toRowArray(): array
@@ -149,7 +205,6 @@ class Room extends Model
             'room_bed_id'      => $this->room_bed_id,
             'tenant_name'      => $this->tenant_name,
 
-            // Real occupancy values
             'occupied_count'   => $this->occupied_count,
             'available_slots'  => $this->available_slots,
             'occupancy_label'  => $this->occupancy_label,

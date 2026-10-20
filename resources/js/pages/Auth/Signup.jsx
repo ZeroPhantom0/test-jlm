@@ -38,7 +38,7 @@ export default function Signup() {
                 <div className="signup-left">
                     <div className="signup-brand">
                         <div className="signup-logo">
-                            <img src="/images/JLM Cozy cabin.jpg" alt="JLM Cozy Cabin Logo" />
+                            <img src="\images\jlm-logo.png" alt="JLM Cozy Cabin Logo" />
                         </div>
                         <span>JLM Cozy Cabin</span>
                     </div>

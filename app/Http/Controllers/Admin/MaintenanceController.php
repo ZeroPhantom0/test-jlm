@@ -13,12 +13,9 @@ class MaintenanceController extends Controller
     /**
      * Display the maintenance requests list.
      */
-    public function index(Request $request)
+    public function index()
     {
-        $filters = $request->only(['search', 'status', 'priority']);
-
         $requests = MaintenanceRequest::with(['tenant.user', 'room'])
-            ->filter($filters)
             ->latest()
             ->get();
 
@@ -29,7 +26,7 @@ class MaintenanceController extends Controller
             'completed'   => MaintenanceRequest::completed()->count(),
         ];
 
-        return view('admin.services.maintenance', compact('requests', 'metrics', 'filters'));
+        return view('admin.services.maintenance', compact('requests', 'metrics'));
     }
 
     /**

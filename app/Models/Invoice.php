@@ -49,9 +49,7 @@ class Invoice extends Model
         'updated_at'   => 'datetime',
     ];
 
-    // ============================================================
-    // RELATIONSHIPS
-    // ============================================================
+    // ---- Relationships ----
 
     public function tenant(): BelongsTo
     {
@@ -68,9 +66,7 @@ class Invoice extends Model
         return $this->belongsTo(User::class, 'verified_by');
     }
 
-    // ============================================================
-    // ACCESSORS
-    // ============================================================
+    // ---- Accessors ----
 
     public function getReceiptUrlAttribute(): ?string
     {
@@ -116,9 +112,7 @@ class Invoice extends Model
         return $this->days . ' ' . ($this->days === 1 ? 'day' : 'days');
     }
 
-    // ============================================================
-    // SCOPES
-    // ============================================================
+    // ---- Scopes ----
 
     public function scopeUnpaid($query)
     {
@@ -140,6 +134,14 @@ class Invoice extends Model
         return $query->where('status', 'Overdue');
     }
 
+    public function scopeRemainingBalance($query)
+    {
+        return $query->where(function ($q) {
+            $q->where('description', 'like', '%remaining%')
+              ->orWhere('description', 'like', '%reservation%');
+        });
+    }
+
     public function scopeFilter($query, array $filters)
     {
         return $query
@@ -159,9 +161,13 @@ class Invoice extends Model
             });
     }
 
-    // ============================================================
-    // HELPERS
-    // ============================================================
+    // ---- Helpers ----
+
+    public function isRemainingBalance(): bool
+    {
+        $desc = strtolower($this->description ?? '');
+        return str_contains($desc, 'remaining') || str_contains($desc, 'reservation');
+    }
 
     public static function generateTransactionNo(string $prefix = 'tn'): string
     {
@@ -187,6 +193,7 @@ class Invoice extends Model
             'check_out'      => $this->check_out?->format('m-d-Y h:i A') ?? '-',
             'payment_method' => $this->payment_method,
             'receipt_url'    => $this->receipt_url,
+            'is_remaining'   => $this->isRemainingBalance(),
         ];
     }
 }

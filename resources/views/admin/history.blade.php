@@ -66,8 +66,10 @@
         </div>
 
         {{-- Filters --}}
-        <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 space-y-3">
-            <div class="flex flex-wrap gap-2">
+        <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 space-y-4">
+            
+            {{-- Category Tabs: Now using Grid to fill full width evenly --}}
+            <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
                 @php
                     $filterOptions = [
                         ['key' => 'all',            'icon' => 'fa-solid fa-wave-square',           'label' => 'All'],
@@ -81,26 +83,33 @@
                 @endphp
                 @foreach ($filterOptions as $f)
                     <a href="{{ route('admin.history', ['category' => $f['key'], 'search' => $filters['search'] ?? '']) }}"
-                       class="filter-btn px-4 py-2 rounded-full text-[13px] font-semibold inline-flex items-center gap-1.5 transition
-                       {{ $currentCategory === $f['key'] ? 'bg-[#0b1d3a] text-white shadow-sm' : 'bg-transparent text-slate-600 hover:bg-slate-100' }}">
-                        <i class="{{ $f['icon'] }} text-[13px]"></i>
+                       class="px-2 py-1.5 rounded-lg text-[12.5px] font-semibold inline-flex items-center justify-center gap-1.5 transition
+                       {{ $currentCategory === $f['key'] ? 'bg-[#0b1d3a] text-white shadow-sm' : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-transparent hover:border-slate-200' }}">
+                        <i class="{{ $f['icon'] }} text-[12px]"></i>
                         <span>{{ $f['label'] }}</span>
                     </a>
                 @endforeach
             </div>
 
-            <form method="GET" action="{{ route('admin.history') }}" class="flex flex-col md:flex-row gap-3.5">
+            {{-- Search & Sort --}}
+            <form method="GET" action="{{ route('admin.history') }}" class="flex flex-col md:flex-row gap-3">
                 <input type="hidden" name="category" value="{{ $currentCategory }}">
-                <div class="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 flex items-center gap-2.5">
-                    <i class="fa-solid fa-magnifying-glass text-slate-400 text-sm"></i>
+                
+                {{-- Reduced height & font size for search --}}
+                <div class="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 flex items-center gap-2 transition focus-within:border-slate-300 focus-within:bg-white">
+                    <i class="fa-solid fa-magnifying-glass text-slate-400 text-[12px]"></i>
                     <input id="history-search" name="search" type="text" value="{{ $filters['search'] ?? '' }}"
                         placeholder="Search by tenant, room, or description..."
-                        class="w-full text-[13.5px] outline-none bg-transparent">
+                        class="w-full text-[13px] outline-none bg-transparent">
                 </div>
-                <div class="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 flex items-center gap-2 text-[13.5px] font-medium text-slate-700 whitespace-nowrap">
-                    <i class="fa-regular fa-calendar text-xs text-slate-500"></i>
-                    <span>Newest First</span>
-                    <i class="fa-solid fa-chevron-down text-xs text-slate-500"></i>
+
+                {{-- Reduced height & font size for sort dropdown --}}
+                <div class="bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 flex items-center justify-between gap-2 text-[13px] font-medium text-slate-700 whitespace-nowrap cursor-pointer hover:bg-slate-100 transition md:min-w-[160px]">
+                    <div class="flex items-center gap-2">
+                        <i class="fa-regular fa-calendar text-[12px] text-slate-500"></i>
+                        <span>Newest First</span>
+                    </div>
+                    <i class="fa-solid fa-chevron-down text-[10px] text-slate-500"></i>
                 </div>
             </form>
         </div>

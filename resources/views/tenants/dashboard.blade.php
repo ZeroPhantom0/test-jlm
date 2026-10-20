@@ -83,19 +83,19 @@
                             <div class="bg-slate-50 p-4 rounded-xl flex-1 min-w-0">
                                 <div class="flex items-center gap-1.5 text-[11px] text-slate-500 mb-1.5">
                                     <i class="fa-regular fa-calendar text-blue-400"></i>
-                                    <span>Move-in Date</span>
+                                    <span>Check-in Date</span>
                                 </div>
                                 <div class="text-sm font-bold">
-                                    {{ $tenant?->move_in_date?->format('M d, Y') ?? '—' }}
+                                    {{ $tenant?->approvedReservation?->check_in?->format('M d, Y') ?? '—' }}
                                 </div>
                             </div>
                             <div class="bg-slate-50 p-4 rounded-xl flex-1 min-w-0">
                                 <div class="flex items-center gap-1.5 text-[11px] text-slate-500 mb-1.5">
                                     <i class="fa-regular fa-calendar text-red-400"></i>
-                                    <span>Move-out Date</span>
+                                    <span>Check-out Date</span>
                                 </div>
                                 <div class="text-sm font-bold">
-                                    {{ $tenant?->move_out_date?->format('M d, Y') ?? '—' }}
+                                    {{ $tenant?->approvedReservation?->check_out?->format('M d, Y') ?? 'Open-ended' }}
                                 </div>
                             </div>
                         </div>
@@ -107,79 +107,12 @@
                     </div>
                 @endif
             </div>
-
-            {{-- Service Requests --}}
-            <div class="bg-white rounded-xl p-5 border border-slate-100">
-                <div class="flex items-center gap-2.5 text-base font-bold mb-4">
-                    <i class="fa-solid fa-wrench text-amber-500"></i>
-                    <span>Service Requests</span>
-                </div>
-                <a href="/tenants/services/maintenance"
-                   class="flex items-center justify-between bg-yellow-50 border border-yellow-200 rounded-lg px-5 py-3.5 mb-4 hover:bg-yellow-100 transition">
-                    <div>
-                        <h5 class="text-[13px] font-bold text-orange-900">Submit a Request</h5>
-                        <p class="text-[11px] text-orange-700">Report maintenance issues</p>
-                    </div>
-                    <i class="fa-solid fa-arrow-right text-orange-700"></i>
-                </a>
-
-                <div class="text-[11px] font-bold text-slate-500 mb-2 flex justify-between">
-                    <span>ACTIVE REQUESTS:</span>
-                    <span class="text-[#16a34a]">({{ $activeRequests->count() }})</span>
-                </div>
-
-                @forelse ($activeRequests as $req)
-                    <div class="bg-slate-50 px-4 py-3 rounded-lg flex items-center justify-between text-xs font-semibold {{ $loop->last ? '' : 'mb-2' }}">
-                        <div class="flex items-center gap-2 min-w-0">
-                            <span class="w-2 h-2 rounded-full shrink-0
-                                {{ $req->status === 'Pending' ? 'bg-amber-500' : 'bg-blue-500' }}"></span>
-                            <span class="truncate">{{ $req->title }}</span>
-                        </div>
-                        <span class="px-2 py-0.5 rounded text-[10px] font-bold whitespace-nowrap ml-2
-                            {{ $req->status === 'Pending' ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700' }}">
-                            {{ strtolower($req->status) }}
-                        </span>
-                    </div>
-                @empty
-                    <div class="text-center text-slate-400 text-xs py-4">
-                        No active service requests.
-                    </div>
-                @endforelse
-            </div>
         </div>
 
         {{-- ============================================================ --}}
         {{-- RIGHT COLUMN --}}
         {{-- ============================================================ --}}
         <div class="space-y-5 min-w-0">
-
-            {{-- Calendar (Philippines Time) --}}
-            <div class="bg-white rounded-xl p-5 border border-slate-100">
-                <div class="flex items-center justify-between font-bold text-sm mb-4">
-                    <i class="fa-solid fa-chevron-left text-slate-400 cursor-pointer"></i>
-                    <span>{{ $monthLabel }}</span>
-                    <i class="fa-solid fa-chevron-right text-slate-400 cursor-pointer"></i>
-                </div>
-                <div class="grid grid-cols-7 gap-1.5 text-xs text-center">
-                    @foreach (['SUN','MON','TUE','WED','THU','FRI','SAT'] as $d)
-                        <div class="text-[10px] font-bold text-slate-500 mb-2">{{ $d }}</div>
-                    @endforeach
-
-                    {{-- Empty slots before first day of the month --}}
-                    @for ($i = 0; $i < $startWeekday; $i++)
-                        <div class="aspect-square"></div>
-                    @endfor
-
-                    {{-- Days of the month --}}
-                    @for ($day = 1; $day <= $daysInMonth; $day++)
-                        @php $isToday = ($day === $todayDay); @endphp
-                        <div class="aspect-square flex items-center justify-center rounded-full cursor-pointer
-                                    {{ $isToday ? 'bg-[#e06800] text-white font-bold' : 'hover:bg-slate-100' }}">
-                            {{ $day }}
-                        </div>
-                    @endfor
-                </div>
-            </div>
 
             {{-- Announcements --}}
             <div class="bg-white rounded-xl p-5 border border-slate-100">
@@ -221,6 +154,67 @@
                 <a href="/tenants/announcements" class="block text-right text-[#16a34a] text-[11px] font-bold pt-1.5">
                     View all <i class="fa-solid fa-chevron-right text-[9px]"></i>
                 </a>
+            </div>
+
+            {{-- Request History --}}
+            @php
+                $historyPreview = $historyItems ?? collect();
+                $latestHistory  = $historyPreview->take(4);
+            @endphp
+
+            <div class="bg-white rounded-xl p-5 border border-slate-100">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center gap-2.5 text-base font-bold">
+                        <i class="fa-solid fa-clock-rotate-left text-[#16a34a]"></i>
+                        <span>Request History</span>
+                    </div>
+                    <a href="/tenants/history"
+                       class="text-[#16a34a] text-[12px] font-bold inline-flex items-center gap-1 hover:text-green-700 transition">
+                        View all <i class="fa-solid fa-chevron-right text-[9px]"></i>
+                    </a>
+                </div>
+
+                @forelse ($latestHistory as $item)
+                    @php
+                        $statusColor = match ($item['status'] ?? 'pending') {
+                            'approved', 'completed', 'paid' => 'bg-emerald-100 text-emerald-700',
+                            'rejected', 'cancelled'         => 'bg-rose-100 text-rose-700',
+                            'expired'                       => 'bg-slate-100 text-slate-500',
+                            default                         => 'bg-amber-100 text-amber-700',
+                        };
+                        $dotColor = match ($item['status'] ?? 'pending') {
+                            'approved', 'completed', 'paid' => 'bg-emerald-500',
+                            'rejected', 'cancelled'         => 'bg-rose-500',
+                            'expired'                       => 'bg-slate-400',
+                            default                         => 'bg-amber-500',
+                        };
+                    @endphp
+                    <a href="/tenants/history"
+                       class="flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition rounded-lg px-3.5 py-2.5 {{ $loop->last ? '' : 'mb-2' }}">
+                        <div class="flex items-center gap-2.5 min-w-0">
+                            <div class="w-7 h-7 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-600 shrink-0">
+                                <i class="{{ $item['icon'] ?? 'fa-regular fa-circle' }} text-[10px]"></i>
+                            </div>
+                            <div class="min-w-0">
+                                <div class="text-[12px] font-semibold text-slate-900 truncate">
+                                    {{ $item['title'] ?? '—' }}
+                                </div>
+                                <div class="text-[10.5px] text-slate-500 mt-0.5 flex items-center gap-1.5">
+                                    <span class="w-1.5 h-1.5 rounded-full {{ $dotColor }}"></span>
+                                    {{ $item['date'] ?? '—' }}
+                                </div>
+                            </div>
+                        </div>
+                        <span class="px-2 py-0.5 rounded text-[9.5px] font-bold whitespace-nowrap ml-2 uppercase {{ $statusColor }}">
+                            {{ $item['status'] ?? 'pending' }}
+                        </span>
+                    </a>
+                @empty
+                    <div class="text-center text-slate-400 text-xs py-5">
+                        <i class="fa-regular fa-inbox text-2xl block mb-2 opacity-60"></i>
+                        Your reservations and service history will appear here.
+                    </div>
+                @endforelse
             </div>
         </div>
     </div>

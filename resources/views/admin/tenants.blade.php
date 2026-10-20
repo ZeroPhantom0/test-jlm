@@ -15,10 +15,6 @@
                     <p class="text-[13px] text-slate-500">Directory of current and past tenants</p>
                 </div>
             </div>
-            <button
-                class="bg-white border border-slate-300 text-slate-700 px-4 py-2 rounded-lg text-[13px] font-semibold inline-flex items-center gap-2 hover:bg-slate-50 transition">
-                <i class="fa-regular fa-file-lines"></i> Export
-            </button>
         </div>
 
         {{-- Stats Grid --}}
@@ -41,13 +37,13 @@
         <div class="bg-white rounded-2xl border border-slate-200 p-5">
             <div class="flex items-center gap-4 mb-5 flex-wrap">
                 <div
-                    class="flex-1 bg-slate-50 border border-slate-200 rounded-[10px] px-3.5 py-2 flex items-center gap-2.5">
+                    class="flex-1 bg-slate-50 border border-slate-200 rounded-[10px] px-3.5 py-1.5 flex items-center gap-2.5">
                     <i class="fa-solid fa-magnifying-glass text-slate-400 text-sm"></i>
                     <input type="text" placeholder="Search name or email..."
                         class="w-full text-[13px] outline-none bg-transparent">
                 </div>
                 <select
-                    class="bg-white border border-slate-300 rounded-[10px] px-4 py-2 text-[13px] font-medium text-slate-700 outline-none cursor-pointer min-w-[140px]">
+                    class="bg-white border border-slate-300 rounded-[10px] px-4 py-1.5 text-[13px] font-medium text-slate-700 outline-none cursor-pointer min-w-[140px]">
                     <option>All Statuses</option>
                     <option>Active</option>
                     <option>Inactive</option>

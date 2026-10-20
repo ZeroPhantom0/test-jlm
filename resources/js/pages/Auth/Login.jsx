@@ -27,7 +27,7 @@ export default function Login() {
                 <div className="login-left">
                     <div className="login-brand">
                         <div className="login-logo">
-                            <img src="/images/JLM Cozy cabin.jpg" alt="JLM Cozy Cabin Logo" />
+                            <img src="\images\jlm-logo.png" alt="JLM Cozy Cabin Logo" />
                         </div>
                         <span>JLM Cozy Cabin</span>
                     </div>

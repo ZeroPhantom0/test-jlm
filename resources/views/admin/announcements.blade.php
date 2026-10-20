@@ -40,20 +40,6 @@
         </div>
     </div>
 
-    {{-- Filter --}}
-    <form method="GET" action="{{ route('admin.announcements') }}" class="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 flex flex-col md:flex-row items-center gap-4">
-        <div class="flex-1 w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-2.5 flex items-center gap-2.5">
-            <i class="fa-solid fa-magnifying-glass text-slate-400 text-sm"></i>
-            <input type="text" name="search" value="{{ $filters['search'] ?? '' }}" placeholder="Search by title or keyword..." class="w-full text-[13.5px] outline-none bg-transparent">
-        </div>
-        <select name="priority" onchange="this.form.submit()" class="bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-[13.5px] font-medium text-slate-700 outline-none cursor-pointer w-full md:w-[180px]">
-            <option value="">All Priorities</option>
-            <option value="Urgent"    {{ ($filters['priority'] ?? '') === 'Urgent'    ? 'selected' : '' }}>Urgent</option>
-            <option value="Important" {{ ($filters['priority'] ?? '') === 'Important' ? 'selected' : '' }}>Important</option>
-            <option value="Normal"    {{ ($filters['priority'] ?? '') === 'Normal'    ? 'selected' : '' }}>Normal</option>
-        </select>
-    </form>
-
     {{-- List --}}
     <div class="flex flex-col gap-4">
         @forelse($announcements as $ann)

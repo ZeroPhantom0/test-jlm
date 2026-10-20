@@ -5,6 +5,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Facades\Auth;
 
 class Tenant extends Model
 {
@@ -34,17 +35,13 @@ class Tenant extends Model
         return $this->belongsTo(Room::class);
     }
 
-    /**
-     * The reservation that made this user a tenant.
-     * ALL lease dates live here — tenants never duplicate them.
-     */
     public function approvedReservation(): BelongsTo
     {
         return $this->belongsTo(Reservation::class, 'approved_reservation_id');
     }
 
     // ============================================================
-    // ACCESSORS — read the dates FROM THE RESERVATION
+    // ACCESSORS
     // ============================================================
 
     public function getInitialAttribute(): string
@@ -52,28 +49,21 @@ class Tenant extends Model
         return strtoupper(substr($this->user->name ?? '?', 0, 1));
     }
 
-    /** Date the tenant moved in (= reservation.check_in). */
-    public function getMoveInAttribute()
-    {
-        return $this->approvedReservation?->check_in;
-    }
+    // ============================================================
+    // STATUS HELPERS
+    // ============================================================
 
-    /** Time the tenant moved in (= reservation.check_in_time). */
-    public function getMoveInTimeAttribute(): ?string
+    public static function isApproved(?int $userId = null): bool
     {
-        return $this->approvedReservation?->check_in_time;
-    }
+        $userId ??= Auth::id();
 
-    /** Date the tenant is set to move out (= reservation.check_out). May be null. */
-    public function getMoveOutAttribute()
-    {
-        return $this->approvedReservation?->check_out;
-    }
+        if (! $userId) {
+            return false;
+        }
 
-    /** Time the tenant is set to move out (= reservation.check_out_time). */
-    public function getMoveOutTimeAttribute(): ?string
-    {
-        return $this->approvedReservation?->check_out_time;
+        return static::where('user_id', $userId)
+            ->whereNotNull('approved_reservation_id')
+            ->exists();
     }
 
     // ============================================================
@@ -95,22 +85,20 @@ class Tenant extends Model
             'phone'   => $user->phone ?? '—',
             'status'  => $this->status,
 
-            // Lease dates — sourced from the reservation
             'room'          => $this->room?->room_number
                                     ? 'Room ' . $this->room->room_number
                                     : '—',
-            'move_in'       => $reservation?->check_in?->format('M d, Y')       ?? '—',
-            'move_in_time'  => $reservation?->check_in_time                     ?? '',
-            'move_out'      => $reservation?->check_out?->format('M d, Y')      ?? 'Open-ended',
-            'move_out_time' => $reservation?->check_out_time                    ?? '',
+            // Check-in / Check-out are the ONLY dates for this tenant.
+            'check_in'      => $reservation?->check_in?->format('M d, Y')       ?? '—',
+            'check_in_time' => $reservation?->check_in_time                     ?? '',
+            'check_out'     => $reservation?->check_out?->format('M d, Y')      ?? 'Open-ended',
+            'check_out_time'=> $reservation?->check_out_time                    ?? '',
             'rent_rate'     => (float) $this->rent_rate,
 
-            // Personal info
             'address'          => $personal?->current_address ?? '—',
             'emergency_name'   => $personal?->emergency_name ?? '—',
             'emergency_number' => $personal?->emergency_number ?? '—',
 
-            // Identity verification (Valid ID)
             'id_type'        => $identity?->id_type ?? null,
             'id_status'      => $identity?->status ?? null,
             'id_uploaded_at' => $identity?->created_at?->format('M d, Y') ?? null,

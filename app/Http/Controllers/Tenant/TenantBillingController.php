@@ -6,6 +6,7 @@ namespace App\Http\Controllers\Tenant;
 use App\Http\Controllers\Controller;
 use App\Models\Invoice;
 use App\Models\Tenant;
+use App\Services\BillingService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
@@ -13,6 +14,8 @@ use Illuminate\Validation\Rule;
 
 class TenantBillingController extends Controller
 {
+    public function __construct(protected BillingService $billing) {}
+
     /**
      * Display the tenant's billing dashboard.
      */
@@ -21,7 +24,7 @@ class TenantBillingController extends Controller
         /** @var \App\Models\User $user */
         $user = Auth::user();
 
-        $tenant = Tenant::with('room')
+        $tenant = Tenant::with(['room', 'approvedReservation'])
             ->where('user_id', $user->id)
             ->first();
 
@@ -29,40 +32,65 @@ class TenantBillingController extends Controller
             ->latest()
             ->get();
 
-        // Unpaid / Partial / Overdue (actionable by tenant)
         $pendingInvoices = $invoices
             ->whereIn('status', ['Unpaid', 'Partial', 'Overdue'])
-            ->sortBy('due_date');
+            ->sortBy('due_date')
+            ->values();
 
-        // Submitted for verification (locked from resubmission)
-        $verifyingInvoices = $invoices->where('status', 'Pending');
+        $verifyingInvoices = $invoices->where('status', 'Pending')->values();
 
-        // Paid history
         $paidInvoices = $invoices
             ->where('status', 'Paid')
-            ->sortByDesc('date_paid');
+            ->sortByDesc('date_paid')
+            ->values();
 
-        $totalDue      = (float) $pendingInvoices->sum('balance');
-        $paymentStatus = $pendingInvoices->count() > 0 ? 'Unpaid' : 'Paid';
-        $nextDueDate   = $pendingInvoices->first()?->due_date;
+        // Canonical dues (invoices + reservation remaining)
+        $dues = $this->billing->duesForTenant($tenant);
+        $totalDue = collect($dues)->sum('amount');
 
+        $reservationDue = collect($dues)
+            ->firstWhere('kind', 'reservation-remaining');
+
+        $reservationRemaining = $reservationDue['amount'] ?? 0;
+
+        // Payment status
+        $paymentStatus = $totalDue > 0 ? 'Unpaid' : 'Paid';
+
+        // Next due date: earliest of invoice due dates or reservation check-in
+        $nextDueDate = $pendingInvoices->first()?->due_date
+            ?? ($reservationDue['due_date'] ?? null);
+
+        // Payment modal payload — prefer earliest invoice, else reservation remaining
         $nextInvoice = $pendingInvoices->first();
 
-        $paymentPayload = $nextInvoice ? [
-            'reference'    => $nextInvoice->transaction_no,
-            'title'        => $nextInvoice->description,
-            'amount'       => (float) $nextInvoice->balance,
-            'due_date'     => $nextInvoice->due_date?->format('M j, Y') ?? '—',
-            'gcash_number' => '0917-123-4567',
-        ] : null;
+        if ($nextInvoice) {
+            $paymentPayload = [
+                'reference'    => $nextInvoice->transaction_no,
+                'title'        => $nextInvoice->description,
+                'amount'       => (float) $nextInvoice->balance,
+                'due_date'     => $nextInvoice->due_date?->format('M j, Y') ?? '—',
+                'gcash_number' => '0917-123-4567',
+            ];
+        } elseif ($reservationDue) {
+            $paymentPayload = [
+                'reference'    => $reservationDue['reference'],
+                'title'        => $reservationDue['title'],
+                'amount'       => $reservationDue['amount'],
+                'due_date'     => $reservationDue['due_date']?->format('M j, Y') ?? '—',
+                'gcash_number' => '0917-123-4567',
+            ];
+        } else {
+            $paymentPayload = null;
+        }
 
         $summary = [
-            'total_due'       => $totalDue,
-            'status'          => $paymentStatus,
-            'next_due_date'   => $nextDueDate?->format('F j, Y') ?? '—',
-            'pending_count'   => $pendingInvoices->count(),
-            'verifying_count' => $verifyingInvoices->count(),
-            'paid_count'      => $paidInvoices->count(),
+            'total_due'             => $totalDue,
+            'status'                => $paymentStatus,
+            'next_due_date'         => $nextDueDate?->format('F j, Y') ?? '—',
+            'pending_count'         => $pendingInvoices->count() + ($reservationRemaining > 0 ? 1 : 0),
+            'verifying_count'       => $verifyingInvoices->count(),
+            'paid_count'            => $paidInvoices->count(),
+            'reservation_remaining' => $reservationRemaining,
         ];
 
         return view('tenants.billing', compact(
@@ -72,20 +100,21 @@ class TenantBillingController extends Controller
             'verifyingInvoices',
             'paidInvoices',
             'summary',
-            'paymentPayload'
+            'paymentPayload',
+            'reservationRemaining',
+            'reservationDue'
         ));
     }
 
     /**
-     * Submit a payment proof for an invoice.
-     * Sets the invoice to "Pending" awaiting admin verification.
+     * Submit a payment proof for an invoice OR a reservation remaining.
      */
     public function pay(Request $request)
     {
         /** @var \App\Models\User $user */
         $user = Auth::user();
 
-        $tenant = Tenant::where('user_id', $user->id)->first();
+        $tenant = Tenant::with('approvedReservation')->where('user_id', $user->id)->first();
 
         if (!$tenant) {
             return response()->json([
@@ -100,9 +129,24 @@ class TenantBillingController extends Controller
             'receipt'          => ['nullable', 'file', 'mimes:png,jpg,jpeg,webp', 'max:10240'],
         ]);
 
+        // Try to find existing invoice
         $invoice = Invoice::where('tenant_id', $tenant->id)
             ->where('transaction_no', $validated['invoice_ref'])
             ->first();
+
+        // If not, check if it's a reservation reference — materialize it
+        if (!$invoice
+            && $tenant->approvedReservation
+            && $tenant->approvedReservation->reference_no === $validated['invoice_ref']) {
+
+            $approved = $tenant->approvedReservation;
+
+            if ($approved->status !== 'Approved' || (float) $approved->remaining <= 0) {
+                return response()->json(['message' => 'No remaining balance to pay.'], 422);
+            }
+
+            $invoice = $this->billing->materializeReservationRemaining($approved, $tenant);
+        }
 
         if (!$invoice) {
             return response()->json(['message' => 'Invoice not found.'], 404);
@@ -118,7 +162,6 @@ class TenantBillingController extends Controller
             ], 422);
         }
 
-        // Store the uploaded receipt (replace old one if any)
         $receiptPath = $invoice->receipt_path;
 
         if ($request->hasFile('receipt')) {
@@ -180,7 +223,6 @@ class TenantBillingController extends Controller
             ], 422);
         }
 
-        // Clean up the uploaded receipt
         if ($invoice->receipt_path) {
             Storage::disk('public')->delete($invoice->receipt_path);
         }

@@ -50,21 +50,11 @@
 
     {{-- Table Card --}}
     <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 space-y-5">
-        <form method="GET" action="{{ route('admin.billing') }}" class="flex flex-col md:flex-row gap-4">
-            <div class="flex-1 bg-white border border-slate-300 rounded-[10px] px-4 py-2.5 flex items-center gap-2.5">
-                <i class="fa-solid fa-magnifying-glass text-slate-400 text-sm"></i>
-                <input type="text" name="search" value="{{ $filters['search'] ?? '' }}" placeholder="Search invoices..." class="w-full text-[13px] outline-none bg-transparent">
-            </div>
+        <form method="GET" action="{{ route('admin.billing') }}" class="flex flex-col md:flex-row md:items-center md:justify-end gap-4">
             <select name="status" onchange="this.form.submit()" class="bg-white border border-slate-300 rounded-[10px] px-4 py-2.5 text-[13px] font-medium text-slate-700 outline-none cursor-pointer min-w-[160px]">
                 <option value="">All Statuses</option>
                 @foreach(['Unpaid','Overdue','Partial','Pending','Paid'] as $s)
                     <option value="{{ $s }}" {{ ($filters['status'] ?? '') === $s ? 'selected' : '' }}>{{ $s }}</option>
-                @endforeach
-            </select>
-            <select name="payment_method" onchange="this.form.submit()" class="bg-white border border-slate-300 rounded-[10px] px-4 py-2.5 text-[13px] font-medium text-slate-700 outline-none cursor-pointer min-w-[160px]">
-                <option value="">All Methods</option>
-                @foreach(['GCash','Over The Counter','Bank Transfer','Not Set'] as $m)
-                    <option value="{{ $m }}" {{ ($filters['payment_method'] ?? '') === $m ? 'selected' : '' }}>{{ $m }}</option>
                 @endforeach
             </select>
         </form>
@@ -85,7 +75,10 @@
                 </thead>
                 <tbody>
                     @forelse($invoices as $inv)
-                    <tr class="border-b border-slate-50 last:border-0" data-tn="{{ $inv->transaction_no }}">
+                    <tr class="border-b border-slate-50 last:border-0"
+                        data-tn="{{ $inv->transaction_no }}"
+                        data-kind="invoice"
+                        data-status="{{ $inv->status }}">
                         <td class="py-4 px-4">
                             <div class="font-semibold text-slate-700 text-[13px]">{{ $inv->transaction_no }}</div>
                             <div class="text-[11px] text-slate-400 mt-0.5">{{ $inv->description }}</div>
@@ -111,12 +104,13 @@
                         </td>
                         <td class="py-4 px-4">
                             <div class="flex items-center gap-3">
-                                {{-- Edit Invoice (always) --}}
                                 <i class="fa-solid fa-pen text-slate-700 text-[15px] cursor-pointer hover:text-orange-500 transition icon-edit" title="Edit Invoice"></i>
 
                                 @if($inv->status === 'Paid')
                                     <i class="fa-solid fa-receipt text-slate-700 text-[15px] cursor-pointer hover:text-orange-500 transition icon-payment" title="View Payment Receipt"></i>
                                 @elseif($inv->status === 'Pending')
+                                    <i class="fa-solid fa-circle-check text-emerald-600 text-[15px] cursor-pointer hover:text-emerald-700 transition icon-verify" title="Verify Payment" data-tn="{{ $inv->transaction_no }}"></i>
+                                    <i class="fa-solid fa-circle-xmark text-rose-600 text-[15px] cursor-pointer hover:text-rose-700 transition icon-reject" title="Reject Payment" data-tn="{{ $inv->transaction_no }}"></i>
                                     <i class="fa-solid fa-file-lines text-slate-700 text-[15px] cursor-pointer hover:text-orange-500 transition icon-receipt" title="View Receipt"></i>
                                 @else
                                     <i class="fa-solid fa-bell text-slate-700 text-[15px] cursor-pointer hover:text-orange-500 transition icon-remind" title="Send Reminder"></i>
@@ -143,3 +137,60 @@
 {{-- React Modal Mount Point with data --}}
 <div id="admin-billing-modals" data-invoices='@json($invoicesForReact)'></div>
 @endsection
+
+@push('scripts')
+<script>
+    (function () {
+        const csrf = () =>
+            document.querySelector('meta[name="csrf-token"]')?.content ||
+            document.querySelector('input[name="_token"]')?.value;
+
+        const post = async (url, body = null) => {
+            const opts = {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': csrf(),
+                },
+            };
+            if (body) {
+                opts.headers['Content-Type'] = 'application/json';
+                opts.body = JSON.stringify(body);
+            }
+            const res = await fetch(url, opts);
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.message || 'Request failed.');
+            return data;
+        };
+
+        // Verify pending payment → /verify-payment
+        document.addEventListener('click', async (e) => {
+            const btn = e.target.closest('.icon-verify');
+            if (!btn) return;
+            const tn = btn.dataset.tn;
+            if (!confirm('Mark this payment as verified and paid?')) return;
+            try {
+                await post(`/admin/billing/${tn}/verify-payment`);
+                window.location.reload();
+            } catch (err) {
+                alert(err.message);
+            }
+        });
+
+        // Reject pending payment → /reject-payment
+        document.addEventListener('click', async (e) => {
+            const btn = e.target.closest('.icon-reject');
+            if (!btn) return;
+            const tn = btn.dataset.tn;
+            const notes = prompt('Reason for rejecting this payment (required):');
+            if (!notes) return;
+            try {
+                await post(`/admin/billing/${tn}/reject-payment`, { admin_notes: notes });
+                window.location.reload();
+            } catch (err) {
+                alert(err.message);
+            }
+        });
+    })();
+</script>
+@endpush

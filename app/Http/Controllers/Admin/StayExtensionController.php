@@ -14,12 +14,9 @@ class StayExtensionController extends Controller
     /**
      * Display the stay extension requests list.
      */
-    public function index(Request $request)
+    public function index()
     {
-        $filters = $request->only(['search', 'status']);
-
         $requests = StayExtensionRequest::with(['tenant.user', 'room'])
-            ->filter($filters)
             ->latest()
             ->get();
 
@@ -35,7 +32,7 @@ class StayExtensionController extends Controller
             return [$req->id => $req->toReactArray()];
         })->toArray();
 
-        return view('admin.services.stay-extension', compact('requests', 'metrics', 'filters', 'requestsForReact'));
+        return view('admin.services.stay-extension', compact('requests', 'metrics', 'requestsForReact'));
     }
 
     /**
@@ -110,7 +107,7 @@ class StayExtensionController extends Controller
     /**
      * Approve a stay extension request.
      */
-        public function approve(Request $request, StayExtensionRequest $stayExtensionRequest)
+    public function approve(Request $request, StayExtensionRequest $stayExtensionRequest)
     {
         $validated = $request->validate([
             'admin_notes' => ['nullable', 'string'],

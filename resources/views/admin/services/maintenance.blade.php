@@ -42,34 +42,6 @@
         </div>
     </div>
 
-    {{-- Filters --}}
-    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 flex flex-col md:flex-row gap-4">
-        <div class="flex-1 bg-slate-50 border border-slate-200 rounded-[10px] px-4 py-2.5 flex items-center gap-2.5">
-            <i class="fa-solid fa-magnifying-glass text-slate-400 text-sm"></i>
-            <input type="text" 
-                id="maintenance-search"
-                value="{{ $filters['search'] ?? '' }}"
-                placeholder="Search by title, room, tenant..." 
-                class="w-full text-[13.5px] outline-none bg-transparent">
-        </div>
-        <select id="maintenance-status-filter" 
-            class="bg-white border border-slate-200 rounded-[10px] px-4 py-2.5 text-[13.5px] font-medium text-slate-700 outline-none cursor-pointer min-w-[160px]">
-            <option value="">All Statuses</option>
-            <option value="Pending" {{ ($filters['status'] ?? '') === 'Pending' ? 'selected' : '' }}>Pending</option>
-            <option value="In Progress" {{ ($filters['status'] ?? '') === 'In Progress' ? 'selected' : '' }}>In Progress</option>
-            <option value="Completed" {{ ($filters['status'] ?? '') === 'Completed' ? 'selected' : '' }}>Completed</option>
-            <option value="Cancelled" {{ ($filters['status'] ?? '') === 'Cancelled' ? 'selected' : '' }}>Cancelled</option>
-        </select>
-        <select id="maintenance-priority-filter"
-            class="bg-white border border-slate-200 rounded-[10px] px-4 py-2.5 text-[13.5px] font-medium text-slate-700 outline-none cursor-pointer min-w-[160px]">
-            <option value="">All Priorities</option>
-            <option value="Critical" {{ ($filters['priority'] ?? '') === 'Critical' ? 'selected' : '' }}>Critical</option>
-            <option value="High" {{ ($filters['priority'] ?? '') === 'High' ? 'selected' : '' }}>High</option>
-            <option value="Medium" {{ ($filters['priority'] ?? '') === 'Medium' ? 'selected' : '' }}>Medium</option>
-            <option value="Low" {{ ($filters['priority'] ?? '') === 'Low' ? 'selected' : '' }}>Low</option>
-        </select>
-    </div>
-
     {{-- Table --}}
     <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
         <table class="w-full text-left">

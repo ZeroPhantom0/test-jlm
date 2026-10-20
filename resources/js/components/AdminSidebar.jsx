@@ -1,5 +1,5 @@
 // resources/js/components/AdminSidebar.jsx
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { logout } from "../utils/logout";
 
 const NAV_ITEMS = [
@@ -33,6 +33,9 @@ export default function AdminSidebar({
     const [collapsed, setCollapsed]       = useState(false);
     const [mobileOpen, setMobileOpen]     = useState(false);
     const [servicesOpen, setServicesOpen] = useState(active.startsWith("services"));
+    
+    // Ref to track the active link for scrolling
+    const activeRef = useRef(null);
 
     useEffect(() => {
         const handler = () => setMobileOpen(true);
@@ -42,6 +45,16 @@ export default function AdminSidebar({
 
     useEffect(() => {
         if (active.startsWith("services")) setServicesOpen(true);
+    }, [active]);
+
+    // Scroll to the active item when the component mounts or active state changes
+    useEffect(() => {
+        if (activeRef.current) {
+            activeRef.current.scrollIntoView({
+                behavior: "smooth",
+                block: "center",
+            });
+        }
     }, [active]);
 
     useEffect(() => {
@@ -121,6 +134,7 @@ export default function AdminSidebar({
                                 <a
                                     href={item.href}
                                     onClick={() => setServicesOpen(true)}
+                                    ref={isActive ? activeRef : null}
                                     className={`
                                         flex items-center justify-between w-full rounded-[10px]
                                         font-medium whitespace-nowrap transition-all
@@ -156,6 +170,7 @@ export default function AdminSidebar({
                                             <li key={sub.key}>
                                                 <a
                                                     href={sub.href}
+                                                    ref={active === sub.key ? activeRef : null}
                                                     className={`
                                                         flex items-center rounded-lg w-full transition-all
                                                         ${active === sub.key ? "bg-[#f97316] text-white font-semibold" : "text-slate-400 hover:text-white hover:bg-white/5"}
@@ -177,6 +192,7 @@ export default function AdminSidebar({
                         <li key={item.key} className="flex flex-col w-full">
                             <a
                                 href={item.href}
+                                ref={isActive ? activeRef : null}
                                 className={`
                                     flex items-center justify-between w-full rounded-[10px]
                                     font-medium whitespace-nowrap transition-all
@@ -225,27 +241,16 @@ export default function AdminSidebar({
                     </div>
                 </div>
 
+                {/* Single logout button (hidden on mobile when expanded, hidden on mobile when collapsed) */}
                 <button
                     type="button"
                     onClick={logout}
-                    className="text-[#8fa0b5] hover:text-white transition cursor-pointer shrink-0"
+                    className={`text-[#8fa0b5] hover:text-white transition cursor-pointer shrink-0 ${collapsed ? "md:flex" : "hidden md:block"}`}
                     style={{ fontSize: "16px" }}
                     title="Logout"
                 >
                     <i className="fa-solid fa-right-from-bracket"></i>
                 </button>
-
-                {collapsed && (
-                    <button
-                        type="button"
-                        onClick={logout}
-                        className="hidden md:flex text-[#8fa0b5] hover:text-white transition cursor-pointer shrink-0"
-                        style={{ fontSize: "16px" }}
-                        title="Logout"
-                    >
-                        <i className="fa-solid fa-right-from-bracket"></i>
-                    </button>
-                )}
             </div>
         </aside>
     );

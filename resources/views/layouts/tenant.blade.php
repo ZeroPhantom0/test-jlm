@@ -8,19 +8,30 @@
             : asset('storage/' . $user->profile_picture))
         : 'https://i.pravatar.cc/100?img=47';
 
+    // True only if an admin has approved this user's reservation
+    $isTenant = \App\Models\Tenant::isApproved();
+
+    // History lives under Dashboard (no sidebar entry) — keep Dashboard
+    // highlighted while the user is on the History page.
+    $sidebarActive = ($active ?? 'dashboard') === 'history'
+        ? 'dashboard'
+        : ($active ?? 'dashboard');
+
     $sidebarProps = json_encode([
-        'active'   => $active ?? 'dashboard',
+        'active'   => $sidebarActive,
         'userName' => $user?->name ?? 'Tenant',
-        'userRole' => 'Tenant',
+        'userRole' => $isTenant ? 'Tenant' : 'New Tenant',
         'avatar'   => $avatarUrl,
+        'isTenant' => $isTenant,
     ]);
 
     $headerProps = json_encode([
         'title'     => $pageTitle ?? 'Dashboard',
         'userName'  => $user?->name ?? 'Tenant',
-        'userRole'  => 'Tenant',
+        'userRole'  => $isTenant ? 'Tenant' : 'New Tenant',
         'userEmail' => $user?->email ?? '',
         'avatar'    => $avatarUrl,
+        'isTenant'  => $isTenant,
     ]);
 @endphp
 

@@ -41,22 +41,6 @@
         </div>
     </div>
 
-    {{-- Filters --}}
-    <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 flex flex-col md:flex-row gap-4">
-        <form method="GET" action="{{ route('admin.services.stay-extension') }}" class="flex-1 flex flex-col md:flex-row gap-4">
-            <div class="flex-1 bg-slate-50 border border-slate-200 rounded-[10px] px-4 py-2.5 flex items-center gap-2.5">
-                <i class="fa-solid fa-magnifying-glass text-slate-400 text-sm"></i>
-                <input type="text" name="search" value="{{ $filters['search'] ?? '' }}" placeholder="Search by tenant, room..." class="w-full text-[13.5px] outline-none bg-transparent">
-            </div>
-            <select name="status" onchange="this.form.submit()" class="bg-white border border-slate-200 rounded-[10px] px-4 py-2.5 text-[13.5px] font-medium text-slate-700 outline-none cursor-pointer min-w-[160px]">
-                <option value="">All Statuses</option>
-                <option value="Pending" {{ ($filters['status'] ?? '') === 'Pending' ? 'selected' : '' }}>Pending</option>
-                <option value="Approved" {{ ($filters['status'] ?? '') === 'Approved' ? 'selected' : '' }}>Approved</option>
-                <option value="Rejected" {{ ($filters['status'] ?? '') === 'Rejected' ? 'selected' : '' }}>Rejected</option>
-            </select>
-        </form>
-    </div>
-
     {{-- Table --}}
     <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
         <div class="overflow-x-auto">

@@ -43,17 +43,17 @@
     {{-- Table Card --}}
     <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
         <div class="flex flex-col md:flex-row gap-3.5 mb-5">
-            <div class="flex-1 bg-white border border-slate-300 rounded-[10px] px-3.5 py-2.5 flex items-center gap-2.5">
+            <div class="flex-1 bg-white border border-slate-300 rounded-[10px] px-3.5 py-1.5 flex items-center gap-2.5">
                 <i class="fa-solid fa-magnifying-glass text-slate-400 text-[13px]"></i>
                 <input type="text" id="room-search" placeholder="Search room or tenant..." class="w-full text-[13px] outline-none border-none bg-transparent">
             </div>
-            <select id="room-filter-status" class="bg-white border border-slate-300 rounded-[10px] px-3.5 py-2.5 text-[13px] text-slate-700 outline-none cursor-pointer min-w-[160px]">
+            <select id="room-filter-status" class="bg-white border border-slate-300 rounded-[10px] px-3.5 py-1.5 text-[13px] text-slate-700 outline-none cursor-pointer min-w-[160px]">
                 <option value="">All Statuses</option>
                 <option>Occupied</option>
                 <option>Available</option>
                 <option>Reserved</option>
             </select>
-            <select id="room-filter-type" class="bg-white border border-slate-300 rounded-[10px] px-3.5 py-2.5 text-[13px] text-slate-700 outline-none cursor-pointer min-w-[160px]">
+            <select id="room-filter-type" class="bg-white border border-slate-300 rounded-[10px] px-3.5 py-1.5 text-[13px] text-slate-700 outline-none cursor-pointer min-w-[160px]">
                 <option value="">All Types</option>
                 <option>Solo Room</option>
                 <option>Bedspace</option>
@@ -91,12 +91,14 @@
                                 </span>
                             </td>
                             <td class="py-4 px-4">
-                                @if ($room->tenant_name)
-                                    <div class="flex items-center gap-2.5">
-                                        <div class="w-7 h-7 rounded-full bg-green-100 text-green-600 flex items-center justify-center text-xs font-bold">
-                                            {{ strtoupper(substr($room->tenant_name, 0, 1)) }}
+                                @if ($room->tenant_display)
+                                    <div class="flex items-center gap-2.5" title="{{ $room->tenant_tooltip }}">
+                                        <div class="w-7 h-7 rounded-full bg-green-100 text-green-600 flex items-center justify-center text-xs font-bold shrink-0">
+                                            {{ strtoupper(substr($room->tenant_display, 0, 1)) }}
                                         </div>
-                                        <span class="text-[13px] text-slate-800">{{ $room->tenant_name }}</span>
+                                        <span class="text-[13px] text-slate-800 truncate max-w-[150px]">
+                                            {{ $room->tenant_display }}
+                                        </span>
                                     </div>
                                 @else
                                     <span class="text-[13px] italic text-slate-400">No tenant</span>

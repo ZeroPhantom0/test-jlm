@@ -23,7 +23,7 @@ class TenantHistoryController extends Controller
         /** @var \App\Models\User $user */
         $user = Auth::user();
 
-        $tenant = Tenant::with('room')
+        $tenant = Tenant::with(['room', 'approvedReservation'])
             ->where('user_id', $user->id)
             ->first();
 
@@ -45,6 +45,7 @@ class TenantHistoryController extends Controller
         // ============================================================
         $items = collect()
             ->merge($this->payments($tenant))
+            ->merge($this->paidReservations($tenant, $user->id))
             ->merge($this->maintenance($tenant))
             ->merge($this->roomChanges($tenant))
             ->merge($this->stayExtensions($tenant))
@@ -78,36 +79,69 @@ class TenantHistoryController extends Controller
     // SOURCES
     // ============================================================
 
+    /**
+     * Every invoice that has any money attached:
+     *  - Paid    → fully paid (a payment happened)
+     *  - Partial → some money was paid, some remains
+     *  - Pending → tenant submitted proof, admin hasn't verified yet
+     */
     private function payments(Tenant $tenant)
     {
         return Invoice::where('tenant_id', $tenant->id)
-            ->whereIn('status', ['Paid', 'Partial'])
+            ->whereIn('status', ['Paid', 'Partial', 'Pending'])
             ->latest()
             ->get()
             ->map(function (Invoice $inv) {
+                $isPaid     = $inv->status === 'Paid';
+                $isPending  = $inv->status === 'Pending';
+
                 $methodLabel = $inv->payment_method ?? 'Not Set';
-                $amountLabel = '₱' . number_format((float) $inv->amount_paid, 0);
+                $paidAmount  = (float) $inv->amount_paid;
+                $amountLabel = '₱' . number_format($paidAmount, 0);
+
+                if ($isPaid) {
+                    $status = 'paid';
+                    $color  = 'green';
+                } elseif ($isPending) {
+                    $status = 'pending';
+                    $color  = 'blue';
+                } else {
+                    $status = 'paid';
+                    $color  = 'green';
+                }
+
+                $desc = match (true) {
+                    $isPaid    => 'Payment of ' . $amountLabel . ' via ' . strtolower($methodLabel),
+                    $isPending => 'Payment proof submitted — awaiting verification',
+                    default    => 'Partial payment of ' . $amountLabel . ' via ' . strtolower($methodLabel)
+                                  . ' — remaining ₱' . number_format((float) $inv->balance, 0),
+                };
 
                 return [
                     'key'      => 'pay-' . $inv->id,
                     'cat'      => 'payments',
                     'icon'     => 'fa-solid fa-peso-sign',
-                    'color'    => 'green',
+                    'color'    => $color,
                     'title'    => $inv->description,
-                    'desc'     => 'Payment of ' . $amountLabel . ' via ' . strtolower($methodLabel),
-                    'date'     => $inv->date_paid?->format('M d, Y') ?? $inv->created_at?->format('M d, Y · h:i A'),
-                    'timestamp'=> $inv->date_paid ?? $inv->created_at,
-                    'amount'   => $amountLabel,
-                    'status'   => 'paid',
+                    'desc'     => $desc,
+                    'date'     => $inv->date_paid?->format('M d, Y')
+                                  ?? $inv->updated_at?->format('M d, Y · h:i A')
+                                  ?? $inv->created_at?->format('M d, Y · h:i A'),
+                    'timestamp'=> $inv->date_paid ?? $inv->updated_at ?? $inv->created_at,
+                    'amount'   => $isPaid ? $amountLabel : null,
+                    'status'   => $status,
                     'details'  => [
                         ['Invoice ID',       $inv->transaction_no],
                         ['Unit',             $inv->room_number],
-                        ['Amount',           $amountLabel],
+                        ['Total Amount',     '₱' . number_format((float) $inv->total_amount, 2)],
+                        ['Amount Paid',      '₱' . number_format($paidAmount, 2)],
+                        ['Balance',          '₱' . number_format((float) $inv->balance, 2)],
                         ['Payment Method',   strtoupper($methodLabel)],
                         ['Reference Number', $inv->receipt_no ?? '—'],
+                        ['Status',           strtoupper($inv->status)],
                         ['Paid Date',        $inv->date_paid?->format('M d, Y') ?? '—'],
                     ],
-                    'receipt' => [
+                    'receipt' => $isPaid ? [
                         'reference'   => $inv->receipt_no ?? $inv->transaction_no,
                         'unit'        => $inv->room_number,
                         'description' => $inv->description,
@@ -115,6 +149,62 @@ class TenantHistoryController extends Controller
                         'method'      => $methodLabel,
                         'paid_date'   => $inv->date_paid?->format('M d, Y') ?? '—',
                         'tenant'      => $inv->tenant_name,
+                    ] : null,
+                ];
+            });
+    }
+
+    /**
+     * Paid reservation down-payments — SHOW them as paid history even
+     * though they don't live in the invoices table.
+     *
+     * Only Approved reservations with a verified proof of payment.
+     */
+    private function paidReservations(Tenant $tenant, int $userId)
+    {
+        return Reservation::where(function ($q) use ($tenant, $userId) {
+                $q->where('user_id', $userId)
+                  ->orWhere('tenant_name', $tenant->user->name ?? '');
+            })
+            ->where('status', 'Approved')
+            ->whereNotNull('proof_of_payment')
+            ->latest()
+            ->get()
+            ->map(function (Reservation $r) {
+                $fee = (float) $r->reservation_fee;
+                $amountLabel = '₱' . number_format($fee, 0);
+
+                return [
+                    'key'      => 'rsv-paid-' . $r->id,
+                    'cat'      => 'payments',
+                    'icon'     => 'fa-solid fa-peso-sign',
+                    'color'    => 'green',
+                    'title'    => 'Reservation Down-Payment — ' . $r->reference_no,
+                    'desc'     => 'Paid ' . $amountLabel . ' reservation fee for unit ' . $r->desired_room,
+                    'date'     => $r->processed_at?->format('M d, Y · h:i A')
+                                  ?? $r->updated_at?->format('M d, Y · h:i A')
+                                  ?? $r->created_at?->format('M d, Y · h:i A'),
+                    'timestamp'=> $r->processed_at ?? $r->updated_at ?? $r->created_at,
+                    'amount'   => $amountLabel,
+                    'status'   => 'paid',
+                    'details'  => [
+                        ['Reservation ID',   $r->reference_no],
+                        ['Reservation No.',  $r->reservation_number],
+                        ['Unit',             $r->desired_room],
+                        ['Total Charges',    '₱' . number_format((float) $r->total_charges, 2)],
+                        ['Down Payment',     $amountLabel],
+                        ['Remaining',        '₱' . number_format((float) $r->remaining, 2)],
+                        ['Payment Method',   strtoupper($r->payment_method ?? 'GCash')],
+                        ['Status',           'PAID'],
+                    ],
+                    'receipt' => [
+                        'reference'   => $r->reference_no,
+                        'unit'        => $r->desired_room,
+                        'description' => 'Reservation down-payment',
+                        'amount'      => $amountLabel,
+                        'method'      => $r->payment_method ?? 'GCash',
+                        'paid_date'   => $r->processed_at?->format('M d, Y') ?? '—',
+                        'tenant'      => $r->tenant_name,
                     ],
                 ];
             });
@@ -244,7 +334,7 @@ class TenantHistoryController extends Controller
 
     private function reservations(Tenant $tenant, int $userId)
     {
-        // Show reservations that belong to the user OR match their email/name
+        // Show reservations that belong to the user OR match their name
         return Reservation::where(function ($q) use ($tenant, $userId) {
                 $q->where('user_id', $userId)
                   ->orWhere('tenant_name', $tenant->user->name ?? '');

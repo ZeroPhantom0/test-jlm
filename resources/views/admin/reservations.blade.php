@@ -50,17 +50,16 @@
         {{-- Table Card --}}
         <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 space-y-5">
 
-            {{-- Toolbar --}}
-            <form method="GET" action="{{ route('admin.reservations') }}" class="flex flex-col md:flex-row gap-4">
-                <div
-                    class="flex-1 bg-slate-50 border border-slate-200 rounded-[10px] px-4 py-2.5 flex items-center gap-2.5">
-                    <i class="fa-solid fa-magnifying-glass text-slate-400 text-sm"></i>
+            {{-- Toolbar: compact, professional --}}
+            <form method="GET" action="{{ route('admin.reservations') }}" class="flex flex-col md:flex-row md:items-center gap-2.5">
+                <div class="relative flex-1">
+                    <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-[11px] pointer-events-none"></i>
                     <input type="text" name="search" value="{{ $filters['search'] ?? '' }}"
                         placeholder="Search by name, email, or room..."
-                        class="w-full text-[13.5px] outline-none bg-transparent">
+                        class="w-full h-9 pl-8 pr-3 rounded-lg border border-slate-200 bg-slate-50/60 text-[12.5px] text-slate-800 placeholder-slate-400 outline-none transition focus:border-teal-400 focus:bg-white focus:ring-2 focus:ring-teal-100">
                 </div>
                 <select name="status" onchange="this.form.submit()"
-                    class="bg-white border border-slate-200 rounded-[10px] px-4 py-2.5 text-[13.5px] text-slate-700 outline-none cursor-pointer min-w-[180px]">
+                    class="h-9 pl-3 pr-8 rounded-lg border border-slate-200 bg-slate-50/60 text-[12.5px] text-slate-700 outline-none cursor-pointer appearance-none bg-[url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 fill=%22none%22 viewBox=%220 0 24 24%22 stroke=%22%2394a3b8%22 stroke-width=%222%22><path stroke-linecap=%22round%22 stroke-linejoin=%22round%22 d=%22M19 9l-7 7-7-7%22/></svg>')] bg-[length:14px] bg-[right_10px_center] bg-no-repeat transition focus:border-teal-400 focus:bg-white focus:ring-2 focus:ring-teal-100 min-w-[180px]">
                     <option value="">All Statuses</option>
                     <option value="Pending" {{ ($filters['status'] ?? '') === 'Pending' ? 'selected' : '' }}>Pending
                     </option>

@@ -21,6 +21,8 @@ const FALLBACK = {
     check_in: '-',
     check_out: '-',
     payment_method: 'Not Set',
+    receipt_url: null,
+    is_remaining: false,
 };
 
 export default function BillingModals() {
@@ -44,7 +46,7 @@ export default function BillingModals() {
     }, []);
 
     // ============================================================
-    // Event delegation
+    // Event delegation — one listener for every icon in the table
     // ============================================================
     useEffect(() => {
         const handleClick = (e) => {
@@ -57,8 +59,8 @@ export default function BillingModals() {
             const btn = editBtn || viewBtn || payBtn || receiptBtn || remindBtn;
             if (!btn) return;
 
-            const row = btn.closest('tr');
-            const tn  = row?.dataset?.tn;
+            const row  = btn.closest('tr');
+            const tn   = row?.dataset?.tn;
             const data = invoicesData[tn] || FALLBACK;
             setInvoice(data);
 
@@ -121,6 +123,51 @@ export default function BillingModals() {
             alert(err.message);
         } finally {
             setSaving(false);
+        }
+    };
+
+    const handleVerify = async () => {
+        if (!invoice) return;
+        if (!confirm(`Verify payment for ${invoice.tn}? This will mark the invoice as paid.`)) return;
+
+        try {
+            const res = await fetch(`/admin/billing/${invoice.tn}/verify-payment`, {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': csrf(),
+                },
+            });
+            const result = await res.json();
+            if (!res.ok) throw new Error(result.message || 'Verification failed.');
+            closeAll();
+            window.location.reload();
+        } catch (err) {
+            alert(err.message);
+        }
+    };
+
+    const handleReject = async () => {
+        if (!invoice) return;
+        const notes = prompt('Reason for rejection (required):');
+        if (!notes) return;
+
+        try {
+            const res = await fetch(`/admin/billing/${invoice.tn}/reject-payment`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': csrf(),
+                },
+                body: JSON.stringify({ admin_notes: notes }),
+            });
+            const result = await res.json();
+            if (!res.ok) throw new Error(result.message || 'Rejection failed.');
+            closeAll();
+            window.location.reload();
+        } catch (err) {
+            alert(err.message);
         }
     };
 
@@ -195,8 +242,25 @@ export default function BillingModals() {
                             <div className="flex justify-between text-xs"><span className="text-slate-400">Date Paid</span><span className="font-semibold">-</span></div>
                         </div>
                     </div>
-                    <div className="p-5 border-t border-slate-100 flex justify-start">
+                    <div className="p-5 border-t border-slate-100 flex justify-between">
                         <button onClick={closeAll} className="bg-[#02122b] text-white px-5 py-2.5 rounded-lg text-[13px] font-semibold">Close</button>
+
+                        {data.status === 'Pending' && (
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={handleReject}
+                                    className="bg-rose-500 hover:bg-rose-600 text-white px-4 py-2.5 rounded-lg text-[13px] font-semibold"
+                                >
+                                    Reject
+                                </button>
+                                <button
+                                    onClick={handleVerify}
+                                    className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-lg text-[13px] font-semibold"
+                                >
+                                    Verify Payment
+                                </button>
+                            </div>
+                        )}
                     </div>
                 </Modal>
             )}
@@ -253,6 +317,17 @@ export default function BillingModals() {
                                 <div className="flex justify-between text-xs"><span className="text-slate-500">Date Paid</span><span className="text-slate-900 font-bold">{data.due}</span></div>
                             </div>
 
+                            {data.receipt_url && (
+                                <a
+                                    href={data.receipt_url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="w-full border border-orange-300 bg-orange-100 text-orange-700 rounded-lg py-2 text-[12px] font-bold inline-flex items-center justify-center gap-2 hover:bg-orange-200 transition"
+                                >
+                                    <i className="fa-regular fa-image"></i> View Uploaded Proof
+                                </a>
+                            )}
+
                             <div className="text-center mt-2">
                                 <p className="text-[11px] text-slate-500">Authorized By: <strong>Leah Agujar</strong></p>
                                 <p className="text-xs font-bold text-orange-500 mt-1">Thank You! :)</p>
@@ -270,7 +345,7 @@ export default function BillingModals() {
 }
 
 /* ============================================================
-   Edit Invoice Modal — separate component so we can use useState
+   Edit Invoice Modal
    ============================================================ */
 function EditInvoiceModal({ data, onClose, onSave, saving }) {
     const [form, setForm] = useState({

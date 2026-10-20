@@ -4,26 +4,28 @@ import { logout } from "../utils/logout";
 
 const NAV_ITEMS = [
     { key: "dashboard",     label: "Dashboard",     icon: "fa-solid fa-border-all",        href: "/tenants" },
-    { key: "services",      label: "Services",      icon: "fa-solid fa-wrench",            href: "/tenants/services/maintenance", hasSub: true },
-    { key: "billing",       label: "Billing",       icon: "fa-regular fa-credit-card",     href: "/tenants/billing" },
+    { key: "services",      label: "Services",      icon: "fa-solid fa-wrench",            href: "/tenants/services/maintenance", hasSub: true, requiresTenant: true },
+    { key: "billing",       label: "Billing",       icon: "fa-regular fa-credit-card",     href: "/tenants/billing",              requiresTenant: true },
     { key: "reservations",  label: "Reservations",  icon: "fa-regular fa-calendar-check",  href: "/tenants/reservations" },
     { key: "messages",      label: "Messages",      icon: "fa-regular fa-comment-dots",    href: "/tenants/messages" },
     { key: "announcements", label: "Announcements", icon: "fa-solid fa-bullhorn",          href: "/tenants/announcements" },
-    { key: "history",       label: "History",       icon: "fa-solid fa-clock-rotate-left", href: "/tenants/history" },
+    // ← History intentionally removed from the sidebar.
+    //   Still reachable via Dashboard → History → "View all".
     { key: "settings",      label: "Settings",      icon: "fa-solid fa-gear",              href: "/tenants/settings" },
 ];
 
 const SERVICES_SUB = [
-    { key: "services.maintenance",     label: "Maintenance",    icon: "fa-solid fa-wrench",     href: "/tenants/services/maintenance" },
-    { key: "services.room-change",     label: "Room Change",    icon: "fa-solid fa-house",      href: "/tenants/services/room-change" },
-    { key: "services.stay-extension",  label: "Stay Extension", icon: "fa-regular fa-calendar", href: "/tenants/services/stay-extension" },
+    { key: "services.maintenance",    label: "Maintenance",    icon: "fa-solid fa-wrench",     href: "/tenants/services/maintenance" },
+    { key: "services.room-change",    label: "Room Change",    icon: "fa-solid fa-house",      href: "/tenants/services/room-change" },
+    { key: "services.stay-extension", label: "Stay Extension", icon: "fa-regular fa-calendar", href: "/tenants/services/stay-extension" },
 ];
 
 export default function Sidebar({
-    active   = "dashboard",
-    userName = "Tenant",
-    userRole = "Tenant",
-    avatar   = "https://i.pravatar.cc/100?img=47",
+    active        = "dashboard",
+    userName      = "Tenant",
+    userRole      = "Tenant",
+    avatar        = "https://i.pravatar.cc/100?img=47",
+    isTenant      = false,
 }) {
     const [collapsed, setCollapsed]       = useState(false);
     const [mobileOpen, setMobileOpen]     = useState(false);
@@ -44,6 +46,10 @@ export default function Sidebar({
     }, [mobileOpen]);
 
     const isServicesActive = active.startsWith("services");
+
+    const visibleItems = NAV_ITEMS.filter(
+        (item) => !item.requiresTenant || isTenant
+    );
 
     return (
         <>
@@ -66,17 +72,30 @@ export default function Sidebar({
                     ${collapsed ? "md:w-20 w-65" : "w-62.5"}
                 `}
             >
-                {/* Brand */}
+                {/* Brand & Toggle */}
                 <div className={`px-4.5 pt-5 pb-3.75 flex items-center justify-between whitespace-nowrap shrink-0 ${collapsed ? "md:justify-center md:px-0 md:py-5" : ""}`}>
-                    <div className="flex items-center gap-3">
+                    <div className={`flex items-center gap-3 ${collapsed ? "md:hidden" : ""}`}>
                         <div className="w-9.5 h-9.5 rounded-full bg-white flex items-center justify-center text-brand-orange text-lg shrink-0">
                             <i className="fa-solid fa-house-chimney" />
                         </div>
-                        <div className={`transition-opacity duration-200 ${collapsed ? "md:hidden" : ""}`}>
+                        <div className="transition-opacity duration-200">
                             <h3 className="text-sm font-bold leading-tight text-white">JLM Cozy Cabin</h3>
                             <p className="text-[11px] text-[#8fa0b5]">Tenant Portal</p>
                         </div>
                     </div>
+
+                    {/* Desktop Collapse Button */}
+                    <button
+                        type="button"
+                        onClick={() => setCollapsed(!collapsed)}
+                        className="hidden md:block text-[#8fa0b5] hover:text-white rounded-md hover:bg-white/10 transition shrink-0"
+                        style={{ fontSize: "18px", padding: "6px" }}
+                        title="Toggle Navigation"
+                    >
+                        <i className="fa-solid fa-bars"></i>
+                    </button>
+
+                    {/* Mobile Close Button */}
                     <button type="button" onClick={() => setMobileOpen(false)}
                             className="md:hidden text-[#8fa0b5] text-lg p-1 hover:text-white"
                             aria-label="Close menu">
@@ -103,7 +122,7 @@ export default function Sidebar({
 
                 {/* Nav */}
                 <ul className="flex-1 overflow-y-auto px-3 space-y-0.75 scrollbar-thin scrollbar-thumb-white/20">
-                    {NAV_ITEMS.map((item) => {
+                    {visibleItems.map((item) => {
                         const isActive = active === item.key || (item.key === "services" && isServicesActive);
 
                         if (item.hasSub) {
@@ -158,21 +177,13 @@ export default function Sidebar({
                     })}
                 </ul>
 
-                {/* Footer */}
+                {/* Footer (Only Logout now) */}
                 <div className="p-3 border-t border-white/5 flex flex-col gap-0.5 shrink-0">
                     <button type="button" onClick={logout}
                             className={`flex items-center py-2.5 px-3 rounded-lg text-[13.5px] font-medium text-[#8fa0b5] hover:text-white transition-colors w-full ${collapsed ? "md:justify-center md:px-0" : ""}`}>
                         <div className={`flex items-center gap-3 ${collapsed ? "md:gap-0" : ""}`}>
                             <i className="fa-solid fa-right-from-bracket w-[18px] text-center text-[15px] shrink-0" />
                             <span className={collapsed ? "md:hidden" : ""}>Logout</span>
-                        </div>
-                    </button>
-
-                    <button type="button" onClick={() => setCollapsed(!collapsed)}
-                            className={`hidden md:flex w-full items-center py-2.5 px-3 rounded-lg text-[13.5px] font-medium text-[#8fa0b5] hover:text-white transition-colors ${collapsed ? "md:justify-center md:px-0" : ""}`}>
-                        <div className={`flex items-center gap-3 ${collapsed ? "md:gap-0" : ""}`}>
-                            <i className="fa-solid fa-bars-staggered w-[18px] text-center text-[15px] shrink-0" />
-                            <span className={collapsed ? "md:hidden" : ""}>Collapse Menu</span>
                         </div>
                     </button>
                 </div>

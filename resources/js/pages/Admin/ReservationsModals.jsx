@@ -12,9 +12,6 @@ export default function ReservationsModals() {
     const [saving, setSaving]                     = useState(false);
     const [reservationsData, setReservationsData] = useState({});
 
-    // ============================================================
-    // Read reservations data from the DOM (passed by Blade)
-    // ============================================================
     useEffect(() => {
         const el = document.getElementById('admin-reservations-modals');
         if (el?.dataset?.reservations) {
@@ -26,9 +23,6 @@ export default function ReservationsModals() {
         }
     }, []);
 
-    // ============================================================
-    // Shared request helper
-    // ============================================================
     const sendAction = useCallback(async (id, action, body = {}) => {
         const url = action === 'delete'
             ? `/admin/reservations/${id}`
@@ -49,12 +43,8 @@ export default function ReservationsModals() {
         return result;
     }, []);
 
-    // ============================================================
-    // Event delegation for row actions
-    // ============================================================
     useEffect(() => {
         const handler = (e) => {
-            // View details — opens modal
             const viewBtn = e.target.closest('.icon-view[data-res-key]');
             if (viewBtn) {
                 const key   = viewBtn.dataset.resKey;
@@ -66,7 +56,6 @@ export default function ReservationsModals() {
                 return;
             }
 
-            // Approve — from row
             const approveBtn = e.target.closest('.icon-approve');
             if (approveBtn) {
                 const id = approveBtn.dataset.resId;
@@ -81,7 +70,6 @@ export default function ReservationsModals() {
                 return;
             }
 
-            // Reject — from row
             const rejectBtn = e.target.closest('.icon-reject');
             if (rejectBtn) {
                 const id = rejectBtn.dataset.resId;
@@ -106,9 +94,6 @@ export default function ReservationsModals() {
         setAdminNotes('');
     };
 
-    // ============================================================
-    // Modal actions — use the numeric ID from the payload
-    // ============================================================
     const runModalAction = async (action, extra = {}) => {
         if (!data) return;
         setSaving(true);
@@ -187,7 +172,7 @@ export default function ReservationsModals() {
                     </div>
                 </div>
 
-                {/* Reservation Details — with Move-in → Move-out pair */}
+                {/* Reservation Details — Check-in / Check-out only */}
                 <div className="bg-slate-50 rounded-xl p-4 flex flex-col gap-2.5">
                     <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Reservation Details</div>
 
@@ -198,16 +183,16 @@ export default function ReservationsModals() {
                         <i className="fa-solid fa-bed w-4 text-slate-400"></i> {data.bedId}
                     </div>
 
-                    {/* Move-in */}
+                    {/* Check-in */}
                     <div className="flex items-center gap-2.5 text-[13px] text-slate-700">
-                        <i className="fa-solid fa-right-to-bracket w-4 text-slate-400"></i> 
-                        Move-in: {data.formattedCheckIn}
+                        <i className="fa-solid fa-right-to-bracket w-4 text-slate-400"></i>
+                        Check-in: {data.formattedCheckIn}
                     </div>
 
-                    {/* Move-out */}
+                    {/* Check-out */}
                     <div className="flex items-center gap-2.5 text-[13px] text-slate-700">
                         <i className="fa-solid fa-right-from-bracket w-4 text-slate-400"></i>
-                        Move-out: {data.formattedCheckOut}
+                        Check-out: {data.formattedCheckOut}
                     </div>
 
                     {/* Submitted */}
@@ -263,14 +248,13 @@ export default function ReservationsModals() {
                             href={data.proofUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="bg-lime-200 rounded-xl p-4 flex flex-col items-center justify-center hover:bg-lime-300 transition block"
+                            className="block w-full rounded-xl overflow-hidden hover:opacity-90 transition"
                         >
                             <img
                                 src={data.proofUrl}
                                 alt="Proof of payment"
-                                className="max-h-48 rounded-md shadow-sm"
+                                className="w-full h-auto object-cover rounded-xl shadow-sm border border-slate-100"
                             />
-                            <span className="text-[11px] text-slate-600 mt-2">Click to expand</span>
                         </a>
                     ) : (
                         <div className="bg-slate-100 rounded-xl p-4 text-center text-[12px] text-slate-500 italic">
