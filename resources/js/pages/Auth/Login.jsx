@@ -19,7 +19,7 @@ export default function Login() {
     };
 
     return (
-        <div className="login-page">
+        <div className="login-page login-page-enter">
             <Head title="Login | JLM Cozy Cabin" />
 
             <div className="login-container">
@@ -27,7 +27,7 @@ export default function Login() {
                 <div className="login-left">
                     <div className="login-brand">
                         <div className="login-logo">
-                            <img src="\images\jlm-logo.png" alt="JLM Cozy Cabin Logo" />
+                            <img src="/images/jlm-logo.png" alt="JLM Cozy Cabin Logo" />
                         </div>
                         <span>JLM Cozy Cabin</span>
                     </div>
@@ -74,18 +74,8 @@ export default function Login() {
 
                         {/* Global error (bad credentials) */}
                         {errors.email && (
-                            <div
-                                style={{
-                                    background: '#fef2f2',
-                                    border: '1px solid #fecaca',
-                                    color: '#b91c1c',
-                                    padding: '10px 14px',
-                                    borderRadius: '10px',
-                                    fontSize: '13px',
-                                    marginBottom: '18px',
-                                }}
-                            >
-                                <i className="bi bi-exclamation-circle" style={{ marginRight: 6 }}></i>
+                            <div className="login-global-error">
+                                <i className="bi bi-exclamation-circle"></i>
                                 {errors.email}
                             </div>
                         )}
@@ -150,7 +140,7 @@ export default function Login() {
                         {/* LOGIN */}
                         <button
                             type="submit"
-                            className="login-btn"
+                            className="login-submit-btn"
                             disabled={processing}
                             style={{ opacity: processing ? 0.7 : 1, cursor: processing ? 'wait' : 'pointer' }}
                         >

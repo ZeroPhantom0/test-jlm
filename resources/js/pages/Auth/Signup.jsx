@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { Head, Link, useForm } from '@inertiajs/react';
 
 export default function Signup() {
-    const [showPw, setShowPw] = useState(false);
+    const [showPw, setShowPw]           = useState(false);
     const [showConfirm, setShowConfirm] = useState(false);
 
     const { data, setData, post, processing, errors, reset } = useForm({
@@ -23,14 +23,14 @@ export default function Signup() {
     };
 
     const fieldError = (field) => errors[field] && (
-        <div style={{ color: '#e11d48', fontSize: '12px', marginTop: '6px' }}>
-            <i className="bi bi-exclamation-circle" style={{ marginRight: 4 }}></i>
+        <div className="signup-field-error">
+            <i className="bi bi-exclamation-circle"></i>
             {errors[field]}
         </div>
     );
 
     return (
-        <div className="signup-page">
+        <div className="signup-page signup-page-enter">
             <Head title="Sign Up | JLM Cozy Cabin" />
 
             <div className="signup-container">
@@ -38,7 +38,7 @@ export default function Signup() {
                 <div className="signup-left">
                     <div className="signup-brand">
                         <div className="signup-logo">
-                            <img src="\images\jlm-logo.png" alt="JLM Cozy Cabin Logo" />
+                            <img src="/images/jlm-logo.png" alt="JLM Cozy Cabin Logo" />
                         </div>
                         <span>JLM Cozy Cabin</span>
                     </div>
@@ -207,7 +207,14 @@ export default function Signup() {
                             disabled={processing}
                             style={{ opacity: processing ? 0.7 : 1, cursor: processing ? 'wait' : 'pointer' }}
                         >
-                            {processing ? 'Creating account...' : 'Sign Up'}
+                            {processing ? (
+                                <>
+                                    <i className="bi bi-arrow-repeat" style={{ animation: 'spin 1s linear infinite', marginRight: 8 }}></i>
+                                    Creating account...
+                                </>
+                            ) : (
+                                'Sign Up'
+                            )}
                         </button>
 
                         <p className="login-link-text">

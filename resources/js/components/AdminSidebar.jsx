@@ -14,7 +14,7 @@ const NAV_ITEMS = [
     { key: "virtual-tour",  label: "Virtual Room Tour", icon: "fa-solid fa-camera",               href: "/admin/virtual-tour" },
     { key: "reports",       label: "Reports",           icon: "fa-regular fa-file-lines",         href: "/admin/reports" },
     { key: "history",       label: "History",           icon: "fa-solid fa-clock-rotate-left",    href: "/admin/history" },
-    { key: "audit-logs",    label: "Audit Logs",        icon: "fa-solid fa-shield-check",         href: "/admin/audit-logs" },
+    { key: "audit-logs",    label: "Audit Logs",        icon: "fa-solid fa-shield-halved",        href: "/admin/audit-logs" },
     { key: "settings",      label: "Settings",          icon: "fa-solid fa-gear",                 href: "/admin/settings" },
 ];
 

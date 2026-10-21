@@ -86,13 +86,13 @@ class Tenant extends Model
             'status'  => $this->status,
 
             'room'          => $this->room?->room_number
-                                    ? 'Room ' . $this->room->room_number
-                                    : '—',
+                ? 'Room ' . $this->room->room_number
+                : '—',
             // Check-in / Check-out are the ONLY dates for this tenant.
             'check_in'      => $reservation?->check_in?->format('M d, Y')       ?? '—',
             'check_in_time' => $reservation?->check_in_time                     ?? '',
             'check_out'     => $reservation?->check_out?->format('M d, Y')      ?? 'Open-ended',
-            'check_out_time'=> $reservation?->check_out_time                    ?? '',
+            'check_out_time' => $reservation?->check_out_time                    ?? '',
             'rent_rate'     => (float) $this->rent_rate,
 
             'address'          => $personal?->current_address ?? '—',
@@ -103,11 +103,38 @@ class Tenant extends Model
             'id_status'      => $identity?->status ?? null,
             'id_uploaded_at' => $identity?->created_at?->format('M d, Y') ?? null,
             'id_front_url'   => $identity?->id_front
-                                    ? asset('storage/' . $identity->id_front)
-                                    : null,
+                ? asset('storage/' . $identity->id_front)
+                : null,
             'id_back_url'    => $identity?->id_back
-                                    ? asset('storage/' . $identity->id_back)
-                                    : null,
+                ? asset('storage/' . $identity->id_back)
+                : null,
         ];
+    }
+
+    // ============================================================
+    // TIME ACCESSORS (12-hour display)
+    // ============================================================
+
+    public function getCheckInTime12Attribute(): ?string
+    {
+        return $this->formatTime12($this->approvedReservation?->check_in_time);
+    }
+
+    public function getCheckOutTime12Attribute(): ?string
+    {
+        return $this->formatTime12($this->approvedReservation?->check_out_time);
+    }
+
+    private function formatTime12(?string $time): ?string
+    {
+        if (!$time) {
+            return null;
+        }
+
+        try {
+            return \Carbon\Carbon::parse($time)->format('g:i A');
+        } catch (\Throwable $e) {
+            return $time; // fall back to raw value if unparseable
+        }
     }
 }

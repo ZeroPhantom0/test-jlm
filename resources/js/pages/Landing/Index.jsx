@@ -1,6 +1,7 @@
 // resources/js/pages/Landing/Index.jsx
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Head, Link } from '@inertiajs/react';
+import { Head, Link, router } from '@inertiajs/react';
+import SplashScreen from '../../components/SplashScreen';
 
 /* ============================================================
    AMENITIES DATA
@@ -48,12 +49,13 @@ export default function Index({ rooms = [] }) {
 }
 
 /* ============================================================
-   HEADER — sticky + scroll-spy underline
+   HEADER — sticky + scroll-spy underline + splash on auth nav
    ============================================================ */
 function LandingHeader() {
-    const [activeSection, setActiveSection]   = useState('home');
-    const [mobileNavOpen, setMobileNavOpen]   = useState(false);
-    const [scrolled, setScrolled]             = useState(false);
+    const [activeSection, setActiveSection] = useState('home');
+    const [mobileNavOpen, setMobileNavOpen] = useState(false);
+    const [scrolled, setScrolled]           = useState(false);
+    const [splash, setSplash]               = useState(null); // { target: '/login' | '/signup' }
 
     /* ---------- Scroll-spy ---------- */
     useEffect(() => {
@@ -80,7 +82,7 @@ function LandingHeader() {
     /* ---------- Solid header on scroll ---------- */
     useEffect(() => {
         const onScroll = () => setScrolled(window.scrollY > 40);
-        onScroll(); // run once
+        onScroll();
         window.addEventListener('scroll', onScroll, { passive: true });
         return () => window.removeEventListener('scroll', onScroll);
     }, []);
@@ -91,47 +93,89 @@ function LandingHeader() {
         if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
     };
 
+    /**
+     * Intercept auth navigation so the splash can play first.
+     */
+    const handleAuthNav = (e, target) => {
+        e.preventDefault();
+        setMobileNavOpen(false);
+        setSplash({ target });
+    };
+
+    const handleSplashComplete = () => {
+        if (splash?.target) {
+            router.visit(splash.target);
+        }
+        setSplash(null);
+    };
+
     return (
-        <header className={`header ${scrolled ? 'header-solid' : ''}`}>
-            <div className="logo">
-                <img
-                    src="/images/jlm-logo.png"
-                    alt="JLM Cozy Cabin Logo"
-                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
+        <>
+            {splash && (
+                <SplashScreen
+                    duration={1800}
+                    message={
+                        splash.target === '/login'
+                            ? 'Signing you in…'
+                            : 'Creating your account…'
+                    }
+                    onComplete={handleSplashComplete}
                 />
-                <span>JLM Cozy Cabin</span>
-            </div>
+            )}
 
-            <nav className={`navigation ${mobileNavOpen ? 'mobile-open' : ''}`}>
-                {NAV_LINKS.map((link) => (
+            <header className={`header ${scrolled ? 'header-solid' : ''}`}>
+                <div className="logo">
+                    <img
+                        src="/images/jlm-logo.png"
+                        alt="JLM Cozy Cabin Logo"
+                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                    />
+                    <span>JLM Cozy Cabin</span>
+                </div>
+
+                <nav className={`navigation ${mobileNavOpen ? 'mobile-open' : ''}`}>
+                    {NAV_LINKS.map((link) => (
+                        <a
+                            key={link.id}
+                            href={`#${link.id}`}
+                            className={`nav-link ${activeSection === link.id ? 'active' : ''}`}
+                            onClick={(e) => {
+                                e.preventDefault();
+                                handleNavClick(link.id);
+                            }}
+                        >
+                            {link.label}
+                        </a>
+                    ))}
+                </nav>
+
+                <div className="header-buttons">
                     <a
-                        key={link.id}
-                        href={`#${link.id}`}
-                        className={`nav-link ${activeSection === link.id ? 'active' : ''}`}
-                        onClick={(e) => {
-                            e.preventDefault();
-                            handleNavClick(link.id);
-                        }}
+                        href="/login"
+                        className="login-btn"
+                        onClick={(e) => handleAuthNav(e, '/login')}
                     >
-                        {link.label}
+                        Log In
                     </a>
-                ))}
-            </nav>
+                    <a
+                        href="/signup"
+                        className="signup-btn"
+                        onClick={(e) => handleAuthNav(e, '/signup')}
+                    >
+                        Get Started
+                    </a>
 
-            <div className="header-buttons">
-                <Link href="/login"  className="login-btn">Log In</Link>
-                <Link href="/signup" className="signup-btn">Get Started</Link>
-
-                <button
-                    type="button"
-                    className="mobile-menu-toggle"
-                    aria-label="Toggle menu"
-                    onClick={() => setMobileNavOpen((v) => !v)}
-                >
-                    <i className={`bi ${mobileNavOpen ? 'bi-x-lg' : 'bi-list'}`} />
-                </button>
-            </div>
-        </header>
+                    <button
+                        type="button"
+                        className="mobile-menu-toggle"
+                        aria-label="Toggle menu"
+                        onClick={() => setMobileNavOpen((v) => !v)}
+                    >
+                        <i className={`bi ${mobileNavOpen ? 'bi-x-lg' : 'bi-list'}`} />
+                    </button>
+                </div>
+            </header>
+        </>
     );
 }
 
@@ -226,7 +270,6 @@ function AmenitiesCarousel() {
     const touchStartX  = useRef(0);
     const touchDeltaX  = useRef(0);
 
-    /* ---------- Responsive visible count ---------- */
     useEffect(() => {
         const update = () => {
             const w = window.innerWidth;
@@ -248,7 +291,6 @@ function AmenitiesCarousel() {
     const next = useCallback(() => setIndex((i) => Math.min(i + 1, maxIndex)), [maxIndex]);
     const prev = useCallback(() => setIndex((i) => Math.max(i - 1, 0)), []);
 
-    /* ---------- Keyboard ---------- */
     useEffect(() => {
         const handler = (e) => {
             if (e.key === 'ArrowRight') next();
@@ -258,7 +300,6 @@ function AmenitiesCarousel() {
         return () => window.removeEventListener('keydown', handler);
     }, [next, prev]);
 
-    /* ---------- Touch ---------- */
     const onTouchStart = (e) => {
         touchStartX.current = e.touches[0].clientX;
         touchDeltaX.current = 0;
@@ -358,7 +399,6 @@ function RoomsSection({ tourRooms, otherRooms }) {
     return (
         <section className="rooms-section" id="rooms">
             <div className="rooms-header">
-                {/* Removed Room Listings badge */}
                 <h2>Find Your Perfect Room</h2>
                 <p>Browse all available room types and take a virtual tour before you reserve.</p>
             </div>
@@ -493,12 +533,13 @@ function RoomCard({ room }) {
 }
 
 /* ============================================================
-   CONTACT — PORTRAIT
+   CONTACT — SIDE-BY-SIDE (LEFT: Info, RIGHT: Stacked Grid)
    ============================================================ */
 function ContactSection() {
     return (
         <section className="contact-section" id="contact">
             <div className="contact-container">
+                {/* LEFT: Info */}
                 <div className="contact-info">
                     <div className="contact-badge">Contact Us</div>
                     <h2>
@@ -511,6 +552,7 @@ function ContactSection() {
                     </p>
                 </div>
 
+                {/* RIGHT: Stacked Grid */}
                 <div className="contact-details-grid">
                     <div className="contact-detail">
                         <div className="contact-icon"><i className="bi bi-telephone" /></div>
@@ -560,7 +602,6 @@ function LandingFooter() {
                     </div>
                     <p>Premium boarding house offering comfortable, affordable, and secure living in Manila.</p>
                     <div className="footer-socials">
-                        {/* Kept only Facebook and added the link */}
                         <a 
                             href="https://www.facebook.com/profile.php?id=100076056182354" 
                             target="_blank" 

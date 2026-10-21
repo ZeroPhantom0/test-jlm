@@ -57,8 +57,8 @@
                             <th class="py-3 px-3.5">Name</th>
                             <th class="py-3 px-3.5">Contact</th>
                             <th class="py-3 px-3.5">Room</th>
-                            <th class="py-3 px-3.5">Move In</th>
-                            <th class="py-3 px-3.5">Move Out</th>
+                            <th class="py-3 px-3.5">Check In</th>
+                            <th class="py-3 px-3.5">Check Out</th>
                             <th class="py-3 px-3.5">Rent Rate</th>
                             <th class="py-3 px-3.5">Status</th>
                             <th class="py-3 px-3.5">Actions</th>
@@ -66,6 +66,7 @@
                     </thead>
                     <tbody>
                         @forelse ($tenants as $tenant)
+                            @php $reservation = $tenant->approvedReservation; @endphp
                             <tr class="border-b border-slate-50 last:border-0" data-tenant='@json($tenant->toReactArray())'>
                                 <td class="py-4 px-3.5">
                                     <div class="flex items-center gap-3">
@@ -94,22 +95,22 @@
                                     {{ $tenant->room->room_number ? 'Room ' . $tenant->room->room_number : '—' }}
                                 </td>
 
-                                {{-- MOVE IN --}}
+                                {{-- CHECK IN --}}
                                 <td class="py-4 px-3.5 text-xs text-slate-700">
                                     <div>
                                         <i class="fa-regular fa-calendar text-[10px] text-slate-400 mr-1"></i>
-                                        {{ $tenant->move_in ? \Carbon\Carbon::parse($tenant->move_in)->format('F j, Y') : '—' }}
+                                        {{ $reservation?->check_in ? $reservation->check_in->format('F j, Y') : '—' }}
                                     </div>
-                                    <div class="text-slate-500">{{ $tenant->move_in_time ? \Carbon\Carbon::parse($tenant->move_in_time)->format('g:i A') : '' }}</div>
+                                    <div class="text-slate-500">{{ $tenant->check_in_time_12 }}</div>
                                 </td>
 
-                                {{-- MOVE OUT --}}
+                                {{-- CHECK OUT --}}
                                 <td class="py-4 px-3.5 text-xs text-slate-700">
                                     <div>
                                         <i class="fa-regular fa-calendar text-[10px] text-slate-400 mr-1"></i>
-                                        {{ $tenant->move_out ? \Carbon\Carbon::parse($tenant->move_out)->format('F j, Y') : '—' }}
+                                        {{ $reservation?->check_out ? $reservation->check_out->format('F j, Y') : '—' }}
                                     </div>
-                                    <div class="text-slate-500">{{ $tenant->move_out_time ? \Carbon\Carbon::parse($tenant->move_out_time)->format('g:i A') : '' }}</div>
+                                    <div class="text-slate-500">{{ $tenant->check_out_time_12 }}</div>
                                 </td>
 
                                 <td class="py-4 px-3.5 text-[13px] font-semibold text-slate-900">

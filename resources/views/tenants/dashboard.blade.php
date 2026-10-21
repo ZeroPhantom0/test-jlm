@@ -156,7 +156,7 @@
                 </a>
             </div>
 
-            {{-- Request History --}}
+            {{-- History --}}
             @php
                 $historyPreview = $historyItems ?? collect();
                 $latestHistory  = $historyPreview->take(4);
@@ -166,7 +166,7 @@
                 <div class="flex items-center justify-between mb-4">
                     <div class="flex items-center gap-2.5 text-base font-bold">
                         <i class="fa-solid fa-clock-rotate-left text-[#16a34a]"></i>
-                        <span>Request History</span>
+                        <span>History</span>
                     </div>
                     <a href="/tenants/history"
                        class="text-[#16a34a] text-[12px] font-bold inline-flex items-center gap-1 hover:text-green-700 transition">

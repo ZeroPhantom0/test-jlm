@@ -85,17 +85,17 @@ export default function TenantsModals() {
     // -------- seed the edit form when opening --------
     useEffect(() => {
         if (showEdit && tenant) {
-            const isOpenEnded = tenant.move_out === 'Open-ended';
+            const isOpenEnded = tenant.check_out === 'Open-ended';
             setForm({
-                name:          tenant.name  ?? '',
-                email:         tenant.email ?? '',
-                phone:         tenant.phone ?? '',
-                move_in:       toDateInput(tenant.move_in),
-                move_in_time:  toTimeInput(tenant.move_in_time),
-                move_out:      isOpenEnded ? '' : toDateInput(tenant.move_out),
-                move_out_time: isOpenEnded ? '' : toTimeInput(tenant.move_out_time),
-                rent_rate:     Number(tenant.rent_rate ?? 0),
-                status:        tenant.status ?? 'active',
+                name:           tenant.name  ?? '',
+                email:          tenant.email ?? '',
+                phone:          tenant.phone ?? '',
+                check_in:       toDateInput(tenant.check_in),
+                check_in_time:  toTimeInput(tenant.check_in_time),
+                check_out:      isOpenEnded ? '' : toDateInput(tenant.check_out),
+                check_out_time: isOpenEnded ? '' : toTimeInput(tenant.check_out_time),
+                rent_rate:      Number(tenant.rent_rate ?? 0),
+                status:         tenant.status ?? 'active',
             });
         }
     }, [showEdit, tenant]);
@@ -107,8 +107,8 @@ export default function TenantsModals() {
         setError('');
 
         // Basic client-side check
-        if (form.move_out && form.move_in && form.move_out < form.move_in) {
-            setError('Move-out date must be on or after move-in date.');
+        if (form.check_out && form.check_in && form.check_out < form.check_in) {
+            setError('Check-out date must be on or after check-in date.');
             setSaving(false);
             return;
         }
@@ -123,15 +123,15 @@ export default function TenantsModals() {
                     'X-Requested-With': 'XMLHttpRequest',
                 },
                 body: JSON.stringify({
-                    name:          form.name,
-                    email:         form.email,
-                    phone:         form.phone,
-                    move_in:       form.move_in || null,
-                    move_in_time:  form.move_in_time || null,
-                    move_out:      form.move_out || null,
-                    move_out_time: form.move_out_time || null,
-                    rent_rate:     Number(form.rent_rate) || 0,
-                    status:        form.status,
+                    name:           form.name,
+                    email:          form.email,
+                    phone:          form.phone,
+                    check_in:       form.check_in || null,
+                    check_in_time:  form.check_in_time || null,
+                    check_out:      form.check_out || null,
+                    check_out_time: form.check_out_time || null,
+                    rent_rate:      Number(form.rent_rate) || 0,
+                    status:         form.status,
                 }),
             });
 
@@ -160,7 +160,7 @@ export default function TenantsModals() {
 
     // -------- derived --------
     const isActive = tenant?.status === 'active';
-    const isOpenEnded = tenant?.move_out === 'Open-ended';
+    const isOpenEnded = tenant?.check_out === 'Open-ended';
 
     // Generic setter for the form
     const set = (key) => (e) =>
@@ -214,15 +214,15 @@ export default function TenantsModals() {
                                 </div>
                             </div>
                             <div className="bg-slate-50 rounded-xl p-3.5">
-                                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Move In</div>
+                                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Check In</div>
                                 <div className="text-[13px] font-bold text-slate-900 mt-1">
-                                    {tenant.move_in}{tenant.move_in_time ? ` · ${formatTime12h(tenant.move_in_time)}` : ''}
+                                    {tenant.check_in}{tenant.check_in_time ? ` · ${formatTime12h(tenant.check_in_time)}` : ''}
                                 </div>
                             </div>
                             <div className="bg-slate-50 rounded-xl p-3.5">
-                                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Move Out</div>
+                                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Check Out</div>
                                 <div className={`text-[13px] font-bold mt-1 ${isOpenEnded ? 'text-slate-400 italic' : 'text-slate-900'}`}>
-                                    {tenant.move_out}{!isOpenEnded && tenant.move_out_time ? ` · ${formatTime12h(tenant.move_out_time)}` : ''}
+                                    {tenant.check_out}{!isOpenEnded && tenant.check_out_time ? ` · ${formatTime12h(tenant.check_out_time)}` : ''}
                                 </div>
                             </div>
                         </div>
@@ -341,11 +341,11 @@ export default function TenantsModals() {
 
                         <div className="grid grid-cols-2 gap-3">
                             <div>
-                                <label className="block text-xs font-semibold text-slate-700 mb-1.5">Move-In Date</label>
+                                <label className="block text-xs font-semibold text-slate-700 mb-1.5">Check-In Date</label>
                                 <input
                                     type="date"
-                                    value={form.move_in}
-                                    onChange={set('move_in')}
+                                    value={form.check_in}
+                                    onChange={set('check_in')}
                                     className="w-full border border-slate-300 rounded-lg px-3.5 py-2.5 text-[13px] outline-none"
                                 />
                             </div>
@@ -353,8 +353,8 @@ export default function TenantsModals() {
                                 <label className="block text-xs font-semibold text-slate-700 mb-1.5">Time-In</label>
                                 <input
                                     type="time"
-                                    value={form.move_in_time}
-                                    onChange={set('move_in_time')}
+                                    value={form.check_in_time}
+                                    onChange={set('check_in_time')}
                                     className="w-full border border-slate-300 rounded-lg px-3.5 py-2.5 text-[13px] outline-none"
                                 />
                             </div>
@@ -362,11 +362,11 @@ export default function TenantsModals() {
 
                         <div className="grid grid-cols-2 gap-3">
                             <div>
-                                <label className="block text-xs font-semibold text-slate-700 mb-1.5">Move-Out Date</label>
+                                <label className="block text-xs font-semibold text-slate-700 mb-1.5">Check-Out Date</label>
                                 <input
                                     type="date"
-                                    value={form.move_out}
-                                    onChange={set('move_out')}
+                                    value={form.check_out}
+                                    onChange={set('check_out')}
                                     placeholder="Open-ended"
                                     className="w-full border border-slate-300 rounded-lg px-3.5 py-2.5 text-[13px] outline-none"
                                 />
@@ -375,8 +375,8 @@ export default function TenantsModals() {
                                 <label className="block text-xs font-semibold text-slate-700 mb-1.5">Time-Out</label>
                                 <input
                                     type="time"
-                                    value={form.move_out_time}
-                                    onChange={set('move_out_time')}
+                                    value={form.check_out_time}
+                                    onChange={set('check_out_time')}
                                     className="w-full border border-slate-300 rounded-lg px-3.5 py-2.5 text-[13px] outline-none"
                                 />
                             </div>

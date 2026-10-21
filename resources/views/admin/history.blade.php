@@ -68,7 +68,7 @@
         {{-- Filters --}}
         <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 space-y-4">
             
-            {{-- Category Tabs: Now using Grid to fill full width evenly --}}
+            {{-- Category Tabs --}}
             <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
                 @php
                     $filterOptions = [
@@ -82,36 +82,38 @@
                     $currentCategory = $filters['category'] ?? 'all';
                 @endphp
                 @foreach ($filterOptions as $f)
-                    <a href="{{ route('admin.history', ['category' => $f['key'], 'search' => $filters['search'] ?? '']) }}"
-                       class="px-2 py-1.5 rounded-lg text-[12.5px] font-semibold inline-flex items-center justify-center gap-1.5 transition
+                    <button type="button"
+                       data-category="{{ $f['key'] }}"
+                       class="history-filter-pill px-2 py-1.5 rounded-lg text-[12.5px] font-semibold inline-flex items-center justify-center gap-1.5 transition
                        {{ $currentCategory === $f['key'] ? 'bg-[#0b1d3a] text-white shadow-sm' : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-transparent hover:border-slate-200' }}">
                         <i class="{{ $f['icon'] }} text-[12px]"></i>
                         <span>{{ $f['label'] }}</span>
-                    </a>
+                    </button>
                 @endforeach
             </div>
 
             {{-- Search & Sort --}}
-            <form method="GET" action="{{ route('admin.history') }}" class="flex flex-col md:flex-row gap-3">
-                <input type="hidden" name="category" value="{{ $currentCategory }}">
-                
-                {{-- Reduced height & font size for search --}}
+            <div class="flex flex-col md:flex-row gap-3">
+                {{-- Search Input --}}
                 <div class="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 flex items-center gap-2 transition focus-within:border-slate-300 focus-within:bg-white">
                     <i class="fa-solid fa-magnifying-glass text-slate-400 text-[12px]"></i>
-                    <input id="history-search" name="search" type="text" value="{{ $filters['search'] ?? '' }}"
+                    <input id="history-search" type="text" value="{{ $filters['search'] ?? '' }}"
                         placeholder="Search by tenant, room, or description..."
                         class="w-full text-[13px] outline-none bg-transparent">
                 </div>
 
-                {{-- Reduced height & font size for sort dropdown --}}
-                <div class="bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 flex items-center justify-between gap-2 text-[13px] font-medium text-slate-700 whitespace-nowrap cursor-pointer hover:bg-slate-100 transition md:min-w-[160px]">
+                {{-- Sort Dropdown --}}
+                <div class="bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 flex items-center justify-between gap-2 text-[13px] font-medium text-slate-700 whitespace-nowrap transition focus-within:border-slate-300 focus-within:bg-white md:min-w-[160px]">
                     <div class="flex items-center gap-2">
                         <i class="fa-regular fa-calendar text-[12px] text-slate-500"></i>
-                        <span>Newest First</span>
+                        <select id="history-sort" class="outline-none bg-transparent cursor-pointer appearance-none w-full pr-4">
+                            <option value="newest">Newest First</option>
+                            <option value="oldest">Oldest First</option>
+                        </select>
                     </div>
-                    <i class="fa-solid fa-chevron-down text-[10px] text-slate-500"></i>
+                    <i class="fa-solid fa-chevron-down text-[10px] text-slate-500 pointer-events-none -ml-4"></i>
                 </div>
-            </form>
+            </div>
         </div>
 
         <div class="flex justify-between items-center text-[13.5px] text-slate-500 font-medium">
@@ -209,6 +211,12 @@
                     <p class="text-sm">No history records found.</p>
                 </div>
             @endforelse
+
+            {{-- Empty State for JS filtering --}}
+            <div id="empty-filter-state" class="hidden bg-white border border-slate-200 rounded-2xl p-12 text-center text-slate-400">
+                <i class="fa-solid fa-magnifying-glass text-4xl mb-3 opacity-50"></i>
+                <p class="text-sm">No records match your current filters.</p>
+            </div>
         </div>
     </div>
 @endsection
@@ -216,17 +224,27 @@
 @push('scripts')
     <script>
         (function() {
+            // ============================================================
+            // ELEMENTS
+            // ============================================================
+            const listContainer = document.getElementById('history-list');
             const items = document.querySelectorAll('.history-item');
-            const input = document.getElementById('history-search');
-            const count = document.getElementById('records-count');
+            const pills = document.querySelectorAll('.history-filter-pill');
+            const searchInput = document.getElementById('history-search');
+            const sortSelect = document.getElementById('history-sort');
+            const countDisplay = document.getElementById('records-count');
+            const emptyState = document.getElementById('empty-filter-state');
+
+            let currentCategory = '{{ $currentCategory }}';
 
             // ============================================================
-            // EXPAND / COLLAPSE DETAILS
+            // 1. EXPAND / COLLAPSE DETAILS
             // ============================================================
             items.forEach((item) => {
                 const header = item.querySelector('.history-item-header');
                 header.addEventListener('click', (e) => {
-                    if (e.target.closest('.px-3\\.5')) return;
+                    // Prevent click if they click the status pill (optional safeguard)
+                    if (e.target.closest('.px-3\\.5')) return; 
 
                     const details = item.querySelector('.history-item-details');
                     const chevron = item.querySelector('.chevron-icon');
@@ -243,27 +261,88 @@
             });
 
             // ============================================================
-            // CLIENT-SIDE SEARCH (instant feedback, server does the real filter)
+            // 2. FILTER & SORT LOGIC
             // ============================================================
-            if (input) {
-                input.addEventListener('input', () => {
-                    const q = (input.value || '').toLowerCase().trim();
-                    let visible = 0;
-                    items.forEach((item) => {
-                        const text = item.innerText.toLowerCase();
-                        const show = q === '' || text.includes(q);
-                        item.style.display = show ? 'flex' : 'none';
-                        if (!show) {
-                            const details = item.querySelector('.history-item-details');
-                            const chevron = item.querySelector('.chevron-icon');
-                            if (details) details.classList.add('hidden');
-                            if (chevron) chevron.style.transform = 'rotate(0deg)';
-                        }
-                        if (show) visible++;
-                    });
-                    if (count) count.textContent = `Showing ${visible} of ${items.length} total records`;
+            function applyFilters() {
+                const query = (searchInput.value || '').toLowerCase().trim();
+                let visibleCount = 0;
+
+                // 1. Filter items
+                items.forEach(item => {
+                    const categoryMatch = (currentCategory === 'all' || item.dataset.category === currentCategory);
+                    
+                    // Extract text from title, tenant, room, desc
+                    const text = item.innerText.toLowerCase();
+                    const searchMatch = (query === '' || text.includes(query));
+
+                    if (categoryMatch && searchMatch) {
+                        item.style.display = 'flex';
+                        visibleCount++;
+                    } else {
+                        item.style.display = 'none';
+                        // Collapse details if hidden
+                        const details = item.querySelector('.history-item-details');
+                        const chevron = item.querySelector('.chevron-icon');
+                        if(details) details.classList.add('hidden');
+                        if(chevron) chevron.style.transform = 'rotate(0deg)';
+                    }
                 });
+
+                // 2. Update Counter & Empty State
+                countDisplay.textContent = `Showing ${visibleCount} of ${items.length} total records`;
+
+                if (visibleCount === 0) {
+                    emptyState.classList.remove('hidden');
+                } else {
+                    emptyState.classList.add('hidden');
+                }
+
+                // 3. Sort (DOM Reordering)
+                if (sortSelect.value === 'newest') {
+                    items.forEach(item => listContainer.appendChild(item));
+                } else {
+                    [...items].reverse().forEach(item => listContainer.appendChild(item));
+                }
             }
+
+            // ============================================================
+            // 3. EVENT LISTENERS
+            // ============================================================
+            
+            // Pills (Navigation)
+            pills.forEach(pill => {
+                pill.addEventListener('click', () => {
+                    // Reset UI state for all pills
+                    pills.forEach(p => {
+                        p.classList.remove('bg-[#0b1d3a]', 'text-white', 'shadow-sm');
+                        p.classList.add('bg-slate-50', 'text-slate-600', 'hover:bg-slate-100', 'border-transparent', 'hover:border-slate-200');
+                    });
+
+                    // Highlight clicked pill
+                    pill.classList.remove('bg-slate-50', 'text-slate-600', 'hover:bg-slate-100', 'border-transparent', 'hover:border-slate-200');
+                    pill.classList.add('bg-[#0b1d3a]', 'text-white', 'shadow-sm');
+
+                    // Update category & filter
+                    currentCategory = pill.dataset.category;
+                    applyFilters();
+                });
+            });
+
+            // Search input (debounced slightly for performance)
+            let searchTimeout;
+            searchInput.addEventListener('input', () => {
+                clearTimeout(searchTimeout);
+                searchTimeout = setTimeout(applyFilters, 150);
+            });
+
+            // Sort dropdown
+            sortSelect.addEventListener('change', applyFilters);
+
+            // Initial trigger (in case the page loads with a pre-selected filter from PHP)
+            // Note: The PHP loop already rendered the correct visual state, 
+            // but this ensures the DOM count is strictly accurate on load.
+            applyFilters();
+
         })();
     </script>
 @endpush

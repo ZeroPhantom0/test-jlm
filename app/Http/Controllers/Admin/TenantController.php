@@ -46,19 +46,19 @@ class TenantController extends Controller
                 Rule::unique('users', 'email')->ignore($tenant->user_id),
             ],
             'phone'         => ['nullable', 'string', 'max:20'],
-            'move_in'       => ['nullable', 'date'],
-            'move_in_time'  => ['nullable', 'string', 'max:20'],
-            'move_out'      => ['nullable', 'date'],
-            'move_out_time' => ['nullable', 'string', 'max:20'],
+            'check_in'      => ['nullable', 'date'],
+            'check_in_time' => ['nullable', 'string', 'max:20'],
+            'check_out'     => ['nullable', 'date'],
+            'check_out_time'=> ['nullable', 'string', 'max:20'],
             'rent_rate'     => ['nullable', 'numeric', 'min:0'],
             'status'        => ['required', Rule::in(['active', 'inactive'])],
         ]);
 
         // Normalise time strings to 24h "H:i:s" (or null)
-        $moveInTime  = $this->normaliseTime($validated['move_in_time']  ?? null);
-        $moveOutTime = $this->normaliseTime($validated['move_out_time'] ?? null);
+        $checkInTime  = $this->normaliseTime($validated['check_in_time']  ?? null);
+        $checkOutTime = $this->normaliseTime($validated['check_out_time'] ?? null);
 
-        DB::transaction(function () use ($tenant, $validated, $moveInTime, $moveOutTime) {
+        DB::transaction(function () use ($tenant, $validated, $checkInTime, $checkOutTime) {
             // 1. users table
             if ($tenant->user) {
                 $tenant->user->update([
@@ -77,10 +77,10 @@ class TenantController extends Controller
             // 3. reservation table (source of truth for lease dates)
             if ($tenant->approvedReservation) {
                 $tenant->approvedReservation->update([
-                    'check_in'       => $validated['move_in']  ?? null,
-                    'check_in_time'  => $moveInTime,
-                    'check_out'      => $validated['move_out'] ?? null,
-                    'check_out_time' => $moveOutTime,
+                    'check_in'       => $validated['check_in']  ?? null,
+                    'check_in_time'  => $checkInTime,
+                    'check_out'      => $validated['check_out'] ?? null,
+                    'check_out_time' => $checkOutTime,
                 ]);
             }
         });
