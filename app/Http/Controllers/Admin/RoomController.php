@@ -1,4 +1,5 @@
 <?php
+// app/Http/Controllers/Admin/RoomController.php
 
 namespace App\Http\Controllers\Admin;
 
@@ -18,6 +19,10 @@ class RoomController extends Controller
             ->orderBy('room_number')
             ->get();
 
+        // Run sync on page load to clean up any legacy "Reserved" rooms
+        // that should actually be "Available" or "Occupied".
+        $rooms->each->syncStatus();
+
         $metrics = [
             'total'     => Room::count(),
             'occupied'  => Room::where('status', 'Occupied')->count(),
@@ -31,8 +36,10 @@ class RoomController extends Controller
     public function store(Request $request)
     {
         $data = $this->validated($request);
-
         $room = Room::create($data);
+        
+        // Enforce the strict status rule immediately
+        $room->syncStatus();
 
         return response()->json([
             'success' => true,
@@ -53,7 +60,14 @@ class RoomController extends Controller
     public function update(Request $request, Room $room)
     {
         $data = $this->validated($request, $room->id);
+        
+        // Unset status so the request can't override the rule
+        unset($data['status']); 
+        
         $room->update($data);
+        
+        // Enforce the strict status rule immediately
+        $room->syncStatus();
 
         return response()->json([
             'success' => true,

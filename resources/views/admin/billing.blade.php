@@ -111,7 +111,6 @@
                                 @elseif($inv->status === 'Pending')
                                     <i class="fa-solid fa-circle-check text-emerald-600 text-[15px] cursor-pointer hover:text-emerald-700 transition icon-verify" title="Verify Payment" data-tn="{{ $inv->transaction_no }}"></i>
                                     <i class="fa-solid fa-circle-xmark text-rose-600 text-[15px] cursor-pointer hover:text-rose-700 transition icon-reject" title="Reject Payment" data-tn="{{ $inv->transaction_no }}"></i>
-                                    <i class="fa-solid fa-file-lines text-slate-700 text-[15px] cursor-pointer hover:text-orange-500 transition icon-receipt" title="View Receipt"></i>
                                 @else
                                     <i class="fa-solid fa-bell text-slate-700 text-[15px] cursor-pointer hover:text-orange-500 transition icon-remind" title="Send Reminder"></i>
                                 @endif

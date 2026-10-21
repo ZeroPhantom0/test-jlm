@@ -98,7 +98,6 @@
                                 {{-- CHECK IN --}}
                                 <td class="py-4 px-3.5 text-xs text-slate-700">
                                     <div>
-                                        <i class="fa-regular fa-calendar text-[10px] text-slate-400 mr-1"></i>
                                         {{ $reservation?->check_in ? $reservation->check_in->format('F j, Y') : '—' }}
                                     </div>
                                     <div class="text-slate-500">{{ $tenant->check_in_time_12 }}</div>
@@ -107,7 +106,6 @@
                                 {{-- CHECK OUT --}}
                                 <td class="py-4 px-3.5 text-xs text-slate-700">
                                     <div>
-                                        <i class="fa-regular fa-calendar text-[10px] text-slate-400 mr-1"></i>
                                         {{ $reservation?->check_out ? $reservation->check_out->format('F j, Y') : '—' }}
                                     </div>
                                     <div class="text-slate-500">{{ $tenant->check_out_time_12 }}</div>

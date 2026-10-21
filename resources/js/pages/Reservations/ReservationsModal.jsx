@@ -17,11 +17,15 @@ const FALLBACK_ROOM = {
     img:         'https://images.unsplash.com/photo-1598928506311-c55ded91a20c?auto=format&fit=crop&w=600&q=80',
     pax:         '1-2 pax',
     beds:        '1 bed',
+    total_beds:  1,
     bath:        '1 bath',
     description: 'Cozy room with modern finishes, private CR and city views. Perfect for working professionals and students.',
     estDate:     'March 25, 2026',
     estApprox:   'Approx. 2 days',
     tourId:      null,
+    bed_slots:   [],
+    is_female_only: false,
+    is_male_only: false,
 };
 
 export default function ReservationsModal() {
@@ -45,6 +49,8 @@ export default function ReservationsModal() {
         payment_option: 'half', // 'half' | 'full'
         reference_no:   '',
         receipt:        null,
+        room_bed_id:    '',     // Added for bed selection
+        agreed_to_terms: false, // Added for terms agreement
     });
 
     // ============================================================
@@ -92,6 +98,8 @@ export default function ReservationsModal() {
                     payment_option: 'half',
                     reference_no:   '',
                     receipt:        null,
+                    room_bed_id:    '',
+                    agreed_to_terms: false,
                 });
                 setShowReserve(true);
                 return;
@@ -151,12 +159,23 @@ export default function ReservationsModal() {
             alert('Please select both check-in and check-out dates.');
             return;
         }
+        
+        // Enforce bed selection if it's a shared room
+        if (room.bed_slots && room.bed_slots.length > 0 && !form.room_bed_id) {
+            alert('Please select a bed slot.');
+            return;
+        }
+
         if (!form.reference_no.trim()) {
             alert('Please enter your GCash reference number.');
             return;
         }
         if (!form.receipt) {
             alert('Please upload your payment proof.');
+            return;
+        }
+        if (!form.agreed_to_terms) {
+            alert('Please agree to the Reservation Policy.');
             return;
         }
 
@@ -173,6 +192,8 @@ export default function ReservationsModal() {
             fd.append('payment_option',  form.payment_option);
             fd.append('reference_no',    form.reference_no);
             fd.append('receipt',         form.receipt);
+            fd.append('room_bed_id',     form.room_bed_id);
+            fd.append('agreed_to_terms', form.agreed_to_terms ? '1' : '0');
 
             const res = await fetch('/tenants/reservations', {
                 method: 'POST',
@@ -418,25 +439,85 @@ export default function ReservationsModal() {
                             </p>
                         </div>
 
-                        {/* Solo Room Options */}
-                        <div className="bg-blue-50 rounded-xl p-4">
-                            <div className="flex items-center gap-2 text-[13px] font-bold text-blue-800 mb-3">
-                                <i className="fa-regular fa-user"></i>
-                                Solo Room Options
+                        {/* Bedspace Slot Selection (Renders only if it's a shared room) */}
+                        {room.bed_slots && room.bed_slots.length > 0 && (
+                            <div className="bg-teal-50 border border-teal-100 rounded-xl p-4">
+                                <div className="flex items-center gap-2 text-[14px] font-bold text-teal-800 mb-2">
+                                    <i className="fa-solid fa-bed"></i>
+                                    Bedspace Slot Selection
+                                </div>
+                                
+                                {room.is_female_only && (
+                                    <div className="bg-teal-100/50 text-teal-800 text-[12px] p-2.5 rounded-lg mb-3">
+                                        <strong>Female-Only Dormitory</strong><br/>
+                                        This unit is restricted to female tenants only.
+                                    </div>
+                                )}
+                                {room.is_male_only && (
+                                    <div className="bg-teal-100/50 text-teal-800 text-[12px] p-2.5 rounded-lg mb-3">
+                                        <strong>Male-Only Dormitory</strong><br/>
+                                        This unit is restricted to male tenants only.
+                                    </div>
+                                )}
+
+                                <label className="block text-[12px] font-semibold text-teal-800 mb-2">
+                                    Select Your Bed Slot <span className="text-rose-500">*</span>
+                                </label>
+                                <div className="grid grid-cols-2 gap-2">
+                                    {room.bed_slots.map((slot) => {
+                                        const isSelected = form.room_bed_id === slot.id;
+                                        const isOccupied = slot.status === 'Occupied';
+
+                                        return (
+                                            <button
+                                                key={slot.id}
+                                                type="button"
+                                                disabled={isOccupied}
+                                                onClick={() => updateField('room_bed_id', slot.id)}
+                                                className={`
+                                                    flex flex-col items-start p-3 rounded-lg border text-left transition
+                                                    ${isOccupied 
+                                                        ? 'bg-slate-100 border-slate-200 opacity-60 cursor-not-allowed' 
+                                                        : isSelected
+                                                            ? 'bg-teal-600 border-teal-600 text-white shadow-sm'
+                                                            : 'bg-white border-slate-200 hover:border-teal-400'
+                                                    }
+                                                `}
+                                            >
+                                                <span className={`text-[13px] font-bold ${isSelected ? 'text-white' : 'text-slate-800'}`}>
+                                                    {slot.label}
+                                                </span>
+                                                <span className={`text-[11px] font-semibold mt-0.5 ${isSelected ? 'text-teal-100' : isOccupied ? 'text-rose-500' : 'text-emerald-500'}`}>
+                                                    {slot.status}
+                                                </span>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
                             </div>
-                            <label className="flex items-start gap-2.5 text-[13px] text-blue-800 font-medium cursor-pointer">
-                                <input
-                                    type="checkbox"
-                                    checked={form.has_companion}
-                                    onChange={(e) => updateField('has_companion', e.target.checked)}
-                                    className="w-[18px] h-[18px] accent-blue-700 mt-0.5 cursor-pointer"
-                                />
-                                <span>I will have a companion (max 2 persons total)</span>
-                            </label>
-                            <p className="text-[12px] text-blue-500 ml-7 mt-1">
-                                Extra mattress fee: ₱150.00 per companion
-                            </p>
-                        </div>
+                        )}
+
+                        {/* Solo Room Options (Only appears if total_beds === 1) */}
+                        {room.total_beds === 1 && (
+                            <div className="bg-blue-50 rounded-xl p-4">
+                                <div className="flex items-center gap-2 text-[13px] font-bold text-blue-800 mb-3">
+                                    <i className="fa-regular fa-user"></i>
+                                    Room Options
+                                </div>
+                                <label className="flex items-start gap-2.5 text-[13px] text-blue-800 font-medium cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={form.has_companion}
+                                        onChange={(e) => updateField('has_companion', e.target.checked)}
+                                        className="w-[18px] h-[18px] accent-blue-700 mt-0.5 cursor-pointer"
+                                    />
+                                    <span>I will have a companion (max 2 persons total)</span>
+                                </label>
+                                <p className="text-[12px] text-blue-500 ml-7 mt-1">
+                                    Extra mattress fee: ₱150.00 per companion
+                                </p>
+                            </div>
+                        )}
 
                         {/* Additional Notes */}
                         <div>
@@ -611,6 +692,21 @@ export default function ReservationsModal() {
                                     <strong>Important:</strong> You must upload your payment proof before submitting your reservation. Your payment and reservation will be reviewed by the admin. You will be notified once your reservation is approved or rejected.
                                 </span>
                             </div>
+                        </div>
+
+                        {/* Terms Agreement */}
+                        <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+                            <label className="flex items-start gap-2.5 cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    checked={form.agreed_to_terms}
+                                    onChange={(e) => updateField('agreed_to_terms', e.target.checked)}
+                                    className="w-[18px] h-[18px] accent-slate-800 mt-0.5 cursor-pointer rounded border-slate-300"
+                                />
+                                <span className="text-[12.5px] text-slate-600 leading-relaxed">
+                                    I have read, understood, and agree to the <strong className="text-emerald-600">Reservation Policy</strong>. I understand the deposit, cancellation, and approval terms. <span className="text-rose-500">*</span>
+                                </span>
+                            </label>
                         </div>
 
                         {/* Footer */}

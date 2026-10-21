@@ -23,6 +23,8 @@ const FALLBACK = {
     payment_method: 'Not Set',
     receipt_url: null,
     is_remaining: false,
+    date_paid: null, // Default to null
+    receipt_no: '-',
 };
 
 export default function BillingModals() {
@@ -33,7 +35,6 @@ export default function BillingModals() {
     const [saving, setSaving]           = useState(false);
     const [invoicesData, setInvoicesData] = useState({});
 
-    // Read invoices data from the DOM (passed by Blade)
     useEffect(() => {
         const el = document.getElementById('admin-billing-modals');
         if (el?.dataset?.invoices) {
@@ -45,9 +46,6 @@ export default function BillingModals() {
         }
     }, []);
 
-    // ============================================================
-    // Event delegation — one listener for every icon in the table
-    // ============================================================
     useEffect(() => {
         const handleClick = (e) => {
             const editBtn    = e.target.closest('.icon-edit');
@@ -81,9 +79,6 @@ export default function BillingModals() {
         setInvoice(null);
     };
 
-    // ============================================================
-    // Actions — wired to backend
-    // ============================================================
     const handleSendReminder = async (data) => {
         if (!confirm(`Send payment reminder to ${data.tenant}?`)) return;
         try {
@@ -128,7 +123,7 @@ export default function BillingModals() {
 
     const handleVerify = async () => {
         if (!invoice) return;
-        if (!confirm(`Verify payment for ${invoice.tn}? This will mark the invoice as paid.`)) return;
+        if (!confirm(`Verify payment for ${invoice.tn}?`)) return;
 
         try {
             const res = await fetch(`/admin/billing/${invoice.tn}/verify-payment`, {
@@ -173,6 +168,9 @@ export default function BillingModals() {
 
     const data = invoice || FALLBACK;
 
+    // If date_paid is missing, show '-' instead of falling back to due date
+    const displayDatePaid = data.date_paid && data.date_paid !== '-' ? data.date_paid : '-';
+
     const statusBadgeClass = {
         Unpaid:  'bg-amber-100 text-amber-700',
         Overdue: 'bg-rose-100 text-rose-600',
@@ -183,9 +181,6 @@ export default function BillingModals() {
 
     return (
         <>
-            {/* ============================================================ */}
-            {/* MODAL 1: EDIT INVOICE */}
-            {/* ============================================================ */}
             {showEdit && (
                 <EditInvoiceModal
                     data={data}
@@ -195,9 +190,6 @@ export default function BillingModals() {
                 />
             )}
 
-            {/* ============================================================ */}
-            {/* MODAL 2: INVOICE SUMMARY */}
-            {/* ============================================================ */}
             {showSummary && (
                 <Modal onClose={closeAll} maxWidth="max-w-[520px]">
                     <div className="p-5 pb-4 flex items-center justify-between border-b border-slate-100">
@@ -231,33 +223,91 @@ export default function BillingModals() {
                             <div className="bg-slate-50 rounded-xl p-3"><div className="text-[11px] text-slate-400">Amount Paid</div><div className="text-[13px] font-bold text-slate-900 mt-0.5">{data.paid}</div></div>
                             <div className="bg-slate-50 rounded-xl p-3"><div className="text-[11px] text-slate-400">Balance</div><div className="text-[13px] font-bold text-slate-900 mt-0.5">{data.balance}</div></div>
                             <div className="bg-slate-50 rounded-xl p-3 col-span-2"><div className="text-[11px] text-slate-400">Due Date</div><div className="text-[13px] font-bold text-slate-900 mt-0.5">{data.due}</div></div>
+                            
+                            {/* Always show for Pending, Partial, Overdue, and Paid */}
+                            {['Pending', 'Partial', 'Overdue', 'Paid'].includes(data.status) && (
+                                <>
+                                    <div className="bg-slate-50 rounded-xl p-3 col-span-1"><div className="text-[11px] text-slate-400">Payment Method</div><div className="text-[13px] font-bold text-blue-700 mt-0.5 uppercase">{data.payment_method || '-'}</div></div>
+                                    <div className="bg-slate-50 rounded-xl p-3 col-span-1"><div className="text-[11px] text-slate-400">Date Paid</div><div className="text-[13px] font-bold text-slate-900 mt-0.5">{displayDatePaid}</div></div>
+                                </>
+                            )}
                         </div>
 
-                        <div className="text-[13px] font-bold text-slate-900 mt-1">Payments:</div>
+                        {data.status === 'Pending' && (
+                            <>
+                                <div className="text-[13px] font-bold text-slate-900 mt-1">Proof of Payment:</div>
+                                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+                                    <div className="text-xs font-semibold text-slate-700 mb-2">1 Attachment</div>
+                                    {data.receipt_url ? (
+                                        <a href={data.receipt_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 border border-slate-200 bg-white rounded-lg p-3 text-[13px] text-slate-700 hover:bg-slate-100 transition">
+                                            <i className="fa-solid fa-file text-blue-500"></i>
+                                            Proof of Payment - {data.tenant.split(' ')[0].toUpperCase()}.png
+                                        </a>
+                                    ) : (
+                                        <div className="text-xs text-slate-400 italic">No image uploaded</div>
+                                    )}
+                                </div>
+                                <div className="text-[13px] font-bold text-slate-900 mt-2">Tenant Note:</div>
+                                <div className="text-[13px] text-slate-600 mt-1">{data.tenant_note || 'Transferred via ' + data.payment_method + '. Please verify.'}</div>
+                            </>
+                        )}
 
-                        <div className="bg-[#02122b] text-white rounded-xl p-4 flex flex-col gap-2.5">
-                            <div className="flex justify-between text-xs"><span className="text-slate-400">Payment #</span><span className="font-semibold">-</span></div>
-                            <div className="flex justify-between text-xs"><span className="text-slate-400">Amount</span><span className="font-semibold">{data.paid}</span></div>
-                            <div className="flex justify-between text-xs"><span className="text-slate-400">Payment Method</span><span className="font-semibold">{data.payment_method}</span></div>
-                            <div className="flex justify-between text-xs"><span className="text-slate-400">Date Paid</span><span className="font-semibold">-</span></div>
-                        </div>
+                        {data.status === 'Partial' && data.receipt_url && (
+                            <>
+                                <div className="text-[13px] font-bold text-slate-900 mt-1">Proof of Payment:</div>
+                                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+                                    <div className="text-xs font-semibold text-slate-700 mb-2">Verified Attachment</div>
+                                    <a href={data.receipt_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 border border-slate-200 bg-white rounded-lg p-3 text-[13px] text-slate-700 hover:bg-slate-100 transition">
+                                        <i className="fa-solid fa-file text-blue-500"></i>
+                                        Proof of Payment - {data.tenant.split(' ')[0].toUpperCase()}.png
+                                    </a>
+                                </div>
+                            </>
+                        )}
+
+                        {['Pending', 'Partial', 'Unpaid', 'Paid', 'Overdue'].includes(data.status) && (
+                            <>
+                                <div className="text-[13px] font-bold text-slate-900 mt-1">Payments:</div>
+                                <div className="bg-[#02122b] text-white rounded-xl p-4 flex flex-col gap-3">
+                                    <div className="flex justify-between text-xs">
+                                        <span className="text-slate-400">Payment #</span>
+                                        <span className="font-semibold">{data.receipt_no || '-'}</span>
+                                    </div>
+                                    <div className="flex justify-between text-xs">
+                                        <span className="text-slate-400">Amount</span>
+                                        <span className="font-semibold">{data.status === 'Unpaid' ? '₱0' : data.paid}</span>
+                                    </div>
+                                    <div className="flex justify-between text-xs">
+                                        <span className="text-slate-400">Payment Method</span>
+                                        <span className="font-semibold">{data.status === 'Unpaid' ? '-' : data.payment_method}</span>
+                                    </div>
+                                    <div className="flex justify-between text-xs">
+                                        <span className="text-slate-400">Date Paid</span>
+                                        <span className="font-semibold">{displayDatePaid}</span>
+                                    </div>
+                                </div>
+                            </>
+                        )}
                     </div>
+                    
                     <div className="p-5 border-t border-slate-100 flex justify-between">
-                        <button onClick={closeAll} className="bg-[#02122b] text-white px-5 py-2.5 rounded-lg text-[13px] font-semibold">Close</button>
+                        <button onClick={closeAll} className="bg-[#02122b] text-white px-5 py-2.5 rounded-lg text-[13px] font-semibold hover:bg-slate-800 transition">
+                            Close
+                        </button>
 
                         {data.status === 'Pending' && (
                             <div className="flex gap-2">
                                 <button
-                                    onClick={handleReject}
-                                    className="bg-rose-500 hover:bg-rose-600 text-white px-4 py-2.5 rounded-lg text-[13px] font-semibold"
+                                    onClick={handleVerify}
+                                    className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-lg text-[13px] font-semibold transition"
                                 >
-                                    Reject
+                                    Approve
                                 </button>
                                 <button
-                                    onClick={handleVerify}
-                                    className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-lg text-[13px] font-semibold"
+                                    onClick={handleReject}
+                                    className="bg-rose-500 hover:bg-rose-600 text-white px-4 py-2.5 rounded-lg text-[13px] font-semibold transition"
                                 >
-                                    Verify Payment
+                                    Reject
                                 </button>
                             </div>
                         )}
@@ -265,9 +315,6 @@ export default function BillingModals() {
                 </Modal>
             )}
 
-            {/* ============================================================ */}
-            {/* MODAL 3: PAYMENT RECEIPT */}
-            {/* ============================================================ */}
             {showReceipt && (
                 <Modal onClose={closeAll} maxWidth="max-w-[520px]">
                     <div className="p-5 pb-4 flex items-center justify-between border-b border-slate-100">
@@ -286,7 +333,7 @@ export default function BillingModals() {
                                 <p className="text-[11px] text-orange-600 font-semibold">JLM Cozy Cabin</p>
                             </div>
                             <div className="text-sm font-semibold text-slate-600">Transaction No. {data.tn.toUpperCase()}</div>
-                            <div className="text-[11px] text-slate-400">Date of Issue: {data.due}</div>
+                            <div className="text-[11px] text-slate-400">Date of Issue: {displayDatePaid}</div>
 
                             <div className="w-full border-t border-slate-100 pt-3 flex flex-col gap-2">
                                 {[
@@ -311,10 +358,10 @@ export default function BillingModals() {
 
                             <div className="w-full border-t border-dashed border-slate-200 pt-3 flex flex-col gap-2">
                                 <div className="text-xs font-bold text-slate-900 mb-1">Payment Details:</div>
-                                <div className="flex justify-between text-xs"><span className="text-slate-500">Payment #</span><span className="text-slate-900 font-bold">REF-{data.tn.toUpperCase()}</span></div>
+                                <div className="flex justify-between text-xs"><span className="text-slate-500">Payment #</span><span className="text-slate-900 font-bold">{data.receipt_no || '-'}</span></div>
                                 <div className="flex justify-between text-xs"><span className="text-slate-500">Payment Method</span><span className="text-slate-900 font-bold">{data.payment_method}</span></div>
                                 <div className="flex justify-between text-xs"><span className="text-slate-500">Amount Paid</span><span className="text-slate-900 font-bold">{data.paid}</span></div>
-                                <div className="flex justify-between text-xs"><span className="text-slate-500">Date Paid</span><span className="text-slate-900 font-bold">{data.due}</span></div>
+                                <div className="flex justify-between text-xs"><span className="text-slate-500">Date Paid</span><span className="text-slate-900 font-bold">{displayDatePaid}</span></div>
                             </div>
 
                             {data.receipt_url && (
@@ -344,9 +391,6 @@ export default function BillingModals() {
     );
 }
 
-/* ============================================================
-   Edit Invoice Modal
-   ============================================================ */
 function EditInvoiceModal({ data, onClose, onSave, saving }) {
     const [form, setForm] = useState({
         tenant_name:    data.tenant,

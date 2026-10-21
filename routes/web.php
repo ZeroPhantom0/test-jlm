@@ -6,6 +6,9 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\LandingController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\PublicTourViewerController;
+
+// Admin Controllers
+use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\RoomController;
 use App\Http\Controllers\Admin\TenantController;
 use App\Http\Controllers\Admin\VirtualTourController;
@@ -20,6 +23,8 @@ use App\Http\Controllers\Admin\AnnouncementController;
 use App\Http\Controllers\Admin\HistoryController;
 use App\Http\Controllers\Admin\ReportsController;
 use App\Http\Controllers\Admin\MessageController;
+
+// Tenant Controllers
 use App\Http\Controllers\Tenant\TenantDashboardController;
 use App\Http\Controllers\Tenant\TenantBillingController;
 use App\Http\Controllers\Tenant\TenantMaintenanceController;
@@ -29,6 +34,7 @@ use App\Http\Controllers\Tenant\TenantAnnouncementController;
 use App\Http\Controllers\Tenant\TenantHistoryController;
 use App\Http\Controllers\Tenant\TenantMessageController;
 use App\Http\Controllers\Tenant\TenantReservationController;
+
 use App\Models\TourScene;
 use App\Models\VirtualTour;
 
@@ -135,7 +141,7 @@ Route::middleware('auth')->prefix('tenants')->name('tenants.')->group(function (
 Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(function () {
 
     // ---------- Dashboard ----------
-    Route::view('/', 'admin.dashboard')->name('dashboard');
+    Route::get('/', [DashboardController::class, 'index'])->name('dashboard');
 
     // ---------- Rooms CRUD ----------
     Route::get('/rooms',           [RoomController::class, 'index'])->name('rooms');

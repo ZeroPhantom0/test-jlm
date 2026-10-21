@@ -16,12 +16,16 @@ class BillingController extends Controller
 
     /**
      * Display the billing & payments list.
+     * 
+     * Paid invoices are hidden because they are archived in the System History.
      */
     public function index(Request $request)
     {
         $filters = $request->only(['search', 'status', 'payment_method']);
 
+        // Hide Paid invoices — they are moved to History.
         $invoices = Invoice::filter($filters)
+            ->where('status', '!=', 'Paid')
             ->latest()
             ->get();
 
@@ -81,6 +85,7 @@ class BillingController extends Controller
             'balance'        => $balance,
             'status'         => $status,
             'payment_method' => $validated['payment_method'] ?? 'Not Set',
+            'date_paid'      => $status === 'Paid' ? now()->toDateString() : null,
         ]);
 
         return response()->json([
@@ -215,10 +220,12 @@ class BillingController extends Controller
             'admin_notes' => ['nullable', 'string'],
         ]);
 
+        $balance = max(0, $invoice->total_amount - $invoice->amount_paid);
+        $newStatus = ($balance <= 0.005) ? 'Paid' : 'Partial';
+
         $invoice->update([
-            'amount_paid' => $invoice->total_amount,
-            'balance'     => 0,
-            'status'      => 'Paid',
+            'balance'     => $balance,
+            'status'      => $newStatus,
             'date_paid'   => now()->toDateString(),
             'receipt_no'  => $invoice->receipt_no
                 ?? 'OTC-' . now()->format('Ymd') . '-' . str_pad($invoice->id, 4, '0', STR_PAD_LEFT),
@@ -228,7 +235,7 @@ class BillingController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Payment verified and invoice marked as paid.',
+            'message' => 'Payment verified successfully.',
             'data'    => $invoice->fresh()->toReactArray(),
         ]);
     }
@@ -255,6 +262,7 @@ class BillingController extends Controller
         $invoice->update([
             'status'       => $invoice->amount_paid > 0 ? 'Partial' : 'Unpaid',
             'receipt_path' => null,
+            'date_paid'    => null,
         ]);
 
         return response()->json([

@@ -5,6 +5,12 @@
 @php
     $fmt = fn ($n) => '₱' . number_format((float) $n, 0);
     $pct = fn ($n) => number_format((float) $n, 1);
+    $rangeLabels = [
+        'daily' => 'Today',
+        'weekly' => 'This Week',
+        'monthly' => 'This Month',
+        'yearly' => 'This Year',
+    ];
 @endphp
 <div class="p-4 md:p-8 max-w-[1400px] mx-auto space-y-5">
 
@@ -21,22 +27,24 @@
         </div>
 
         <div class="flex items-center gap-2.5 flex-wrap">
-
+            
             {{-- Date-range dropdown --}}
-            <div class="relative" data-dropdown="range">
+            <form method="GET" action="{{ route('admin.reports') }}" id="range-form" class="relative" data-dropdown="range">
+                <input type="hidden" name="range" id="range-input" value="{{ $range }}">
                 <button type="button"
                     class="js-dropdown-toggle bg-white border border-slate-300 rounded-[10px] px-3.5 py-2 text-[13px] font-medium text-slate-700 flex items-center gap-2 hover:bg-slate-50 transition">
                     <i class="fa-regular fa-calendar text-slate-500"></i>
-                    <span id="range-label">Last 6 Months</span>
+                    <span id="range-label">{{ $rangeLabels[$range] ?? 'This Month' }}</span>
                     <i class="fa-solid fa-chevron-down text-[10px] text-slate-400"></i>
                 </button>
                 <div class="js-dropdown-menu hidden absolute right-0 mt-2 w-44 bg-white border border-slate-200 rounded-xl shadow-lg p-1.5 z-[2000]">
-                    <button type="button" class="range-option w-full text-left px-3 py-2 rounded-lg text-[13px] text-slate-700 hover:bg-slate-100">Daily</button>
-                    <button type="button" class="range-option w-full text-left px-3 py-2 rounded-lg text-[13px] text-slate-700 hover:bg-slate-100">Weekly</button>
-                    <button type="button" class="range-option w-full text-left px-3 py-2 rounded-lg text-[13px] text-slate-700 hover:bg-slate-100">Monthly</button>
-                    <button type="button" class="range-option w-full text-left px-3 py-2 rounded-lg text-[13px] text-slate-700 hover:bg-slate-100">Yearly</button>
+                    @foreach (['daily', 'weekly', 'monthly', 'yearly'] as $r)
+                        <button type="button" data-range="{{ $r }}" class="range-option w-full text-left px-3 py-2 rounded-lg text-[13px] text-slate-700 hover:bg-slate-100 {{ $range === $r ? 'bg-slate-100 font-bold' : '' }}">
+                            {{ $rangeLabels[$r] }}
+                        </button>
+                    @endforeach
                 </div>
-            </div>
+            </form>
 
             {{-- Export dropdown --}}
             <div class="relative" data-dropdown="export">
@@ -82,10 +90,10 @@
     {{-- 4 Metric Cards --}}
     <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div class="bg-emerald-50 border border-emerald-200 rounded-2xl px-4 py-4">
-            <div class="text-xs font-semibold text-emerald-600">Total Revenue ({{ now()->format('M') }})</div>
+            <div class="text-xs font-semibold text-emerald-600">Total Revenue ({{ $rangeLabels[$range] ?? 'This Month' }})</div>
             <div class="text-[26px] font-extrabold text-emerald-600 leading-tight mt-2">{{ $fmt($summary['revenue']) }}</div>
             <div class="text-[11.5px] text-emerald-500 mt-2">
-                {{ $summary['revenue_change'] >= 0 ? '+' : '' }}{{ $pct($summary['revenue_change']) }}% vs last month
+                {{ $summary['revenue_change'] >= 0 ? '+' : '' }}{{ $pct($summary['revenue_change']) }}% vs last period
             </div>
         </div>
         <div class="bg-sky-50 border border-sky-200 rounded-2xl px-4 py-4">
@@ -128,8 +136,8 @@
         {{-- TAB 1: OCCUPANCY --}}
         {{-- ============================================ --}}
         <div class="reports-panel p-6" id="panel-occupancy">
-            <h3 class="text-base font-bold text-slate-900">Monthly Occupancy Trend</h3>
-            <p class="text-xs text-slate-500 mt-0.5 mb-5">Number of rooms by status per month</p>
+            <h3 class="text-base font-bold text-slate-900">Occupancy Trend ({{ $rangeLabels[$range] ?? 'This Month' }})</h3>
+            <p class="text-xs text-slate-500 mt-0.5 mb-5">Number of rooms by status</p>
 
             <div class="flex items-center justify-center gap-5 text-xs text-slate-500 mb-4">
                 <div class="flex items-center gap-1.5"><div class="w-2.5 h-2.5 rounded-sm bg-emerald-500"></div> Occupied</div>
@@ -137,17 +145,20 @@
                 <div class="flex items-center gap-1.5"><div class="w-2.5 h-2.5 rounded-sm bg-slate-200"></div> Vacant</div>
             </div>
 
-            <div class="flex items-end justify-around h-[180px] border-b border-dashed border-slate-300 pl-6 gap-3">
-                @foreach ($occupancyTrend as $bar)
-                <div class="flex flex-col items-center gap-2">
-                    <div class="w-[50px] h-[160px] flex flex-col justify-end rounded-md overflow-hidden">
-                        <div class="w-full bg-slate-200" style="height: {{ $bar['vacant'] }}%"></div>
-                        <div class="w-full bg-indigo-500" style="height: {{ $bar['reserved'] }}%"></div>
-                        <div class="w-full bg-emerald-500" style="height: {{ $bar['occupied'] }}%"></div>
+            {{-- Scrollable container for the chart --}}
+            <div class="overflow-x-auto pb-4">
+                <div class="flex items-end justify-around min-w-[800px] h-[180px] border-b border-dashed border-slate-300 pl-6 gap-3">
+                    @foreach ($occupancyTrend as $bar)
+                    <div class="flex flex-col items-center gap-2 shrink-0">
+                        <div class="w-[40px] h-[160px] flex flex-col justify-end rounded-md overflow-hidden">
+                            <div class="w-full bg-slate-200" style="height: {{ $bar['vacant'] }}%"></div>
+                            <div class="w-full bg-indigo-500" style="height: {{ $bar['reserved'] }}%"></div>
+                            <div class="w-full bg-emerald-500" style="height: {{ $bar['occupied'] }}%"></div>
+                        </div>
+                        <span class="text-[11px] text-slate-500 whitespace-nowrap">{{ $bar['label'] }}</span>
                     </div>
-                    <span class="text-[11px] text-slate-500">{{ $bar['label'] }}</span>
+                    @endforeach
                 </div>
-                @endforeach
             </div>
 
             <div class="mt-8">
@@ -185,7 +196,7 @@
         {{-- TAB 2: REVENUE --}}
         {{-- ============================================ --}}
         <div class="reports-panel p-6 hidden" id="panel-revenue">
-            <h3 class="text-base font-bold text-slate-900">Monthly Revenue Breakdown</h3>
+            <h3 class="text-base font-bold text-slate-900">Revenue Breakdown ({{ $rangeLabels[$range] ?? 'This Month' }})</h3>
             <p class="text-xs text-slate-500 mt-0.5 mb-5">Rent, utilities and other income in ₱</p>
 
             @php
@@ -201,17 +212,19 @@
                 <div class="flex items-center gap-1.5"><div class="w-2.5 h-2.5 rounded-sm bg-amber-500"></div> Other</div>
             </div>
 
-            <div class="flex items-end justify-around h-[180px] border-b border-dashed border-slate-300 pl-9 gap-3">
-                @foreach ($revenueBreakdown as $bar)
-                <div class="flex flex-col items-center gap-2">
-                    <div class="flex items-end gap-1 h-[160px]">
-                        <div class="w-3.5 rounded-t-sm bg-emerald-500" style="height: {{ ($bar['rent'] / $revMax) * 100 }}%"></div>
-                        <div class="w-3.5 rounded-t-sm bg-indigo-500" style="height: {{ ($bar['util'] / $revMax) * 100 }}%"></div>
-                        <div class="w-3.5 rounded-t-sm bg-amber-500"  style="height: {{ ($bar['other'] / $revMax) * 100 }}%"></div>
+            <div class="overflow-x-auto pb-4">
+                <div class="flex items-end justify-around min-w-[800px] h-[180px] border-b border-dashed border-slate-300 pl-9 gap-3">
+                    @foreach ($revenueBreakdown as $bar)
+                    <div class="flex flex-col items-center gap-2 shrink-0">
+                        <div class="flex items-end gap-1 h-[160px]">
+                            <div class="w-3.5 rounded-t-sm bg-emerald-500" style="height: {{ ($bar['rent'] / $revMax) * 100 }}%"></div>
+                            <div class="w-3.5 rounded-t-sm bg-indigo-500" style="height: {{ ($bar['util'] / $revMax) * 100 }}%"></div>
+                            <div class="w-3.5 rounded-t-sm bg-amber-500"  style="height: {{ ($bar['other'] / $revMax) * 100 }}%"></div>
+                        </div>
+                        <span class="text-[11px] text-slate-500 whitespace-nowrap">{{ $bar['label'] }}</span>
                     </div>
-                    <span class="text-[11px] text-slate-500">{{ $bar['label'] }}</span>
+                    @endforeach
                 </div>
-                @endforeach
             </div>
 
             <div class="mt-8">
@@ -220,7 +233,7 @@
                     <table class="w-full text-left text-[13px]">
                         <thead>
                             <tr class="bg-slate-50 text-[11px] text-slate-500 uppercase tracking-wide">
-                                <th class="py-3 px-4">Month</th>
+                                <th class="py-3 px-4">Period</th>
                                 <th class="py-3 px-4">Rent</th>
                                 <th class="py-3 px-4">Utilities</th>
                                 <th class="py-3 px-4">Other</th>
@@ -263,59 +276,61 @@
         {{-- TAB 3: SERVICE REQUESTS --}}
         {{-- ============================================ --}}
         <div class="reports-panel p-6 hidden" id="panel-service">
-            <h3 class="text-base font-bold text-slate-900">Monthly Service Requests by Category</h3>
+            <h3 class="text-base font-bold text-slate-900">Service Requests by Category ({{ $rangeLabels[$range] ?? 'This Month' }})</h3>
             <p class="text-xs text-slate-500 mt-0.5 mb-5">Breakdown of maintenance issues reported</p>
 
-            <div class="flex flex-col gap-4 mt-3">
-                <div class="relative h-[200px] pl-10 flex flex-col justify-end">
-                    <div class="absolute top-0 left-10 right-0 bottom-0 flex flex-col justify-between pointer-events-none">
-                        <div class="w-full border-b border-dashed border-slate-100"></div>
-                        <div class="w-full border-b border-dashed border-slate-100"></div>
-                        <div class="w-full border-b border-dashed border-slate-100"></div>
-                        <div class="w-full border-b border-dashed border-slate-300"></div>
-                    </div>
+            <div class="overflow-x-auto pb-4">
+                <div class="flex flex-col gap-4 mt-3 min-w-[800px]">
+                    <div class="relative h-[200px] pl-10 flex flex-col justify-end">
+                        <div class="absolute top-0 left-10 right-0 bottom-0 flex flex-col justify-between pointer-events-none">
+                            <div class="w-full border-b border-dashed border-slate-100"></div>
+                            <div class="w-full border-b border-dashed border-slate-100"></div>
+                            <div class="w-full border-b border-dashed border-slate-100"></div>
+                            <div class="w-full border-b border-dashed border-slate-300"></div>
+                        </div>
 
-                    <div class="absolute left-0 -top-1.5 bottom-0 flex flex-col justify-between text-[11px] text-slate-400">
-                        <span>{{ $serviceMax }}</span>
-                        <span>{{ round($serviceMax * 2 / 3) }}</span>
-                        <span>{{ round($serviceMax / 3) }}</span>
-                        <span>0</span>
-                    </div>
+                        <div class="absolute left-0 -top-1.5 bottom-0 flex flex-col justify-between text-[11px] text-slate-400">
+                            <span>{{ $serviceMax }}</span>
+                            <span>{{ round($serviceMax * 2 / 3) }}</span>
+                            <span>{{ round($serviceMax / 3) }}</span>
+                            <span>0</span>
+                        </div>
 
-                    <div class="flex items-end justify-around h-full relative z-10">
-                        @foreach ($serviceByCategory as $month)
-                            <div class="flex flex-col items-center h-full justify-end">
-                                <div class="flex items-end gap-1.5 h-full">
-                                    <div class="w-3.5 rounded-t-sm transition-opacity hover:opacity-85"
-                                         style="background:#6366f1; height: {{ ($month['plumbing'] / $serviceMax) * 100 }}%;"
-                                         title="Plumbing: {{ $month['plumbing'] }}"></div>
-                                    <div class="w-3.5 rounded-t-sm transition-opacity hover:opacity-85"
-                                         style="background:#f59e0b; height: {{ ($month['electrical'] / $serviceMax) * 100 }}%;"
-                                         title="Electrical: {{ $month['electrical'] }}"></div>
-                                    <div class="w-3.5 rounded-t-sm transition-opacity hover:opacity-85"
-                                         style="background:#10b981; height: {{ ($month['hvac'] / $serviceMax) * 100 }}%;"
-                                         title="HVAC: {{ $month['hvac'] }}"></div>
-                                    <div class="w-3.5 rounded-t-sm transition-opacity hover:opacity-85"
-                                         style="background:#94a3b8; height: {{ ($month['general'] / $serviceMax) * 100 }}%;"
-                                         title="General: {{ $month['general'] }}"></div>
+                        <div class="flex items-end justify-around h-full relative z-10 gap-2">
+                            @foreach ($serviceByCategory as $period)
+                                <div class="flex flex-col items-center h-full justify-end shrink-0">
+                                    <div class="flex items-end gap-1.5 h-full">
+                                        <div class="w-3.5 rounded-t-sm transition-opacity hover:opacity-85"
+                                             style="background:#6366f1; height: {{ ($period['plumbing'] / $serviceMax) * 100 }}%;"
+                                             title="Plumbing: {{ $period['plumbing'] }}"></div>
+                                        <div class="w-3.5 rounded-t-sm transition-opacity hover:opacity-85"
+                                             style="background:#f59e0b; height: {{ ($period['electrical'] / $serviceMax) * 100 }}%;"
+                                             title="Electrical: {{ $period['electrical'] }}"></div>
+                                        <div class="w-3.5 rounded-t-sm transition-opacity hover:opacity-85"
+                                             style="background:#10b981; height: {{ ($period['hvac'] / $serviceMax) * 100 }}%;"
+                                             title="HVAC: {{ $period['hvac'] }}"></div>
+                                        <div class="w-3.5 rounded-t-sm transition-opacity hover:opacity-85"
+                                             style="background:#94a3b8; height: {{ ($period['general'] / $serviceMax) * 100 }}%;"
+                                             title="General: {{ $period['general'] }}"></div>
+                                    </div>
                                 </div>
-                            </div>
+                            @endforeach
+                        </div>
+                    </div>
+
+                    <div class="flex justify-around pl-10">
+                        @foreach ($serviceByCategory as $period)
+                            <span class="text-[11px] text-slate-500 font-medium text-center w-20 shrink-0">{{ $period['label'] }}</span>
                         @endforeach
                     </div>
                 </div>
+            </div>
 
-                <div class="flex justify-around pl-10">
-                    @foreach ($serviceByCategory as $month)
-                        <span class="text-[11px] text-slate-500 font-medium text-center w-20">{{ $month['label'] }}</span>
-                    @endforeach
-                </div>
-
-                <div class="flex items-center justify-center gap-5 text-xs text-slate-500 mt-4">
-                    <div class="flex items-center gap-1.5"><div class="w-2.5 h-2.5 rounded-sm" style="background:#6366f1;"></div> Plumbing</div>
-                    <div class="flex items-center gap-1.5"><div class="w-2.5 h-2.5 rounded-sm" style="background:#f59e0b;"></div> Electrical</div>
-                    <div class="flex items-center gap-1.5"><div class="w-2.5 h-2.5 rounded-sm" style="background:#10b981;"></div> HVAC</div>
-                    <div class="flex items-center gap-1.5"><div class="w-2.5 h-2.5 rounded-sm" style="background:#94a3b8;"></div> General</div>
-                </div>
+            <div class="flex items-center justify-center gap-5 text-xs text-slate-500 mt-4">
+                <div class="flex items-center gap-1.5"><div class="w-2.5 h-2.5 rounded-sm" style="background:#6366f1;"></div> Plumbing</div>
+                <div class="flex items-center gap-1.5"><div class="w-2.5 h-2.5 rounded-sm" style="background:#f59e0b;"></div> Electrical</div>
+                <div class="flex items-center gap-1.5"><div class="w-2.5 h-2.5 rounded-sm" style="background:#10b981;"></div> HVAC</div>
+                <div class="flex items-center gap-1.5"><div class="w-2.5 h-2.5 rounded-sm" style="background:#94a3b8;"></div> General</div>
             </div>
         </div>
 
@@ -335,7 +350,7 @@
                 <div class="flex flex-col items-center justify-center gap-5">
                     <div>
                         <h3 class="text-base font-bold text-slate-900 text-center">Payment Methods Distribution</h3>
-                        <p class="text-xs text-slate-500 mt-0.5 mb-5 text-center">Percentage of payments by method</p>
+                        <p class="text-xs text-slate-500 mt-0.5 mb-5 text-center">Percentage of payments by method ({{ $rangeLabels[$range] ?? 'This Month' }})</p>
                     </div>
 
                     <div class="w-[180px] h-[180px] rounded-full relative flex items-center justify-center"
@@ -415,7 +430,7 @@
         document.getElementById('panel-' + tab.dataset.tab).classList.remove('hidden');
     }));
 
-    /* -------------------- Dropdowns (UI only) -------------------- */
+    /* -------------------- Dropdowns -------------------- */
     document.querySelectorAll('[data-dropdown]').forEach(wrap => {
         const toggle = wrap.querySelector('.js-dropdown-toggle');
         const menu   = wrap.querySelector('.js-dropdown-menu');
@@ -431,6 +446,55 @@
 
     document.addEventListener('click', () => {
         document.querySelectorAll('.js-dropdown-menu').forEach(m => m.classList.add('hidden'));
+    });
+
+    /* -------------------- Range Filter -------------------- */
+    document.querySelectorAll('.range-option').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            const range = btn.dataset.range;
+            document.getElementById('range-input').value = range;
+            document.getElementById('range-form').submit();
+        });
+    });
+
+    /* -------------------- Export CSV -------------------- */
+    document.getElementById('export-csv').addEventListener('click', () => {
+        const activeTab = document.querySelector('.reports-tab-btn.active')?.dataset.tab || 'occupancy';
+        let csvContent = "data:text/csv;charset=utf-8,";
+        
+        if (activeTab === 'revenue') {
+            csvContent += "Period,Rent,Utilities,Other,Total\n";
+            document.querySelectorAll('#panel-revenue tbody tr').forEach(row => {
+                const cols = row.querySelectorAll('td');
+                if (cols.length >= 5) {
+                    const rowData = Array.from(cols).map(c => `"${c.innerText.replace(/,/g, '')}"`).join(",");
+                    csvContent += rowData + "\n";
+                }
+            });
+        } else if (activeTab === 'occupancy') {
+            csvContent += "Room Type,Occupied,Reserved,Vacant,Total\n";
+            document.querySelectorAll('#panel-occupancy tbody tr').forEach(row => {
+                const cols = row.querySelectorAll('td');
+                if (cols.length >= 5) {
+                    const rowData = Array.from(cols).map(c => `"${c.innerText.trim()}"`).join(",");
+                    csvContent += rowData + "\n";
+                }
+            });
+        }
+
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", `report_${activeTab}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    });
+
+    /* -------------------- Export PDF (Placeholder) -------------------- */
+    document.getElementById('export-pdf').addEventListener('click', () => {
+        window.print();
     });
 })();
 </script>

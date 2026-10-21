@@ -31,6 +31,21 @@ main {
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
 /* ============================================================
+   BROWSER PASSWORD ICON FIX
+   (Hides default Edge/Safari eye icons so only the custom ones show)
+   ============================================================ */
+input::-ms-reveal,
+input::-ms-clear {
+    display: none !important;
+}
+input::-webkit-credentials-auto-fill-button,
+input::-webkit-strong-password-auto-fill-button {
+    display: none !important;
+    visibility: hidden !important;
+}
+
+
+/* ============================================================
    AUTH + ONBOARDING STYLES
    ============================================================ */
 

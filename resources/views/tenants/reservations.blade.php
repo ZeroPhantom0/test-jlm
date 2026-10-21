@@ -106,11 +106,15 @@
                         'img'         => $room['img'],
                         'pax'         => $room['pax'],
                         'beds'        => $room['beds'],
+                        'total_beds'  => $room['total_beds'], // Added for logic
                         'bath'        => $room['bath'],
                         'description' => $room['desc'],
                         'estDate'     => $room['estDate'],
                         'estApprox'   => $room['estApprox'],
                         'tourId'      => $room['tourId'],
+                        'bed_slots'   => $room['bed_slots'],
+                        'is_female_only' => $room['is_female_only'],
+                        'is_male_only'   => $room['is_male_only'],
                     ]);
                 @endphp
 

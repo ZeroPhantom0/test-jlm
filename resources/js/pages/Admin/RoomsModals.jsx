@@ -382,7 +382,6 @@ export default function RoomsModals() {
                                 >
                                     <option>Available</option>
                                     <option>Occupied</option>
-                                    <option>Reserved</option>
                                 </select>
                             </div>
                             <div>
@@ -453,7 +452,28 @@ export default function RoomsModals() {
                             ))}
                         </div>
 
-                        {room.tenant_name && (
+                        {/* Bed Occupants list */}
+                        {room.bed_configurations && room.bed_configurations.length > 0 && (
+                            <div className="mb-4">
+                                <h4 className="text-sm font-bold text-slate-900 mb-3">Current Bed Occupants</h4>
+                                <div className="grid grid-cols-2 gap-2.5">
+                                    {room.bed_configurations.map((bed, i) => (
+                                        <div key={i} className="bg-emerald-50 border border-emerald-100 rounded-lg p-3 flex items-center gap-3">
+                                            <div className="w-8 h-8 rounded-full bg-emerald-500 text-white flex items-center justify-center font-bold text-xs shrink-0">
+                                                {bed.initial}
+                                            </div>
+                                            <div className="min-w-0">
+                                                <div className="text-[13px] font-bold text-emerald-900 truncate">{bed.name}</div>
+                                                <div className="text-[11px] text-emerald-700 font-medium mt-0.5">{bed.label}</div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Fallback legacy tenant display */}
+                        {(!room.bed_configurations || room.bed_configurations.length === 0) && room.tenant_name && (
                             <div className="bg-emerald-50 rounded-lg p-3.5 flex items-center gap-3 mb-4">
                                 <div className="w-9 h-9 rounded-full bg-emerald-500 text-white flex items-center justify-center font-bold">
                                     {room.tenant_name.charAt(0).toUpperCase()}
@@ -513,7 +533,6 @@ export default function RoomsModals() {
                                 >
                                     <option>Available</option>
                                     <option>Occupied</option>
-                                    <option>Reserved</option>
                                 </select>
                             </div>
 

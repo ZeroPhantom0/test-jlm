@@ -587,11 +587,13 @@ body:has(.landing-page) {
     background: #ffffff;
     scroll-margin-top: 64px;
 }
+
 .rooms-header {
     max-width: 760px;
     margin: 0 auto;
     text-align: center;
 }
+
 .rooms-header h2 {
     margin-bottom: 12px;
     color: #111a30;
@@ -600,6 +602,7 @@ body:has(.landing-page) {
     font-weight: 800;
     letter-spacing: -0.4px;
 }
+
 .rooms-header p {
     max-width: 640px;
     margin: 0 auto;
@@ -622,6 +625,7 @@ body:has(.landing-page) {
     border-radius: 999px;
     background: #f8fafc;
 }
+
 .status-item {
     display: flex;
     align-items: center;
@@ -630,82 +634,92 @@ body:has(.landing-page) {
     font-size: 12.5px;
     font-weight: 500;
 }
+
 .status-dot {
     width: 9px;
     height: 9px;
     border-radius: 50%;
 }
-.status-dot.available {
-    background: #10b981;
-}
-.status-dot.occupied {
-    background: #ff3366;
-}
-.status-dot.reserved {
-    background: #ff9900;
-}
 
-.recommended-heading {
+.status-dot.available { background: #10b981; }
+.status-dot.occupied  { background: #ff3366; }
+.status-dot.reserved  { background: #ff9900; }
+
+/* --- New Category Headers --- */
+.category-header {
     display: flex;
     align-items: center;
-    width: 100%;
-    margin: 26px 0 22px;
-}
-.recommended-label {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex-shrink: 0;
-    padding: 9px 18px;
-    border-radius: 10px;
-    background: #ff8904;
-    color: #ffffff;
-    font-size: 13.5px;
-    font-weight: 700;
-    box-shadow: 0 6px 14px rgba(255, 137, 4, 0.22);
-}
-.recommended-line {
-    height: 1px;
-    flex: 1;
-    margin-left: 14px;
-    background: #dfe4eb;
-}
-
-.rooms-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 26px;
+    gap: 12px;
     max-width: 1200px;
-    margin: 0 auto;
+    margin: 32px auto 20px;
 }
+
+.category-title {
+    margin: 0;
+    color: #111a30;
+    font-size: 16px;
+    font-weight: 800;
+    white-space: nowrap;
+}
+
+.category-line {
+    flex: 1;
+    height: 1px;
+    background: #e2e8f0;
+}
+
+/* --- 3-Column Grid --- */
+.rooms-grid-3 {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+    max-width: 1200px;
+    margin: 0 auto 24px;
+}
+
+/* --- Base Room Card --- */
 .room-card {
     overflow: hidden;
-    border: 1px solid #ff8904;
+    border: 1px solid #e2e8f0;
     border-radius: 16px;
     background: #ffffff;
     box-shadow: 0 4px 14px rgba(0, 0, 0, 0.06);
-    transition:
-        transform 0.22s ease,
-        box-shadow 0.22s ease;
+    transition: transform 0.22s ease, box-shadow 0.22s ease;
     display: flex;
     flex-direction: column;
 }
+
 .room-card:hover {
     transform: translateY(-3px);
     box-shadow: 0 10px 24px rgba(0, 0, 0, 0.1);
 }
 
-/* Bigger Image Area */
+/* --- Compact Card Modifier (Applied in JSX) --- */
+.room-card.compact {
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.room-card.compact:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08);
+}
+
+/* --- Image Area --- */
 .room-image {
     position: relative;
-    height: 320px;
+    height: 320px; /* Default height */
     background: linear-gradient(135deg, #dfe5ec 0%, #c8d1dc 100%);
     overflow: hidden;
     display: block;
 }
-.room-image.clickable {
-    cursor: pointer;
+
+.room-card.compact .room-image {
+    height: 200px; /* Smaller height for 3-col grid */
 }
+
+.room-image.clickable { cursor: pointer; }
+
 .room-image.clickable::after {
     content: "";
     position: absolute;
@@ -713,6 +727,7 @@ body:has(.landing-page) {
     background: rgba(0, 0, 0, 0);
     transition: background 0.2s ease;
 }
+
 .room-image.clickable:hover::after {
     background: rgba(0, 0, 0, 0.1);
 }
@@ -724,10 +739,12 @@ body:has(.landing-page) {
     display: block;
     transition: transform 0.4s ease;
 }
+
 .room-image.clickable:hover .room-thumbnail {
     transform: scale(1.03);
 }
 
+/* --- Badges --- */
 .room-status {
     position: absolute;
     top: 16px;
@@ -743,19 +760,11 @@ body:has(.landing-page) {
     letter-spacing: 0.2px;
     z-index: 2;
 }
-.room-status .bi-circle-fill {
-    font-size: 6px;
-}
-.occupied-status {
-    background: #ff3366;
-}
-.available-status {
-    background: #10b981;
-}
-.reserved-status {
-    background: #ff3366;
-    color: #ffffff;
-}
+
+.room-status .bi-circle-fill { font-size: 6px; }
+.occupied-status  { background: #ff3366; }
+.available-status { background: #10b981; }
+.reserved-status  { background: #ff3366; }
 
 .recommended-tag {
     position: absolute;
@@ -772,6 +781,7 @@ body:has(.landing-page) {
     gap: 6px;
     z-index: 2;
 }
+
 .views {
     position: absolute;
     right: 16px;
@@ -789,13 +799,18 @@ body:has(.landing-page) {
     z-index: 2;
 }
 
-/* Tighter Info Area */
+/* --- Info Area --- */
 .room-info {
     padding: 16px 20px 20px;
     display: flex;
     flex-direction: column;
     flex: 1;
 }
+
+.room-card.compact .room-info {
+    padding: 14px 16px 16px;
+}
+
 .room-title-row {
     display: flex;
     align-items: flex-start;
@@ -803,6 +818,7 @@ body:has(.landing-page) {
     gap: 14px;
     margin-bottom: 8px;
 }
+
 .room-title-row h3 {
     margin: 0 0 3px 0;
     color: #111a30;
@@ -810,10 +826,16 @@ body:has(.landing-page) {
     font-weight: 800;
     letter-spacing: -0.2px;
 }
+
+.room-card.compact .room-title-row h3 {
+    font-size: 16px;
+}
+
 .room-type {
     color: #8a9ab5;
     font-size: 12.5px;
 }
+
 .room-price {
     color: #ff8904;
     font-size: 20px;
@@ -821,6 +843,11 @@ body:has(.landing-page) {
     text-align: right;
     line-height: 1.1;
 }
+
+.room-card.compact .room-price {
+    font-size: 18px;
+}
+
 .room-price span {
     display: block;
     margin-top: 2px;
@@ -828,6 +855,11 @@ body:has(.landing-page) {
     font-size: 11px;
     font-weight: 500;
 }
+
+.room-card.compact .room-price span {
+    font-size: 10px;
+}
+
 .room-details {
     display: flex;
     flex-wrap: wrap;
@@ -836,17 +868,29 @@ body:has(.landing-page) {
     color: #647a9a;
     font-size: 13px;
 }
+
+.room-card.compact .room-details {
+    font-size: 12px;
+    margin-bottom: 10px;
+}
+
 .room-details span {
     display: inline-flex;
     align-items: center;
     gap: 5px;
 }
 
+/* --- Availability Box --- */
 .availability-box {
     padding: 10px 14px;
     border-radius: 10px;
     margin-top: auto;
 }
+
+.room-card.compact .availability-box {
+    padding: 8px 12px;
+}
+
 .availability-box small {
     display: flex;
     align-items: center;
@@ -854,59 +898,51 @@ body:has(.landing-page) {
     margin-bottom: 2px;
     font-size: 11px;
 }
+
 .availability-box strong {
     display: block;
     font-size: 13.5px;
 }
-.occupied-box {
-    border: 1px solid #ffb6c7;
-    background: #fff1f4;
-    color: #d92d5a;
-}
-.available-box {
-    border: 1px solid #10b981;
-    background: #d8f8ea;
-    color: #087f68;
-}
-.reserved-box {
-    border: 1px solid #ffd08a;
-    background: #fff8ec;
-    color: #b25e00;
+
+.room-card.compact .availability-box strong {
+    font-size: 12.5px;
 }
 
-.all-units-heading {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin-top: 40px;
-    margin-bottom: 24px;
-}
-.all-units-label {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    color: #111a30;
-    font-size: 14px;
-    font-weight: 700;
-    white-space: nowrap;
-}
-.all-units-line {
-    flex: 1;
-    height: 1px;
-    background: #d8dee7;
-}
+.occupied-box  { border: 1px solid #ffb6c7; background: #fff1f4; color: #d92d5a; }
+.available-box { border: 1px solid #10b981; background: #d8f8ea; color: #087f68; }
+.reserved-box  { border: 1px solid #ffd08a; background: #fff8ec; color: #b25e00; }
 
+/* --- Empty State --- */
 .rooms-empty {
     text-align: center;
     padding: 56px 20px;
     color: #94a3b8;
     font-size: 13px;
 }
+
 .rooms-empty i {
     font-size: 40px;
     display: block;
     margin-bottom: 10px;
     opacity: 0.5;
+}
+
+/* --- Responsive Grid Adjustments --- */
+@media (max-width: 1024px) {
+    .rooms-grid-3 {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 768px) {
+    .rooms-grid-3 {
+        grid-template-columns: 1fr;
+    }
+    .room-card.compact .room-image {
+        height: 260px; /* Slightly taller on mobile */
+    }
+    .room-card.compact .room-title-row h3 { font-size: 17px; }
+    .room-card.compact .room-price { font-size: 19px; }
 }
 
 /* ============================================================

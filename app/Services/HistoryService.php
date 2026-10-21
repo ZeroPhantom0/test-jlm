@@ -14,23 +14,6 @@ class HistoryService
 {
     /**
      * Build the unified activity timeline.
-     *
-     * Each "event" is normalized to a common shape:
-     *  - category: 'payment' | 'reservation' | 'maintenance' | 'room-change' | 'stay-extension'
-     *  - icon:     FontAwesome class
-     *  - color:    semantic color key (green/blue/purple/red/yellow/gray)
-     *  - title:    short headline
-     *  - tenant:   tenant display name
-     *  - room:     room/bed label
-     *  - desc:     one-line description
-     *  - date:     formatted date string
-     *  - timestamp: raw Carbon timestamp for sorting
-     *  - amount:   optional amount string
-     *  - status:   paid | approved | rejected | completed | cancelled | expired | pending
-     *  - details:  array of ['label' => ..., 'value' => ...] shown in expanded view
-     *
-     * @param  array  $filters  ['search' => string, 'category' => string]
-     * @return Collection
      */
     public function build(array $filters = []): Collection
     {
@@ -66,6 +49,7 @@ class HistoryService
      */
     public function metrics(): array
     {
+        // Only count fully PAID invoices in total payments
         $paidTotal = Invoice::where('status', 'Paid')->sum('amount_paid');
         $paidCount = Invoice::where('status', 'Paid')->count();
 
@@ -85,10 +69,15 @@ class HistoryService
 
     protected function payments(): Collection
     {
-        return Invoice::whereIn('status', ['Paid', 'Partial'])
+        // ONLY fetch fully paid invoices. Pending and Partial are excluded.
+        return Invoice::where('status', 'Paid')
             ->latest()
             ->get()
             ->map(function (Invoice $inv) {
+                $methodLabel = $inv->payment_method ?? 'Not Set';
+                $paidAmount  = (float) $inv->amount_paid;
+                $amountLabel = '₱' . number_format($paidAmount, 0);
+
                 return [
                     'category'  => 'payment',
                     'icon'      => 'fa-solid fa-peso-sign',
@@ -96,18 +85,20 @@ class HistoryService
                     'title'     => $inv->description,
                     'tenant'    => $inv->tenant_name,
                     'room'      => 'Room ' . $inv->room_number,
-                    'desc'      => 'Payment of ' . $inv->formatted_paid
-                                 . ' via ' . strtolower($inv->payment_method),
-                    'date'      => $inv->created_at?->format('M d, Y · h:i A'),
-                    'timestamp' => $inv->date_paid ?? $inv->created_at,
-                    'amount'    => $inv->formatted_paid,
+                    'desc'      => 'Payment of ' . $amountLabel . ' via ' . strtolower($methodLabel),
+                    'date'      => $inv->date_paid?->format('M d, Y · h:i A')
+                                 ?? $inv->updated_at?->format('M d, Y · h:i A')
+                                 ?? $inv->created_at?->format('M d, Y · h:i A'),
+                    'timestamp' => $inv->date_paid ?? $inv->updated_at ?? $inv->created_at,
+                    'amount'    => $amountLabel,
                     'status'    => 'paid',
                     'details'   => [
                         ['label' => 'Invoice ID',       'value' => $inv->transaction_no],
                         ['label' => 'Tenant',           'value' => $inv->tenant_name],
                         ['label' => 'Unit',             'value' => $inv->room_number],
-                        ['label' => 'Amount',           'value' => $inv->formatted_paid],
-                        ['label' => 'Payment Method',   'value' => strtoupper($inv->payment_method)],
+                        ['label' => 'Total Amount',     'value' => $inv->formatted_total],
+                        ['label' => 'Amount Paid',      'value' => $inv->formatted_paid],
+                        ['label' => 'Payment Method',   'value' => strtoupper($methodLabel)],
                         ['label' => 'Reference Number', 'value' => $inv->receipt_no ?? '—'],
                         ['label' => 'Paid Date',        'value' => $inv->date_paid?->format('M d, Y') ?? '—'],
                     ],

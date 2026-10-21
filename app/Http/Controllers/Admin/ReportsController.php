@@ -18,18 +18,22 @@ class ReportsController extends Controller
      */
     public function index(Request $request)
     {
+        // Get the selected range (default: monthly)
+        $range = $request->query('range', 'monthly');
+
         // Summary cards
-        $summary = $this->reports->summaryMetrics();
+        $summary = $this->reports->summaryMetrics($range);
 
         // Occupancy tab
-        $occupancyTrend     = $this->reports->occupancyTrend(6);
+        $occupancyTrend     = $this->reports->occupancyTrend($range);
         $occupancyByType    = $this->reports->occupancyByRoomType();
 
         // Revenue tab
-        $revenueBreakdown   = $this->reports->revenueBreakdown(6);
+        $revenueBreakdown   = $this->reports->revenueBreakdown($range);
 
         // Service requests tab
-        $serviceByCategory  = $this->reports->serviceRequestsByCategory(6);
+        $serviceByCategory  = $this->reports->serviceRequestsByCategory($range);
+        
         // Max y-axis = highest single-category count across all months (min 1)
         $serviceMax = 1;
         foreach ($serviceByCategory as $m) {
@@ -39,7 +43,7 @@ class ReportsController extends Controller
         }
 
         // Payments tab
-        $paymentMethods     = $this->reports->paymentMethodDistribution();
+        $paymentMethods     = $this->reports->paymentMethodDistribution($range);
         $paymentSummary     = $this->reports->paymentStatusSummary();
 
         return view('admin.reports', compact(
@@ -50,7 +54,8 @@ class ReportsController extends Controller
             'serviceByCategory',
             'serviceMax',
             'paymentMethods',
-            'paymentSummary'
+            'paymentSummary',
+            'range'
         ));
     }
 }

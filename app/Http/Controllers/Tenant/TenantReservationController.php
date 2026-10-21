@@ -66,6 +66,27 @@ class TenantReservationController extends Controller
             ->orderBy('room_number')
             ->get()
             ->map(function (Room $room) {
+                
+                // Build bed slots based on room capacity
+                $bedSlots = [];
+                if ($room->room_type !== 'Solo Room') {
+                    $totalBeds = (int) $room->total_beds;
+                    for ($i = 1; $i <= ceil($totalBeds / 2); $i++) {
+                        $bedSlots[] = ['id' => "B{$i}-U", 'label' => "Bed {$i} - Upper", 'status' => 'Available'];
+                        $bedSlots[] = ['id' => "B{$i}-L", 'label' => "Bed {$i} - Lower", 'status' => 'Available'];
+                    }
+                    $bedSlots = array_slice($bedSlots, 0, $totalBeds);
+
+                    $occupiedCount = $room->occupied_count;
+                    $slotIndex = 0;
+                    foreach ($bedSlots as &$slot) {
+                        if ($slotIndex < $occupiedCount) {
+                            $slot['status'] = 'Occupied';
+                        }
+                        $slotIndex++;
+                    }
+                }
+
                 return [
                     'id'          => $room->id,
                     'num'         => $room->room_number,
@@ -81,12 +102,16 @@ class TenantReservationController extends Controller
                         default                                    => $room->total_beds . ' pax',
                     },
                     'beds'        => $room->total_beds . ' bed' . ($room->total_beds === 1 ? '' : 's'),
+                    'total_beds'  => (int) $room->total_beds, // <-- Added for logic
                     'bath'        => '1 bath',
                     'floor'       => $room->floor,
                     'desc'        => $room->description ?? 'Cozy room with modern finishes.',
                     'estDate'     => null,
                     'estApprox'   => null,
                     'tourId'      => $room->virtualTour?->id,
+                    'bed_slots'   => $bedSlots,
+                    'is_female_only' => str_contains($room->room_type, 'All Girls'),
+                    'is_male_only'   => str_contains($room->room_type, 'All Boys'),
                 ];
             });
 
@@ -128,6 +153,8 @@ class TenantReservationController extends Controller
             'payment_option'  => ['required', 'in:half,full'],
             'reference_no'    => ['required', 'string', 'max:100'],
             'receipt'         => ['required', 'file', 'mimes:png,jpg,jpeg,webp', 'max:10240'],
+            'room_bed_id'     => ['nullable', 'string', 'max:50'],
+            'agreed_to_terms' => ['accepted'],
         ]);
 
         $room = Room::findOrFail($validated['room_id']);
@@ -169,7 +196,7 @@ class TenantReservationController extends Controller
             'email'              => $user->email,
             'phone'              => $user->phone,
             'desired_room'       => $room->room_number,
-            'room_bed_id'        => $room->room_bed_id,
+            'room_bed_id'        => $validated['room_bed_id'] ?? $room->room_bed_id,
             'check_in'           => $validated['check_in_date'],
             'check_in_time'      => $validated['check_in_time'] ?? null,
             'check_out'          => $validated['check_out_date'],
@@ -186,7 +213,7 @@ class TenantReservationController extends Controller
         ]);
 
         // ============================================================
-        // FIX: Create the Invoice immediately so it shows in Admin Billing
+        // Create the Invoice immediately so it shows in Admin Billing
         // ============================================================
         $tenant = Tenant::where('user_id', $user->id)->first();
 

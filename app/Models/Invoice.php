@@ -138,7 +138,7 @@ class Invoice extends Model
     {
         return $query->where(function ($q) {
             $q->where('description', 'like', '%remaining%')
-              ->orWhere('description', 'like', '%reservation%');
+                ->orWhere('description', 'like', '%reservation%');
         });
     }
 
@@ -148,9 +148,9 @@ class Invoice extends Model
             ->when($filters['search'] ?? null, function ($q, $search) {
                 $q->where(function ($q) use ($search) {
                     $q->where('transaction_no', 'like', "%{$search}%")
-                      ->orWhere('tenant_name', 'like', "%{$search}%")
-                      ->orWhere('room_number', 'like', "%{$search}%")
-                      ->orWhere('description', 'like', "%{$search}%");
+                        ->orWhere('tenant_name', 'like', "%{$search}%")
+                        ->orWhere('room_number', 'like', "%{$search}%")
+                        ->orWhere('description', 'like', "%{$search}%");
                 });
             })
             ->when($filters['status'] ?? null, function ($q, $status) {
@@ -194,6 +194,8 @@ class Invoice extends Model
             'payment_method' => $this->payment_method,
             'receipt_url'    => $this->receipt_url,
             'is_remaining'   => $this->isRemainingBalance(),
+            'receipt_no'     => $this->receipt_no,
+            'date_paid'      => $this->date_paid?->format('M d, Y') ?? null, // Send null so frontend can fallback
         ];
     }
 }

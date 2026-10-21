@@ -135,9 +135,11 @@ class TenantBillingController extends Controller
             ->first();
 
         // If not, check if it's a reservation reference — materialize it
-        if (!$invoice
+        if (
+            !$invoice
             && $tenant->approvedReservation
-            && $tenant->approvedReservation->reference_no === $validated['invoice_ref']) {
+            && $tenant->approvedReservation->reference_no === $validated['invoice_ref']
+        ) {
 
             $approved = $tenant->approvedReservation;
 
@@ -182,6 +184,7 @@ class TenantBillingController extends Controller
             'status'         => 'Pending',
             'receipt_no'     => $validated['reference_number'] ?: $invoice->receipt_no,
             'receipt_path'   => $receiptPath,
+            'date_paid'      => now()->toDateString(), // <-- Record the submission date immediately
         ]);
 
         return response()->json([

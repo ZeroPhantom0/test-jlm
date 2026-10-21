@@ -81,12 +81,9 @@ class Room extends Model
     }
 
     // ============================================================
-    // TENANT NAME FORMATTING (For the Table UI)
+    // TENANT NAME FORMATTING
     // ============================================================
 
-    /**
-     * Returns an array of all active tenant names.
-     */
     public function getActiveTenantNamesAttribute(): array
     {
         return $this->tenants()
@@ -99,10 +96,6 @@ class Room extends Model
             ->toArray();
     }
 
-    /**
-     * The formatted string to show in the table.
-     * Example: "Zen Phantom, Elle D..."
-     */
     public function getTenantDisplayAttribute(): ?string
     {
         $names = $this->active_tenant_names;
@@ -115,34 +108,65 @@ class Room extends Model
             return $names[0];
         }
 
-        // Show first name fully, and a hint of the rest
         return $names[0] . ', ' . substr($names[1], 0, 7) . '...';
     }
 
-    /**
-     * The full comma-separated string for the hover tooltip.
-     * Example: "Zen Phantom, Elle Dela Cruz, John Doe"
-     */
     public function getTenantTooltipAttribute(): string
     {
         return implode(', ', $this->active_tenant_names);
     }
 
+    /**
+     * Parse bed slots for active tenants.
+     * Maps "B1-U" to "Bed 1 - Upper Deck"
+     */
+    public function getBedConfigurationsAttribute(): array
+    {
+        if ($this->room_type === 'Solo Room') {
+            return [];
+        }
+
+        return $this->tenants()
+            ->where('status', 'active')
+            ->with('user', 'approvedReservation')
+            ->get()
+            ->map(function ($tenant) {
+                $slot = $tenant->approvedReservation?->room_bed_id ?? 'Unassigned';
+                $label = 'Unassigned';
+
+                if ($slot !== 'Unassigned' && preg_match('/^B(\d+)-([UL])$/', $slot, $matches)) {
+                    $bedNum = $matches[1];
+                    $deck = $matches[2] === 'U' ? 'Upper Deck' : 'Lower Deck';
+                    $label = "Bed {$bedNum} ({$deck})";
+                } elseif ($slot !== 'Unassigned') {
+                    $label = $slot; // Fallback for custom IDs
+                }
+
+                return [
+                    'name'   => $tenant->user->name ?? 'Unknown',
+                    'initial'=> strtoupper(substr($tenant->user->name ?? '?', 0, 1)),
+                    'slot'   => $slot,
+                    'label'  => $label,
+                ];
+            })
+            ->toArray();
+    }
+
     // ============================================================
-    // AUTO STATUS
+    // AUTO STATUS (STRICT)
     // ============================================================
 
     public function syncStatus(): void
     {
-        $names   = $this->active_tenant_names;
+        $names    = $this->active_tenant_names;
         $occupied = count($names);
 
-        $newStatus = ($this->total_beds > 0 && $occupied >= $this->total_beds)
-            ? 'Reserved'
-            : 'Available';
+        // If the room is completely full (or over capacity), it is Occupied.
+        // Otherwise, it is Available.
+        $isFull = ($this->total_beds > 0 && $occupied >= $this->total_beds);
+        
+        $newStatus = $isFull ? 'Occupied' : 'Available';
 
-        // Build a comma-separated string for the `tenant_name` DB column
-        // so it stores actual names instead of user IDs.
         $newTenantName = empty($names) ? null : implode(', ', $names);
 
         if ($this->status !== $newStatus || $this->tenant_name !== $newTenantName) {
@@ -169,9 +193,9 @@ class Room extends Model
     public function getStatusColorAttribute(): string
     {
         return match ($this->status) {
-            'Occupied' => 'bg-green-100 text-green-600',
+            'Occupied' => 'bg-rose-100 text-rose-600',
             'Reserved' => 'bg-indigo-100 text-indigo-700',
-            default    => 'bg-slate-100 text-slate-600 border border-slate-200',
+            default    => 'bg-emerald-100 text-emerald-600',
         };
     }
 
@@ -204,11 +228,11 @@ class Room extends Model
             'status'           => $this->status,
             'room_bed_id'      => $this->room_bed_id,
             'tenant_name'      => $this->tenant_name,
-
             'occupied_count'   => $this->occupied_count,
             'available_slots'  => $this->available_slots,
             'occupancy_label'  => $this->occupancy_label,
             'occupancy_percent'=> $this->occupancy_percent,
+            'bed_configurations' => $this->bed_configurations, // <-- Added
         ];
     }
 }

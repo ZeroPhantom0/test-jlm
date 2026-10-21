@@ -14,54 +14,125 @@ use Illuminate\Support\Facades\DB;
 class ReportsService
 {
     /**
-     * Default window: last 6 months including current month.
-     *
-     * @return array<Carbon>   Ordered oldest → newest
+     * Get the date range start and end based on the filter.
      */
-    public function monthWindow(int $months = 6): array
+    public function getDateRange(string $range): array
     {
-        $out = [];
-        for ($i = $months - 1; $i >= 0; $i--) {
-            $out[] = now()->subMonthsNoOverflow($i)->startOfMonth();
+        $end = now();
+
+        switch ($range) {
+            case 'daily':
+                $start = now()->startOfDay();
+                $labelFormat = 'h:i A';
+                $limit = 24; // 24 hours
+                break;
+            case 'weekly':
+                $start = now()->startOfWeek();
+                $labelFormat = 'D'; // Mon, Tue, etc.
+                $limit = 7;
+                break;
+            case 'monthly':
+                $start = now()->startOfMonth();
+                $labelFormat = 'W'; // Week 1, Week 2, etc.
+                $limit = 5;
+                break;
+            case 'yearly':
+            default:
+                $start = now()->startOfYear();
+                $labelFormat = 'M'; // Jan, Feb, etc.
+                $limit = 12;
+                break;
         }
-        return $out;
+
+        return [$start, $end, $labelFormat, $limit];
+    }
+
+    /**
+     * Generate time buckets for charts based on range.
+     */
+    public function generateBuckets(string $range): array
+    {
+        [$start, $end, $format, $limit] = $this->getDateRange($range);
+        $buckets = [];
+
+        if ($range === 'daily') {
+            for ($i = 0; $i < 24; $i++) {
+                $buckets[] = [
+                    'start' => now()->startOfDay()->addHours($i),
+                    'end' => now()->startOfDay()->addHours($i)->endOfHour(),
+                    'label' => now()->startOfDay()->addHours($i)->format('h A'),
+                ];
+            }
+        } elseif ($range === 'weekly') {
+            for ($i = 0; $i < 7; $i++) {
+                $day = now()->startOfWeek()->addDays($i);
+                $buckets[] = [
+                    'start' => $day->copy()->startOfDay(),
+                    'end' => $day->copy()->endOfDay(),
+                    'label' => $day->format('D'),
+                ];
+            }
+        } elseif ($range === 'monthly') {
+            $weeks = now()->startOfMonth()->diffInWeeks(now()->endOfMonth()) + 1;
+            for ($i = 0; $i < $weeks; $i++) {
+                $weekStart = now()->startOfMonth()->addWeeks($i)->startOfWeek();
+                $buckets[] = [
+                    'start' => $weekStart->copy()->startOfDay(),
+                    'end' => $weekStart->copy()->endOfWeek(),
+                    'label' => 'Week ' . ($i + 1),
+                ];
+            }
+        } else {
+            for ($i = 0; $i < 12; $i++) {
+                $month = now()->startOfYear()->addMonths($i);
+                $buckets[] = [
+                    'start' => $month->copy()->startOfMonth(),
+                    'end' => $month->copy()->endOfMonth(),
+                    'label' => $month->format('M'),
+                ];
+            }
+        }
+
+        return $buckets;
     }
 
     /**
      * Top summary cards (4 values).
      */
-    public function summaryMetrics(): array
+    public function summaryMetrics(string $range): array
     {
-        $startOfMonth     = now()->startOfMonth();
-        $startOfLastMonth = now()->subMonthNoOverflow()->startOfMonth();
-        $endOfLastMonth   = now()->subMonthNoOverflow()->endOfMonth();
+        [$start, $end] = $this->getDateRange($range);
 
-        // Revenue this month (from Paid invoices)
-        $revenueThisMonth = (float) Invoice::where('status', 'Paid')
-            ->whereBetween('date_paid', [$startOfMonth, now()])
+        // Revenue this period
+        $revenueThisPeriod = (float) Invoice::where('status', 'Paid')
+            ->whereBetween('date_paid', [$start, $end])
             ->sum('amount_paid');
 
-        $revenueLastMonth = (float) Invoice::where('status', 'Paid')
-            ->whereBetween('date_paid', [$startOfLastMonth, $endOfLastMonth])
+        // Revenue previous period (for comparison)
+        $prevStart = $start->copy()->subDays($start->diffInDays($end) + 1);
+        $prevEnd = $start->copy()->subDay();
+
+        $revenueLastPeriod = (float) Invoice::where('status', 'Paid')
+            ->whereBetween('date_paid', [$prevStart, $prevEnd])
             ->sum('amount_paid');
 
-        $revenueChange = $revenueLastMonth > 0
-            ? round((($revenueThisMonth - $revenueLastMonth) / $revenueLastMonth) * 100, 1)
+        $revenueChange = $revenueLastPeriod > 0
+            ? round((($revenueThisPeriod - $revenueLastPeriod) / $revenueLastPeriod) * 100, 1)
             : 0;
 
-        // Occupancy
+        // Occupancy (current snapshot)
         $totalRooms     = Room::count();
         $occupiedRooms  = Room::where('status', 'Occupied')->count();
         $occupancyRate  = $totalRooms > 0 ? round(($occupiedRooms / $totalRooms) * 100) : 0;
 
-        // Active tenants
+        // Active tenants (current snapshot)
         $activeTenants = Tenant::where('status', 'active')->count();
 
-        // Open (pending) maintenance requests
+        // Open (pending) maintenance requests (current snapshot)
         $openRequests = MaintenanceRequest::where('status', 'Pending')->count();
 
         return [
-            'revenue'         => $revenueThisMonth,
+            'revenue'         => $revenueThisPeriod,
             'revenue_change'  => $revenueChange,
             'occupancy_rate'  => $occupancyRate,
             'occupied_rooms'  => $occupiedRooms,
@@ -72,41 +143,28 @@ class ReportsService
     }
 
     /**
-     * Monthly occupancy trend — for each of the last N months,
-     * count rooms by status.
-     *
-     * Since we don't snapshot room status historically, we approximate:
-     *  - "Occupied" = current Occupied rooms
-     *  - "Reserved" = current Reserved rooms
-     *  - "Vacant"   = current Available rooms
-     *
-     * In a real system you'd store daily occupancy snapshots. Here we
-     * use the *current* state as a proxy for each month (acceptable for
-     * a demo / small property).
+     * Occupancy trend chart.
      */
-    public function occupancyTrend(int $months = 6): array
+    public function occupancyTrend(string $range): array
     {
-        $total    = max(Room::count(), 1);
-        $occupied = Room::where('status', 'Occupied')->count();
-        $reserved = Room::where('status', 'Reserved')->count();
-        $vacant   = Room::where('status', 'Available')->count();
+        $buckets = $this->generateBuckets($range);
+        $total = max(Room::count(), 1);
 
-        // Tiny deterministic jitter so the bars aren't identical — remove in production
-        $seed = crc32((string) $total);
+        // Get current actual occupancy
+        $currentOccupied = Room::where('status', 'Occupied')->count();
+        $currentReserved = Room::where('status', 'Reserved')->count();
+        $currentVacant = Room::where('status', 'Available')->count();
 
         $out = [];
-        foreach ($this->monthWindow($months) as $i => $month) {
-            $jitter = (($seed + $i * 7) % 5) - 2;  // -2..+2
-
-            $occAdj = max(1, min($total, $occupied + $jitter));
-            $resAdj = max(0, min($total - $occAdj, $reserved));
-            $vacAdj = max(0, $total - $occAdj - $resAdj);
-
+        foreach ($buckets as $bucket) {
+            // Note: For a real production system, you would query historical 
+            // snapshots for each specific bucket time. 
+            // Here, we show the current actual state to avoid fake data.
             $out[] = [
-                'label'    => $month->format('M y'),
-                'occupied' => round(($occAdj / $total) * 100),
-                'reserved' => round(($resAdj / $total) * 100),
-                'vacant'   => round(($vacAdj / $total) * 100),
+                'label'    => $bucket['label'],
+                'occupied' => round(($currentOccupied / $total) * 100),
+                'reserved' => round(($currentReserved / $total) * 100),
+                'vacant'   => round(($currentVacant / $total) * 100),
             ];
         }
 
@@ -140,30 +198,21 @@ class ReportsService
     }
 
     /**
-     * Monthly revenue breakdown by category.
-     *
-     * Since we only store a single `total_amount` per invoice, we split
-     * it into Rent / Utilities / Other using a simple rule:
-     *  - Description containing "util" or "electric" or "water" → Utilities
-     *  - Description containing "other"                          → Other
-     *  - Everything else                                          → Rent
-     *
-     * Adjust the rules to match your real invoice taxonomy.
+     * Revenue breakdown chart.
      */
-    public function revenueBreakdown(int $months = 6): array
+    public function revenueBreakdown(string $range): array
     {
-        $months_ = $this->monthWindow($months);
-        $rows    = [];
+        $buckets = $this->generateBuckets($range);
+        $rows = [];
 
-        foreach ($months_ as $month) {
-            $start = $month->copy()->startOfMonth();
-            $end   = $month->copy()->endOfMonth();
-
+        foreach ($buckets as $bucket) {
             $invoices = Invoice::where('status', 'Paid')
-                ->whereBetween('date_paid', [$start, $end])
+                ->whereBetween('date_paid', [$bucket['start'], $bucket['end']])
                 ->get();
 
-            $rent = 0.0; $util = 0.0; $other = 0.0;
+            $rent = 0.0;
+            $util = 0.0;
+            $other = 0.0;
             foreach ($invoices as $inv) {
                 $desc = strtolower($inv->description ?? '');
                 if (str_contains($desc, 'util') || str_contains($desc, 'electric') || str_contains($desc, 'water')) {
@@ -176,7 +225,7 @@ class ReportsService
             }
 
             $rows[] = [
-                'label'  => $month->format('M y'),
+                'label'  => $bucket['label'],
                 'rent'   => $rent,
                 'util'   => $util,
                 'other'  => $other,
@@ -188,34 +237,33 @@ class ReportsService
     }
 
     /**
-     * Monthly service requests grouped by category.
+     * Service Requests grouped by category.
      */
-    public function serviceRequestsByCategory(int $months = 6): array
+    public function serviceRequestsByCategory(string $range): array
     {
-        $months_ = $this->monthWindow($months);
-        $rows    = [];
+        $buckets = $this->generateBuckets($range);
+        $rows = [];
 
-        // Pull all non-cancelled requests in the window once
-        $start = $months_[0]->copy()->startOfMonth();
-        $end   = now()->endOfMonth();
+        $start = $buckets[0]['start'];
+        $end = end($buckets)['end'];
 
         $requests = MaintenanceRequest::where('status', '!=', 'Cancelled')
             ->whereBetween('created_at', [$start, $end])
             ->get();
 
-        foreach ($months_ as $month) {
-            $bucket = $requests->filter(function ($r) use ($month) {
-                return $r->created_at->isSameMonth($month);
+        foreach ($buckets as $bucket) {
+            $bucketRequests = $requests->filter(function ($r) use ($bucket) {
+                return $r->created_at >= $bucket['start'] && $r->created_at <= $bucket['end'];
             });
 
             $rows[] = [
-                'label'      => $month->format('M y'),
-                'plumbing'   => $bucket->filter(fn ($r) => stripos($r->category ?? '', 'plumb') !== false)->count(),
-                'electrical' => $bucket->filter(fn ($r) => stripos($r->category ?? '', 'elect') !== false)->count(),
-                'hvac'       => $bucket->filter(fn ($r) => stripos($r->category ?? '', 'hvac') !== false
-                                              || stripos($r->category ?? '', 'aircon') !== false
-                                              || stripos($r->category ?? '', 'air con') !== false)->count(),
-                'general'    => $bucket->filter(function ($r) {
+                'label'      => $bucket['label'],
+                'plumbing'   => $bucketRequests->filter(fn($r) => stripos($r->category ?? '', 'plumb') !== false)->count(),
+                'electrical' => $bucketRequests->filter(fn($r) => stripos($r->category ?? '', 'elect') !== false)->count(),
+                'hvac'       => $bucketRequests->filter(fn($r) => stripos($r->category ?? '', 'hvac') !== false
+                    || stripos($r->category ?? '', 'aircon') !== false
+                    || stripos($r->category ?? '', 'air con') !== false)->count(),
+                'general'    => $bucketRequests->filter(function ($r) {
                     $cat = strtolower($r->category ?? '');
                     return !str_contains($cat, 'plumb')
                         && !str_contains($cat, 'elect')
@@ -230,11 +278,14 @@ class ReportsService
     }
 
     /**
-     * Payment methods distribution (percentage of invoices by method).
+     * Payment methods distribution.
      */
-    public function paymentMethodDistribution(): array
+    public function paymentMethodDistribution(string $range): array
     {
+        [$start, $end] = $this->getDateRange($range);
+
         $rows = Invoice::where('status', 'Paid')
+            ->whereBetween('date_paid', [$start, $end])
             ->select('payment_method', DB::raw('COUNT(*) as count'))
             ->groupBy('payment_method')
             ->pluck('count', 'payment_method')
@@ -243,10 +294,10 @@ class ReportsService
         $total = array_sum($rows);
         if ($total === 0) {
             return [
-                'gcash'    => 0,
-                'bank'     => 0,
-                'otc'      => 0,
-                'total'    => 0,
+                'gcash' => 0,
+                'bank'  => 0,
+                'otc'   => 0,
+                'total' => 0,
             ];
         }
 
@@ -263,7 +314,7 @@ class ReportsService
     }
 
     /**
-     * Payment status summary (counts + totals per status).
+     * Payment status summary.
      */
     public function paymentStatusSummary(): array
     {

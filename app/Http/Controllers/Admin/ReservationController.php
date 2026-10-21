@@ -16,12 +16,24 @@ class ReservationController extends Controller
 {
     /**
      * Display the reservations list.
+     *
+     * Only reservations that still need admin attention are shown:
+     *   - Pending  → awaiting approval/rejection
+     *   - Rejected → admin may want to revisit / follow up
+     *
+     * Approved reservations are hidden because they've already been
+     * processed and now live in the History page as active tenants.
+     * Expired reservations are hidden because they're stale.
+     *
+     * Both are still counted in the metrics so admins see the full picture.
      */
     public function index(Request $request)
     {
         $filters = $request->only(['search', 'status']);
 
+        // Hide Approved + Expired — they live in History now.
         $reservations = Reservation::filter($filters)
+            ->whereNotIn('status', ['Approved', 'Expired'])
             ->latest()
             ->get();
 

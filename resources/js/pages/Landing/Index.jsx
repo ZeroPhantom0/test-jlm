@@ -30,9 +30,6 @@ const NAV_LINKS = [
    MAIN COMPONENT
    ============================================================ */
 export default function Index({ rooms = [] }) {
-    const tourRooms  = rooms.filter((r) => r.has_tour);
-    const otherRooms = rooms.filter((r) => !r.has_tour);
-
     return (
         <div className="landing-page">
             <Head title="JLM Cozy Cabin" />
@@ -41,7 +38,7 @@ export default function Index({ rooms = [] }) {
             <HeroSection />
             <AboutSection />
             <AmenitiesCarousel />
-            <RoomsSection tourRooms={tourRooms} otherRooms={otherRooms} />
+            <RoomsSection rooms={rooms} />
             <ContactSection />
             <LandingFooter />
         </div>
@@ -49,20 +46,16 @@ export default function Index({ rooms = [] }) {
 }
 
 /* ============================================================
-   HEADER — sticky + scroll-spy underline + splash on auth nav
+   HEADER
    ============================================================ */
 function LandingHeader() {
     const [activeSection, setActiveSection] = useState('home');
     const [mobileNavOpen, setMobileNavOpen] = useState(false);
     const [scrolled, setScrolled]           = useState(false);
-    const [splash, setSplash]               = useState(null); // { target: '/login' | '/signup' }
+    const [splash, setSplash]               = useState(null);
 
-    /* ---------- Scroll-spy ---------- */
     useEffect(() => {
-        const sections = NAV_LINKS
-            .map((l) => document.getElementById(l.id))
-            .filter(Boolean);
-
+        const sections = NAV_LINKS.map((l) => document.getElementById(l.id)).filter(Boolean);
         if (!sections.length) return;
 
         const observer = new IntersectionObserver(
@@ -79,7 +72,6 @@ function LandingHeader() {
         return () => observer.disconnect();
     }, []);
 
-    /* ---------- Solid header on scroll ---------- */
     useEffect(() => {
         const onScroll = () => setScrolled(window.scrollY > 40);
         onScroll();
@@ -93,9 +85,6 @@ function LandingHeader() {
         if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
     };
 
-    /**
-     * Intercept auth navigation so the splash can play first.
-     */
     const handleAuthNav = (e, target) => {
         e.preventDefault();
         setMobileNavOpen(false);
@@ -103,9 +92,7 @@ function LandingHeader() {
     };
 
     const handleSplashComplete = () => {
-        if (splash?.target) {
-            router.visit(splash.target);
-        }
+        if (splash?.target) router.visit(splash.target);
         setSplash(null);
     };
 
@@ -114,11 +101,7 @@ function LandingHeader() {
             {splash && (
                 <SplashScreen
                     duration={1800}
-                    message={
-                        splash.target === '/login'
-                            ? 'Signing you in…'
-                            : 'Creating your account…'
-                    }
+                    message={splash.target === '/login' ? 'Signing you in…' : 'Creating your account…'}
                     onComplete={handleSplashComplete}
                 />
             )}
@@ -139,10 +122,7 @@ function LandingHeader() {
                             key={link.id}
                             href={`#${link.id}`}
                             className={`nav-link ${activeSection === link.id ? 'active' : ''}`}
-                            onClick={(e) => {
-                                e.preventDefault();
-                                handleNavClick(link.id);
-                            }}
+                            onClick={(e) => { e.preventDefault(); handleNavClick(link.id); }}
                         >
                             {link.label}
                         </a>
@@ -150,18 +130,10 @@ function LandingHeader() {
                 </nav>
 
                 <div className="header-buttons">
-                    <a
-                        href="/login"
-                        className="login-btn"
-                        onClick={(e) => handleAuthNav(e, '/login')}
-                    >
+                    <a href="/login" className="login-btn" onClick={(e) => handleAuthNav(e, '/login')}>
                         Log In
                     </a>
-                    <a
-                        href="/signup"
-                        className="signup-btn"
-                        onClick={(e) => handleAuthNav(e, '/signup')}
-                    >
+                    <a href="/signup" className="signup-btn" onClick={(e) => handleAuthNav(e, '/signup')}>
                         Get Started
                     </a>
 
@@ -393,9 +365,14 @@ function AmenitiesCarousel() {
 }
 
 /* ============================================================
-   ROOMS
+   ROOMS — Grouped by Type with Dynamic Headers
    ============================================================ */
-function RoomsSection({ tourRooms, otherRooms }) {
+function RoomsSection({ rooms }) {
+    // Group rooms by type
+    const soloRooms = rooms.filter(r => r.room_type === 'Solo Room');
+    const bedspaceRooms = rooms.filter(r => r.room_type === 'Bedspace');
+    const barkadaRooms = rooms.filter(r => r.room_type === 'Barkada Room');
+
     return (
         <section className="rooms-section" id="rooms">
             <div className="rooms-header">
@@ -409,43 +386,52 @@ function RoomsSection({ tourRooms, otherRooms }) {
                 <div className="status-item"><span className="status-dot reserved" /> Reserved</div>
             </div>
 
-            {tourRooms.length > 0 && (
-                <>
-                    <div className="recommended-heading">
-                        <div className="recommended-label">
-                            <span><i className="bi bi-camera-video-fill" /></span>
-                            Virtual Tours Available
-                        </div>
-                        <div className="recommended-line" />
-                    </div>
+            <div className="all-units-heading">
+                <div className="all-units-label">
+                    <span><i className="bi bi-grid-fill" /></span>
+                    All Available Rooms
+                </div>
+                <div className="all-units-line" />
+            </div>
 
-                    <div className="rooms-grid">
-                        {tourRooms.map((room) => (
-                            <RoomCard key={room.id} room={room} />
-                        ))}
+            {/* Render categories only if rooms exist */}
+            {soloRooms.length > 0 && (
+                <>
+                    <div className="category-header">
+                        <h3 className="category-title">Solo Rooms</h3>
+                        <div className="category-line" />
+                    </div>
+                    <div className="rooms-grid-3">
+                        {soloRooms.map((room) => <RoomCard key={room.id} room={room} />)}
                     </div>
                 </>
             )}
 
-            {otherRooms.length > 0 && (
+            {bedspaceRooms.length > 0 && (
                 <>
-                    <div className="all-units-heading">
-                        <div className="all-units-label">
-                            <span><i className="bi bi-grid-fill" /></span>
-                            All Available Rooms
-                        </div>
-                        <div className="all-units-line" />
+                    <div className="category-header">
+                        <h3 className="category-title">Bedspace</h3>
+                        <div className="category-line" />
                     </div>
-
-                    <div className="rooms-grid">
-                        {otherRooms.map((room) => (
-                            <RoomCard key={room.id} room={room} />
-                        ))}
+                    <div className="rooms-grid-3">
+                        {bedspaceRooms.map((room) => <RoomCard key={room.id} room={room} />)}
                     </div>
                 </>
             )}
 
-            {tourRooms.length === 0 && otherRooms.length === 0 && (
+            {barkadaRooms.length > 0 && (
+                <>
+                    <div className="category-header">
+                        <h3 className="category-title">Barkada Rooms</h3>
+                        <div className="category-line" />
+                    </div>
+                    <div className="rooms-grid-3">
+                        {barkadaRooms.map((room) => <RoomCard key={room.id} room={room} />)}
+                    </div>
+                </>
+            )}
+
+            {rooms.length === 0 && (
                 <div className="rooms-empty">
                     <i className="bi bi-door-closed" />
                     <p>No rooms are available right now. Please check back soon.</p>
@@ -471,7 +457,7 @@ function RoomCard({ room }) {
         : { className: 'room-image' };
 
     return (
-        <div className="room-card">
+        <div className="room-card compact">
             <ImageWrapper {...imageProps}>
                 {room.thumbnail && (
                     <img
