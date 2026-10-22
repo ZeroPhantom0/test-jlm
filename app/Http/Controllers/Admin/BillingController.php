@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Invoice;
+use App\Services\AuditLogger;
 use App\Services\BillingService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -88,6 +89,15 @@ class BillingController extends Controller
             'date_paid'      => $status === 'Paid' ? now()->toDateString() : null,
         ]);
 
+        AuditLogger::log([
+            'action'       => 'CREATE',
+            'module'       => 'BILLING',
+            'description'  => 'Created invoice ' . $invoice->transaction_no . ' for ' . $invoice->tenant_name
+                             . ' (₱' . number_format((float) $invoice->total_amount) . ')',
+            'subject_type' => Invoice::class,
+            'subject_id'   => $invoice->id,
+        ]);
+
         return response()->json([
             'success' => true,
             'message' => 'Invoice created successfully.',
@@ -155,6 +165,14 @@ class BillingController extends Controller
             'balance'      => $balance,
         ]);
 
+        AuditLogger::log([
+            'action'       => 'UPDATE',
+            'module'       => 'BILLING',
+            'description'  => 'Updated invoice ' . $invoice->transaction_no . ' for ' . $invoice->tenant_name,
+            'subject_type' => Invoice::class,
+            'subject_id'   => $invoice->id,
+        ]);
+
         return response()->json([
             'success' => true,
             'message' => 'Invoice updated successfully.',
@@ -167,6 +185,15 @@ class BillingController extends Controller
      */
     public function destroy(Invoice $invoice)
     {
+        AuditLogger::log([
+            'action'       => 'DELETE',
+            'module'       => 'BILLING',
+            'description'  => 'Deleted invoice ' . $invoice->transaction_no . ' for ' . $invoice->tenant_name,
+            'status'       => 'warning',
+            'subject_type' => Invoice::class,
+            'subject_id'   => $invoice->id,
+        ]);
+
         if ($invoice->receipt_path) {
             Storage::disk('public')->delete($invoice->receipt_path);
         }
@@ -196,6 +223,14 @@ class BillingController extends Controller
             'receipt_no'     => $invoice->receipt_no ?? 'OTC-' . now()->format('Ymd') . '-' . str_pad($invoice->id, 4, '0', STR_PAD_LEFT),
             'verified_by'    => $request->user()->id,
             'verified_at'    => now(),
+        ]);
+
+        AuditLogger::log([
+            'action'       => 'UPDATE',
+            'module'       => 'BILLING',
+            'description'  => 'Marked invoice ' . $invoice->transaction_no . ' as paid (' . $invoice->tenant_name . ')',
+            'subject_type' => Invoice::class,
+            'subject_id'   => $invoice->id,
         ]);
 
         return response()->json([
@@ -233,6 +268,15 @@ class BillingController extends Controller
             'verified_at' => now(),
         ]);
 
+        AuditLogger::log([
+            'action'       => 'VERIFY',
+            'module'       => 'BILLING',
+            'description'  => 'Verified ' . $invoice->payment_method . ' payment for '
+                             . $invoice->tenant_name . ' invoice ' . $invoice->transaction_no,
+            'subject_type' => Invoice::class,
+            'subject_id'   => $invoice->id,
+        ]);
+
         return response()->json([
             'success' => true,
             'message' => 'Payment verified successfully.',
@@ -265,6 +309,16 @@ class BillingController extends Controller
             'date_paid'    => null,
         ]);
 
+        AuditLogger::log([
+            'action'       => 'REJECT',
+            'module'       => 'BILLING',
+            'description'  => 'Rejected payment for invoice ' . $invoice->transaction_no
+                             . ' (' . $invoice->tenant_name . '): ' . $validated['admin_notes'],
+            'status'       => 'warning',
+            'subject_type' => Invoice::class,
+            'subject_id'   => $invoice->id,
+        ]);
+
         return response()->json([
             'success'     => true,
             'message'     => 'Payment rejected.',
@@ -277,6 +331,15 @@ class BillingController extends Controller
      */
     public function sendReminder(Request $request, Invoice $invoice)
     {
+        AuditLogger::log([
+            'action'       => 'SUBMIT',
+            'module'       => 'BILLING',
+            'description'  => 'Sent payment reminder to ' . $invoice->tenant_name
+                             . ' for invoice ' . $invoice->transaction_no,
+            'subject_type' => Invoice::class,
+            'subject_id'   => $invoice->id,
+        ]);
+
         return response()->json([
             'success' => true,
             'message' => 'Reminder sent to ' . $invoice->tenant_name . '.',

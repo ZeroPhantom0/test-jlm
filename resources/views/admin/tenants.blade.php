@@ -128,7 +128,7 @@
                                         <i
                                             class="fa-solid fa-pencil text-slate-700 text-sm cursor-pointer hover:scale-110 transition edit-tenant-btn"></i>
                                         <i
-                                            class="fa-regular fa-trash-can text-red-500 text-sm cursor-pointer hover:scale-110 transition"></i>
+                                            class="fa-regular fa-trash-can text-red-500 text-sm cursor-pointer hover:scale-110 transition delete-tenant-btn"></i>
                                     </div>
                                 </td>
                             </tr>

@@ -1,9 +1,9 @@
 // resources/js/utils/logout.js
+
+/**
+ * Dispatch a custom event to open the logout modal.
+ * The actual logout logic lives in the Layout component or LogoutModal component.
+ */
 export function logout() {
-    const form = document.getElementById('logout-form');
-    if (form) {
-        form.submit();
-    } else {
-        console.error('Logout form not found. Add it to your Blade layout.');
-    }
+    window.dispatchEvent(new Event("open-logout-modal"));
 }

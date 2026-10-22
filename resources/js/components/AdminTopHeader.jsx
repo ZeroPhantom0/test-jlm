@@ -93,13 +93,6 @@ export default function AdminTopHeader({
                                     href="#"
                                     className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-medium text-slate-700 hover:bg-slate-100 transition"
                                 >
-                                    <i className="fa-solid fa-sliders w-4 text-center text-slate-500"></i>
-                                    <span>System Preferences</span>
-                                </a>
-                                <a
-                                    href="#"
-                                    className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-medium text-slate-700 hover:bg-slate-100 transition"
-                                >
                                     <i className="fa-solid fa-user-clock w-4 text-center text-slate-500"></i>
                                     <span>My Activity Log</span>
                                 </a>

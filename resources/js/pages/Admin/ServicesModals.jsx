@@ -13,6 +13,8 @@ const STATUSES = ['Pending', 'In Progress', 'Completed', 'Cancelled'];
 export default function ServicesModals() {
     const [showDetails, setShowDetails] = useState(false);
     const [showNew, setShowNew] = useState(false);
+    const [showDelete, setShowDelete] = useState(false);
+    const [deleteTarget, setDeleteTarget] = useState(null);
     const [request, setRequest] = useState(null);
     const [saving, setSaving] = useState(false);
 
@@ -28,7 +30,7 @@ export default function ServicesModals() {
     const [newForm, setNewForm] = useState({
         title: '',
         description: '',
-        category: '', // User input text
+        category: '',
         priority: 'Medium',
         preferred_date: '',
         preferred_time: '',
@@ -127,13 +129,32 @@ export default function ServicesModals() {
     };
 
     // ============================================================
-    // Delete request
+    // Open delete confirmation
     // ============================================================
-    const handleDelete = async () => {
-        if (!request || !confirm('Delete this maintenance request permanently?')) return;
+    const openDeleteModal = () => {
+        if (!request) return;
+        setDeleteTarget({
+            id: request.id,
+            title: request.title,
+            ref: request.id,
+        });
+        setShowDelete(true);
+    };
+
+    const closeDeleteModal = () => {
+        if (saving) return;
+        setShowDelete(false);
+        setDeleteTarget(null);
+    };
+
+    // ============================================================
+    // Confirm delete
+    // ============================================================
+    const confirmDelete = async () => {
+        if (!deleteTarget) return;
         setSaving(true);
         try {
-            const res = await fetch(`/admin/services/maintenance/${request.id}`, {
+            const res = await fetch(`/admin/services/maintenance/${deleteTarget.id}`, {
                 method: 'DELETE',
                 headers: {
                     'Accept': 'application/json',
@@ -142,6 +163,8 @@ export default function ServicesModals() {
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.message || 'Failed to delete request.');
+            setShowDelete(false);
+            setDeleteTarget(null);
             setShowDetails(false);
             window.location.reload();
         } catch (err) {
@@ -406,7 +429,7 @@ export default function ServicesModals() {
                                 {saving ? 'Updating…' : 'Update'}
                             </button>
                             <button
-                                onClick={handleDelete}
+                                onClick={openDeleteModal}
                                 className="text-rose-600 hover:text-rose-700 text-[13px] font-semibold px-3 py-2"
                             >
                                 Delete
@@ -417,6 +440,71 @@ export default function ServicesModals() {
                             className="bg-[#02122c] text-white px-4 py-2.5 rounded-lg text-[13px] font-semibold"
                         >
                             Close
+                        </button>
+                    </div>
+                </Modal>
+            )}
+
+            {/* ============================================================ */}
+            {/* DELETE CONFIRMATION MODAL */}
+            {/* ============================================================ */}
+            {showDelete && deleteTarget && (
+                <Modal onClose={closeDeleteModal} maxWidth="max-w-[460px]">
+                    <div className="p-5 pb-4 flex items-center justify-between border-b border-slate-100">
+                        <h3 className="text-lg font-bold text-slate-900">Delete Maintenance Request</h3>
+                        <button
+                            onClick={closeDeleteModal}
+                            disabled={saving}
+                            className="text-slate-400 hover:text-slate-700 text-lg disabled:opacity-50"
+                        >
+                            <i className="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+
+                    <div className="p-6 text-center">
+                        <div className="w-16 h-16 mx-auto rounded-full bg-rose-50 flex items-center justify-center mb-4">
+                            <i className="fa-solid fa-trash-can text-rose-500 text-2xl"></i>
+                        </div>
+                        <h4 className="text-lg font-bold text-slate-900 mb-2">Are you sure?</h4>
+                        <p className="text-slate-500 text-[13px] mb-2">
+                            You are about to permanently delete:
+                        </p>
+                        <p className="font-bold text-slate-900 text-[15px] mb-4">
+                            {deleteTarget.title} <span className="text-slate-400 font-normal">(#SR-{deleteTarget.ref})</span>
+                        </p>
+                        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-left">
+                            <p className="text-[12px] text-amber-800 leading-snug">
+                                <i className="fa-solid fa-circle-info mr-1"></i>
+                                This will permanently remove the maintenance request, its status, and its history.{' '}
+                                <strong>This action cannot be undone.</strong>
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="p-5 border-t border-slate-100 flex justify-end gap-3">
+                        <button
+                            onClick={closeDeleteModal}
+                            disabled={saving}
+                            className="text-slate-600 text-[13.5px] font-semibold px-4 py-2 disabled:opacity-50"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            onClick={confirmDelete}
+                            disabled={saving}
+                            className="bg-rose-500 hover:bg-rose-600 disabled:opacity-50 text-white px-5 py-2.5 rounded-lg text-[13.5px] font-semibold inline-flex items-center gap-2 transition"
+                        >
+                            {saving ? (
+                                <>
+                                    <i className="fa-solid fa-spinner fa-spin"></i>
+                                    Deleting…
+                                </>
+                            ) : (
+                                <>
+                                    <i className="fa-solid fa-trash-can"></i>
+                                    Yes, Delete
+                                </>
+                            )}
                         </button>
                     </div>
                 </Modal>

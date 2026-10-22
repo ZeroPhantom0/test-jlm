@@ -382,8 +382,8 @@ function RoomsSection({ rooms }) {
 
             <div className="room-status-legend">
                 <div className="status-item"><span className="status-dot available" /> Available</div>
-                <div className="status-item"><span className="status-dot occupied" /> Occupied</div>
                 <div className="status-item"><span className="status-dot reserved" /> Reserved</div>
+                <div className="status-item"><span className="status-dot occupied" /> Occupied</div>
             </div>
 
             <div className="all-units-heading">
@@ -444,8 +444,8 @@ function RoomsSection({ rooms }) {
 function RoomCard({ room }) {
     const statusClass = {
         Available: 'available-status',
-        Occupied:  'occupied-status',
         Reserved:  'reserved-status',
+        Occupied:  'occupied-status',
     }[room.status] || 'available-status';
 
     const hasTour = !!room.has_tour && !!room.tour_id;

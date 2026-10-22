@@ -6,6 +6,7 @@ namespace App\Http\Controllers;
 use App\Models\User;
 use App\Models\PersonalInformation;
 use App\Models\IdentityVerification;
+use App\Services\AuditLogger;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
@@ -35,16 +36,39 @@ class AuthController extends Controller
             /** @var User $user */
             $user = Auth::user();
 
-            // ✅ Use Inertia::location() because /admin and /tenants are
-            //    Blade routes, NOT Inertia pages. A plain redirect() would
-            //    cause Inertia to inject the Blade HTML into the current
-            //    page, producing the "floating modal" mashup.
+            AuditLogger::log([
+                'action'      => 'LOGIN',
+                'module'      => 'AUTHENTICATION',
+                'description' => ucfirst($user->role) . ' logged in successfully',
+            ]);
+
+            // Admins → admin dashboard (no onboarding).
             if ($user->isAdmin()) {
                 return Inertia::location('/admin');
             }
 
-            return Inertia::location('/tenants');
+            // Tenants:
+            //   - If BOTH onboarding steps are done → tenant dashboard
+            //   - Otherwise → START FROM STEP 1 (Personal Information), always
+            $hasPersonal = $user->personalInformation()->exists();
+            $hasIdentity = $user->identityVerification()->exists();
+
+            if ($hasPersonal && $hasIdentity) {
+                return Inertia::location('/tenants');
+            }
+
+            // Fresh login for a not-fully-onboarded user → always Step 1.
+            return Inertia::location('/personal-information');
         }
+
+        AuditLogger::log([
+            'action'      => 'LOGIN FAILED',
+            'module'      => 'AUTHENTICATION',
+            'description' => 'Failed login attempt for ' . $request->input('email'),
+            'status'      => 'error',
+            'user_name'   => 'Unknown',
+            'user_role'   => 'Unknown',
+        ]);
 
         return back()->withErrors([
             'email' => 'The provided credentials do not match our records.',
@@ -72,34 +96,53 @@ class AuthController extends Controller
             'email'    => $validated['email'],
             'phone'    => $validated['phone'],
             'password' => Hash::make($validated['password']),
-            'role'     => 'tenant', // new signups are always tenants
+            'role'     => 'tenant',
         ]);
 
         Auth::login($user);
         $request->session()->regenerate();
 
-        // ✅ Redirect into the onboarding flow (Inertia page). Both are
-        //    Inertia pages, so a normal redirect() works here. But
-        //    Inertia::location also works and keeps behavior consistent.
+        AuditLogger::log([
+            'action'       => 'CREATE',
+            'module'       => 'TENANTS',
+            'description'  => 'New tenant account registered: ' . $user->email,
+            'subject_type' => User::class,
+            'subject_id'   => $user->id,
+        ]);
+
         return redirect()->route('personal-information');
     }
 
     // ============ LOGOUT ============
     public function logout(Request $request)
     {
+        /** @var User|null $user */
+        $user = Auth::user();
+
+        if ($user) {
+            AuditLogger::log([
+                'action'      => 'LOGOUT',
+                'module'      => 'AUTHENTICATION',
+                'description' => ucfirst($user->role) . ' logged out',
+            ]);
+        }
+
         Auth::logout();
         $request->session()->invalidate();
         $request->session()->regenerateToken();
 
-        // ✅ Full reload back to the landing page (Inertia page).
         return Inertia::location('/');
     }
 
     // ============ ONBOARDING: PERSONAL INFO ============
     public function showPersonalInformation()
     {
+        /** @var User $user */
+        $user = Auth::user();
+
         return Inertia::render('Onboarding/PersonalInformation', [
-            'user' => Auth::user(),
+            'user'         => $user,
+            'personalInfo' => $user->personalInformation,
         ]);
     }
 
@@ -112,10 +155,16 @@ class AuthController extends Controller
             'current_address'  => ['nullable', 'string'],
             'emergency_name'   => ['required', 'string', 'max:255'],
             'emergency_number' => ['required', 'string', 'max:20'],
+            'profile_picture'  => ['nullable', 'file', 'mimes:png,jpg,jpeg,webp', 'max:10240'],
         ]);
 
         /** @var User $user */
         $user = Auth::user();
+
+        $profilePath = $user->personalInformation?->profile_picture;
+        if ($request->hasFile('profile_picture')) {
+            $profilePath = $request->file('profile_picture')->store('profiles/' . $user->id, 'public');
+        }
 
         PersonalInformation::updateOrCreate(
             ['user_id' => $user->id],
@@ -126,43 +175,61 @@ class AuthController extends Controller
                 'current_address'  => $validated['current_address'] ?? null,
                 'emergency_name'   => $validated['emergency_name'],
                 'emergency_number' => $validated['emergency_number'],
+                'profile_picture'  => $profilePath,
             ]
         );
 
-        // Also update user's core name/phone
         $user->update([
             'name'  => $validated['fullname'],
             'phone' => $validated['contact_number'],
         ]);
 
-        // ✅ Both are Inertia pages, so a standard redirect works.
+        AuditLogger::log([
+            'action'       => 'UPDATE',
+            'module'       => 'TENANTS',
+            'description'  => 'Completed personal information for ' . $user->name,
+            'subject_type' => User::class,
+            'subject_id'   => $user->id,
+        ]);
+
         return redirect()->route('identity-verification');
     }
 
     // ============ ONBOARDING: IDENTITY ============
     public function showIdentityVerification()
     {
-        return Inertia::render('Onboarding/IdentityVerification');
+        /** @var User $user */
+        $user = Auth::user();
+
+        return Inertia::render('Onboarding/IdentityVerification', [
+            'identity' => $user->identityVerification,
+        ]);
     }
 
     public function storeIdentityVerification(Request $request)
     {
+        /** @var User $user */
+        $user = Auth::user();
+        $existing = $user->identityVerification;
+
         $validated = $request->validate([
             'id_type'                => ['required', 'string'],
-            'id_front'               => ['required', 'file', 'mimes:png,jpg,jpeg', 'max:10240'],
-            'id_back'                => ['nullable', 'file', 'mimes:png,jpg,jpeg', 'max:10240'],
+            'id_front'               => [$existing?->id_front ? 'nullable' : 'required', 'file', 'mimes:png,jpg,jpeg,webp', 'max:10240'],
+            'id_back'                => ['nullable', 'file', 'mimes:png,jpg,jpeg,webp', 'max:10240'],
             'verification_agreement' => ['accepted'],
         ]);
 
-        /** @var User $user */
-        $user = Auth::user();
+        $frontPath = $existing?->id_front;
+        if ($request->hasFile('id_front')) {
+            $frontPath = $request->file('id_front')->store('ids/' . $user->id, 'public');
+        }
 
-        $frontPath = $request->file('id_front')->store('ids/' . $user->id, 'public');
-        $backPath  = $request->hasFile('id_back')
-            ? $request->file('id_back')->store('ids/' . $user->id, 'public')
-            : null;
+        $backPath = $existing?->id_back;
+        if ($request->hasFile('id_back')) {
+            $backPath = $request->file('id_back')->store('ids/' . $user->id, 'public');
+        }
 
-        IdentityVerification::updateOrCreate(
+        $verification = IdentityVerification::updateOrCreate(
             ['user_id' => $user->id],
             [
                 'id_type'  => $validated['id_type'],
@@ -172,8 +239,14 @@ class AuthController extends Controller
             ]
         );
 
-        // ✅ /tenants/dashboard is a Blade route (Route::view), so it needs
-        //    a full browser reload. Inertia::location() forces that.
+        AuditLogger::log([
+            'action'       => 'SUBMIT',
+            'module'       => 'TENANTS',
+            'description'  => 'Submitted identity verification (' . $validated['id_type'] . ')',
+            'subject_type' => IdentityVerification::class,
+            'subject_id'   => $verification->id,
+        ]);
+
         return Inertia::location('/tenants');
     }
 }

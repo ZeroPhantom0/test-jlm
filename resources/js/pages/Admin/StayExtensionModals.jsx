@@ -8,7 +8,9 @@ const csrf = () =>
 
 export default function StayExtensionModals() {
     const [showDetails, setShowDetails] = useState(false);
+    const [showDelete, setShowDelete] = useState(false);
     const [request, setRequest] = useState(null);
+    const [deleteTarget, setDeleteTarget] = useState(null);
     const [adminNotes, setAdminNotes] = useState('');
     const [saving, setSaving] = useState(false);
     const [requestsData, setRequestsData] = useState({});
@@ -104,12 +106,33 @@ export default function StayExtensionModals() {
         }
     };
 
-    const handleDelete = async () => {
+    // ============================================================
+    // Open delete confirmation
+    // ============================================================
+    const openDeleteModal = () => {
         if (!request) return;
-        if (!confirm('Delete this stay extension request permanently?')) return;
+        setDeleteTarget({
+            id: request.id,
+            tenant: request.tenant,
+            reference_no: request.reference_no,
+            current_end: request.current_end,
+            requested_end: request.requested_end,
+            extension_days: request.extension_days,
+        });
+        setShowDelete(true);
+    };
+
+    const closeDeleteModal = () => {
+        if (saving) return;
+        setShowDelete(false);
+        setDeleteTarget(null);
+    };
+
+    const confirmDelete = async () => {
+        if (!deleteTarget) return;
         setSaving(true);
         try {
-            const res = await fetch(`/admin/services/stay-extension/${request.id}`, {
+            const res = await fetch(`/admin/services/stay-extension/${deleteTarget.id}`, {
                 method: 'DELETE',
                 headers: {
                     'Accept': 'application/json',
@@ -118,6 +141,8 @@ export default function StayExtensionModals() {
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.message || 'Failed to delete.');
+            setShowDelete(false);
+            setDeleteTarget(null);
             closeModal();
             window.location.reload();
         } catch (err) {
@@ -127,7 +152,17 @@ export default function StayExtensionModals() {
         }
     };
 
-    if (!showDetails || !request) return null;
+    if (!showDetails || !request) {
+        // Still render delete modal if it's open (e.g. when details closed)
+        return showDelete && deleteTarget ? (
+            <DeleteStayExtensionModal
+                target={deleteTarget}
+                saving={saving}
+                onClose={closeDeleteModal}
+                onConfirm={confirmDelete}
+            />
+        ) : null;
+    }
 
     // ============================================================
     // Status badge config
@@ -141,117 +176,202 @@ export default function StayExtensionModals() {
     const isPending = request.status === 'Pending';
 
     return (
-        <Modal onClose={closeModal} maxWidth="max-w-[500px]">
-            {/* ============ HEADER ============ */}
+        <>
+            <Modal onClose={closeModal} maxWidth="max-w-[500px]">
+                {/* ============ HEADER ============ */}
+                <div className="p-5 pb-4 flex items-center justify-between border-b border-slate-100">
+                    <h3 className="text-lg font-bold text-slate-900">Extension Request Details</h3>
+                    <button
+                        onClick={closeModal}
+                        className="text-slate-400 hover:text-slate-700 text-lg"
+                    >
+                        <i className="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+
+                {/* ============ BODY ============ */}
+                <div className="p-6 overflow-y-auto flex flex-col gap-4">
+
+                    {/* Tenant + Status */}
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <div className="text-[17px] font-bold text-slate-900">
+                                {request.tenant}
+                            </div>
+                            <div className="text-xs text-slate-400 mt-0.5">
+                                {request.reference_no}
+                            </div>
+                        </div>
+                        <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold ${statusConfig.class}`}>
+                            <i className={statusConfig.icon}></i> {request.status}
+                        </span>
+                    </div>
+
+                    {/* Lease Extension Card */}
+                    <div className="bg-purple-50 border border-purple-100 rounded-2xl p-5 flex flex-col items-center gap-3">
+                        <div className="flex justify-around w-full">
+                            <div className="text-center">
+                                <div className="text-[11px] text-purple-500 font-medium mb-1">
+                                    Current Lease Ends
+                                </div>
+                                <div className="text-base font-extrabold text-slate-900">
+                                    {request.current_end}
+                                </div>
+                            </div>
+                            <div className="text-center">
+                                <div className="text-[11px] text-purple-500 font-medium mb-1">
+                                    Requested New End
+                                </div>
+                                <div className="text-base font-extrabold text-purple-700">
+                                    {request.requested_end}
+                                </div>
+                            </div>
+                        </div>
+                        <span className="bg-purple-100 text-purple-700 text-[11px] font-bold px-3.5 py-1 rounded-xl">
+                            {request.extension_days}
+                        </span>
+                    </div>
+
+                    {/* Reason */}
+                    <div>
+                        <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Reason</div>
+                        <div className="bg-slate-50 rounded-xl p-4 text-[13.5px] text-slate-700 leading-snug">
+                            {request.reason}
+                        </div>
+                    </div>
+
+                    {/* Admin Notes */}
+                    <div>
+                        <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">
+                            Admin Notes
+                        </div>
+                        <textarea
+                            value={adminNotes}
+                            onChange={(e) => setAdminNotes(e.target.value)}
+                            placeholder="Add internal notes here..."
+                            className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-[13px] outline-none resize-y min-h-[70px] focus:border-slate-400"
+                        />
+                    </div>
+                </div>
+
+                {/* ============ FOOTER ACTIONS ============ */}
+                <div className="p-5 border-t border-slate-100 flex items-center gap-2.5">
+                    {isPending && (
+                        <>
+                            <button
+                                onClick={handleApprove}
+                                disabled={saving}
+                                className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-4 py-2.5 rounded-lg text-[13px] font-semibold inline-flex items-center gap-1.5"
+                            >
+                                <i className="fa-regular fa-circle-check"></i>
+                                {saving ? 'Saving…' : 'Approve'}
+                            </button>
+                            <button
+                                onClick={handleReject}
+                                disabled={saving}
+                                className="bg-rose-50 hover:bg-rose-100 disabled:opacity-50 text-rose-600 px-4 py-2.5 rounded-lg text-[13px] font-semibold inline-flex items-center gap-1.5"
+                            >
+                                <i className="fa-regular fa-circle-xmark"></i>
+                                Reject
+                            </button>
+                        </>
+                    )}
+                    <button
+                        onClick={openDeleteModal}
+                        disabled={saving}
+                        className="text-rose-600 hover:text-rose-700 disabled:opacity-50 text-[13px] font-semibold px-3 py-2 ml-auto"
+                    >
+                        Delete
+                    </button>
+                    <button
+                        onClick={closeModal}
+                        className="bg-[#02122c] text-white px-4 py-2.5 rounded-lg text-[13px] font-semibold"
+                    >
+                        Close
+                    </button>
+                </div>
+            </Modal>
+
+            {/* ============================================================ */}
+            {/* DELETE CONFIRMATION MODAL */}
+            {/* ============================================================ */}
+            {showDelete && deleteTarget && (
+                <DeleteStayExtensionModal
+                    target={deleteTarget}
+                    saving={saving}
+                    onClose={closeDeleteModal}
+                    onConfirm={confirmDelete}
+                />
+            )}
+        </>
+    );
+}
+
+// ---------- Delete confirmation subcomponent ----------
+function DeleteStayExtensionModal({ target, saving, onClose, onConfirm }) {
+    return (
+        <Modal onClose={onClose} maxWidth="max-w-[460px]">
             <div className="p-5 pb-4 flex items-center justify-between border-b border-slate-100">
-                <h3 className="text-lg font-bold text-slate-900">Extension Request Details</h3>
+                <h3 className="text-lg font-bold text-slate-900">Delete Stay Extension Request</h3>
                 <button
-                    onClick={closeModal}
-                    className="text-slate-400 hover:text-slate-700 text-lg"
+                    onClick={onClose}
+                    disabled={saving}
+                    className="text-slate-400 hover:text-slate-700 text-lg disabled:opacity-50"
                 >
                     <i className="fa-solid fa-xmark"></i>
                 </button>
             </div>
 
-            {/* ============ BODY ============ */}
-            <div className="p-6 overflow-y-auto flex flex-col gap-4">
-
-                {/* Tenant + Status */}
-                <div className="flex items-center justify-between">
-                    <div>
-                        <div className="text-[17px] font-bold text-slate-900">
-                            {request.tenant}
-                        </div>
-                        <div className="text-xs text-slate-400 mt-0.5">
-                            {request.reference_no}
-                        </div>
-                    </div>
-                    <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold ${statusConfig.class}`}>
-                        <i className={statusConfig.icon}></i> {request.status}
-                    </span>
+            <div className="p-6 text-center">
+                <div className="w-16 h-16 mx-auto rounded-full bg-rose-50 flex items-center justify-center mb-4">
+                    <i className="fa-solid fa-trash-can text-rose-500 text-2xl"></i>
                 </div>
-
-                {/* Lease Extension Card */}
-                <div className="bg-purple-50 border border-purple-100 rounded-2xl p-5 flex flex-col items-center gap-3">
-                    <div className="flex justify-around w-full">
-                        <div className="text-center">
-                            <div className="text-[11px] text-purple-500 font-medium mb-1">
-                                Current Lease Ends
-                            </div>
-                            <div className="text-base font-extrabold text-slate-900">
-                                {request.current_end}
-                            </div>
-                        </div>
-                        <div className="text-center">
-                            <div className="text-[11px] text-purple-500 font-medium mb-1">
-                                Requested New End
-                            </div>
-                            <div className="text-base font-extrabold text-purple-700">
-                                {request.requested_end}
-                            </div>
-                        </div>
-                    </div>
-                    <span className="bg-purple-100 text-purple-700 text-[11px] font-bold px-3.5 py-1 rounded-xl">
-                        {request.extension_days}
-                    </span>
-                </div>
-
-                {/* Reason */}
-                <div>
-                    <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Reason</div>
-                    <div className="bg-slate-50 rounded-xl p-4 text-[13.5px] text-slate-700 leading-snug">
-                        {request.reason}
-                    </div>
-                </div>
-
-                {/* Admin Notes */}
-                <div>
-                    <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">
-                        Admin Notes
-                    </div>
-                    <textarea
-                        value={adminNotes}
-                        onChange={(e) => setAdminNotes(e.target.value)}
-                        placeholder="Add internal notes here..."
-                        className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-[13px] outline-none resize-y min-h-[70px] focus:border-slate-400"
-                    />
+                <h4 className="text-lg font-bold text-slate-900 mb-2">Are you sure?</h4>
+                <p className="text-slate-500 text-[13px] mb-2">
+                    You are about to permanently delete:
+                </p>
+                <p className="font-bold text-slate-900 text-[15px] mb-1">
+                    {target.tenant}
+                </p>
+                <p className="text-[13px] text-slate-600 mb-4">
+                    <span className="font-semibold">{target.current_end}</span>
+                    <i className="fa-solid fa-arrow-right text-slate-400 text-[10px] mx-2"></i>
+                    <span className="font-semibold text-purple-700">{target.requested_end}</span>
+                    <span className="text-slate-400 ml-2">({target.reference_no})</span>
+                </p>
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-left">
+                    <p className="text-[12px] text-amber-800 leading-snug">
+                        <i className="fa-solid fa-circle-info mr-1"></i>
+                        This will permanently remove the stay extension request and its history. The tenant's lease will not be affected.{' '}
+                        <strong>This action cannot be undone.</strong>
+                    </p>
                 </div>
             </div>
 
-            {/* ============ FOOTER ACTIONS ============ */}
-            <div className="p-5 border-t border-slate-100 flex items-center gap-2.5">
-                {isPending && (
-                    <>
-                        <button
-                            onClick={handleApprove}
-                            disabled={saving}
-                            className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-4 py-2.5 rounded-lg text-[13px] font-semibold inline-flex items-center gap-1.5"
-                        >
-                            <i className="fa-regular fa-circle-check"></i>
-                            {saving ? 'Saving…' : 'Approve'}
-                        </button>
-                        <button
-                            onClick={handleReject}
-                            disabled={saving}
-                            className="bg-rose-50 hover:bg-rose-100 disabled:opacity-50 text-rose-600 px-4 py-2.5 rounded-lg text-[13px] font-semibold inline-flex items-center gap-1.5"
-                        >
-                            <i className="fa-regular fa-circle-xmark"></i>
-                            Reject
-                        </button>
-                    </>
-                )}
+            <div className="p-5 border-t border-slate-100 flex justify-end gap-3">
                 <button
-                    onClick={handleDelete}
+                    onClick={onClose}
                     disabled={saving}
-                    className="text-rose-600 hover:text-rose-700 disabled:opacity-50 text-[13px] font-semibold px-3 py-2 ml-auto"
+                    className="text-slate-600 text-[13.5px] font-semibold px-4 py-2 disabled:opacity-50"
                 >
-                    Delete
+                    Cancel
                 </button>
                 <button
-                    onClick={closeModal}
-                    className="bg-[#02122c] text-white px-4 py-2.5 rounded-lg text-[13px] font-semibold"
+                    onClick={onConfirm}
+                    disabled={saving}
+                    className="bg-rose-500 hover:bg-rose-600 disabled:opacity-50 text-white px-5 py-2.5 rounded-lg text-[13.5px] font-semibold inline-flex items-center gap-2 transition"
                 >
-                    Close
+                    {saving ? (
+                        <>
+                            <i className="fa-solid fa-spinner fa-spin"></i>
+                            Deleting…
+                        </>
+                    ) : (
+                        <>
+                            <i className="fa-solid fa-trash-can"></i>
+                            Yes, Delete
+                        </>
+                    )}
                 </button>
             </div>
         </Modal>

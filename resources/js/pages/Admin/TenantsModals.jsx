@@ -47,7 +47,11 @@ function csrfToken() {
 export default function TenantsModals() {
     const [showView, setShowView] = useState(false);
     const [showEdit, setShowEdit] = useState(false);
+    const [showDelete, setShowDelete] = useState(false);
     const [tenant, setTenant] = useState(null);
+
+    // Delete target
+    const [deleteTarget, setDeleteTarget] = useState(null);
 
     // Edit form state
     const [form, setForm] = useState(null);
@@ -57,9 +61,10 @@ export default function TenantsModals() {
     // -------- open modals via delegated clicks --------
     useEffect(() => {
         const handleClick = (e) => {
-            const viewBtn = e.target.closest('.view-tenant-btn');
-            const editBtn = e.target.closest('.edit-tenant-btn');
-            if (!viewBtn && !editBtn) return;
+            const viewBtn   = e.target.closest('.view-tenant-btn');
+            const editBtn   = e.target.closest('.edit-tenant-btn');
+            const deleteBtn = e.target.closest('.delete-tenant-btn');
+            if (!viewBtn && !editBtn && !deleteBtn) return;
 
             const row = e.target.closest('tr[data-tenant]');
             if (!row) return;
@@ -70,6 +75,14 @@ export default function TenantsModals() {
             } catch {
                 parsed = null;
             }
+
+            if (deleteBtn) {
+                // Delete: only needs the ID + name for the confirmation modal
+                setDeleteTarget(parsed);
+                setShowDelete(true);
+                return;
+            }
+
             setTenant(parsed);
             setError('');
             setForm(null);
@@ -138,7 +151,6 @@ export default function TenantsModals() {
             const json = await res.json().catch(() => ({}));
 
             if (!res.ok) {
-                // Validation errors: { errors: { field: [msg] } }
                 if (json.errors) {
                     const first = Object.values(json.errors)[0];
                     throw new Error(
@@ -148,7 +160,6 @@ export default function TenantsModals() {
                 throw new Error(json.message || 'Save failed.');
             }
 
-            // Success — close modal and reload so the row reflects the changes
             setShowEdit(false);
             window.location.reload();
         } catch (err) {
@@ -156,6 +167,41 @@ export default function TenantsModals() {
         } finally {
             setSaving(false);
         }
+    };
+
+    // -------- delete --------
+    const confirmDelete = async () => {
+        if (!deleteTarget) return;
+        setSaving(true);
+        try {
+            const res = await fetch(`/admin/tenants/${deleteTarget.id}`, {
+                method: 'DELETE',
+                headers: {
+                    'Accept':       'application/json',
+                    'X-CSRF-TOKEN': csrfToken(),
+                },
+            });
+
+            const json = await res.json().catch(() => ({}));
+
+            if (!res.ok) {
+                throw new Error(json.message || 'Failed to delete tenant.');
+            }
+
+            setShowDelete(false);
+            setDeleteTarget(null);
+            window.location.reload();
+        } catch (err) {
+            alert(err.message || 'Something went wrong.');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const closeDeleteModal = () => {
+        if (saving) return;
+        setShowDelete(false);
+        setDeleteTarget(null);
     };
 
     // -------- derived --------
@@ -423,6 +469,73 @@ export default function TenantsModals() {
                         >
                             {saving && <i className="fa-solid fa-spinner fa-spin"></i>}
                             {saving ? 'Saving…' : 'Save Changes'}
+                        </button>
+                    </div>
+                </Modal>
+            )}
+
+            {/* ============================================================ */}
+            {/* DELETE CONFIRMATION MODAL */}
+            {/* ============================================================ */}
+            {showDelete && deleteTarget && (
+                <Modal onClose={closeDeleteModal} maxWidth="max-w-[460px]">
+                    <div className="p-5 pb-4 flex items-center justify-between border-b border-slate-100">
+                        <h3 className="text-lg font-bold text-slate-900">Delete Tenant</h3>
+                        <button
+                            onClick={closeDeleteModal}
+                            disabled={saving}
+                            className="text-slate-400 hover:text-slate-700 text-lg disabled:opacity-50"
+                        >
+                            <i className="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+
+                    <div className="p-6 text-center">
+                        <div className="w-16 h-16 mx-auto rounded-full bg-rose-50 flex items-center justify-center mb-4">
+                            <i className="fa-solid fa-trash-can text-rose-500 text-2xl"></i>
+                        </div>
+                        <h4 className="text-lg font-bold text-slate-900 mb-2">Are you sure?</h4>
+                        <p className="text-slate-500 text-[13px] mb-2">
+                            You are about to permanently delete:
+                        </p>
+                        <p className="font-bold text-slate-900 text-[15px] mb-4">
+                            {deleteTarget.name}
+                            {deleteTarget.room && deleteTarget.room !== '—' ? ` (${deleteTarget.room})` : ''}
+                        </p>
+                        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-left">
+                            <p className="text-[12px] text-amber-800 leading-snug">
+                                <i className="fa-solid fa-circle-info mr-1"></i>
+                                This will remove the tenant record and unassign them from their current room.
+                                Their user account, reservation history, and billing records will be preserved.{' '}
+                                <strong>This action cannot be undone.</strong>
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="p-5 border-t border-slate-100 flex justify-end gap-3">
+                        <button
+                            onClick={closeDeleteModal}
+                            disabled={saving}
+                            className="text-slate-600 text-[13.5px] font-semibold px-4 py-2 disabled:opacity-50"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            onClick={confirmDelete}
+                            disabled={saving}
+                            className="bg-rose-500 hover:bg-rose-600 disabled:opacity-50 text-white px-5 py-2.5 rounded-lg text-[13.5px] font-semibold inline-flex items-center gap-2 transition"
+                        >
+                            {saving ? (
+                                <>
+                                    <i className="fa-solid fa-spinner fa-spin"></i>
+                                    Deleting…
+                                </>
+                            ) : (
+                                <>
+                                    <i className="fa-solid fa-trash-can"></i>
+                                    Yes, Delete
+                                </>
+                            )}
                         </button>
                     </div>
                 </Modal>

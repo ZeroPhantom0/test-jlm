@@ -1,5 +1,5 @@
 // resources/js/pages/Admin/VirtualTourModals.jsx
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import Modal from '../../components/Modal';
 
 const csrf = () =>
@@ -223,7 +223,8 @@ export default function VirtualTourModals() {
 
         return (
             <Modal onClose={() => setModal(null)} maxWidth="max-w-[820px]">
-                <div className="p-6 pb-4 flex items-center justify-between border-b border-slate-100">
+                {/* Fixed Header */}
+                <div className="p-6 pb-4 flex items-center justify-between border-b border-slate-100 shrink-0">
                     <h3 className="text-lg font-bold text-slate-900">
                         {isEdit ? 'Edit Virtual Tour' : 'Add New Virtual Tour'}
                     </h3>
@@ -235,7 +236,8 @@ export default function VirtualTourModals() {
                     </button>
                 </div>
 
-                <div className="p-6 overflow-y-auto">
+                {/* Scrollable Body */}
+                <div className="p-6 overflow-y-auto max-h-[60vh]">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         {/* LEFT */}
                         <div className="flex flex-col gap-4">
@@ -384,7 +386,8 @@ export default function VirtualTourModals() {
                     </div>
                 </div>
 
-                <div className="p-6 border-t border-slate-100 flex justify-end gap-3">
+                {/* Fixed Footer */}
+                <div className="p-6 border-t border-slate-100 flex justify-end gap-3 shrink-0">
                     <button
                         onClick={() => setModal(null)}
                         className="text-slate-600 text-[13.5px] font-semibold px-4 py-2"
@@ -410,7 +413,7 @@ export default function VirtualTourModals() {
     if (modal === 'view' && tour) {
         return (
             <Modal onClose={() => setModal(null)} maxWidth="max-w-[540px]">
-                <div className="relative h-[200px] bg-black">
+                <div className="relative h-[200px] bg-black shrink-0">
                     <img
                         src={tour.thumbnail_url || 'https://via.placeholder.com/600x300?text=360+Tour'}
                         alt="Tour"
@@ -435,7 +438,7 @@ export default function VirtualTourModals() {
                     </div>
                 </div>
 
-                <div className="p-5">
+                <div className="p-5 overflow-y-auto max-h-[60vh]">
                     <p className="text-[13px] text-slate-500 mb-4">
                         {tour.description || 'No description provided.'}
                     </p>
@@ -460,7 +463,7 @@ export default function VirtualTourModals() {
                     </div>
                 </div>
 
-                <div className="flex items-center justify-end gap-3 px-5 py-4 border-t border-slate-100 bg-slate-50">
+                <div className="flex items-center justify-end gap-3 px-5 py-4 border-t border-slate-100 bg-slate-50 shrink-0">
                     <button
                         onClick={() => {
                             // Switch to edit with existing data
@@ -491,40 +494,59 @@ export default function VirtualTourModals() {
     if (modal === 'delete' && tour) {
         return (
             <Modal onClose={() => setModal(null)} maxWidth="max-w-[460px]">
-                <div className="bg-rose-500 px-5 py-4">
-                    <h3 className="text-white font-bold flex items-center gap-2">
-                        <i className="fa-solid fa-triangle-exclamation"></i> Delete Tour
-                    </h3>
+                <div className="p-5 pb-4 flex items-center justify-between border-b border-slate-100 shrink-0">
+                    <h3 className="text-lg font-bold text-slate-900">Delete Virtual Tour</h3>
+                    <button
+                        onClick={() => setModal(null)}
+                        disabled={saving}
+                        className="text-slate-400 hover:text-slate-700 text-lg disabled:opacity-50"
+                    >
+                        <i className="fa-solid fa-xmark"></i>
+                    </button>
                 </div>
-                <div className="p-6 text-center">
-                    <i className="fa-solid fa-trash-can text-4xl text-rose-500 mb-4"></i>
-                    <h4 className="text-lg font-bold text-slate-800 mb-2">Are you sure?</h4>
+
+                <div className="p-6 text-center overflow-y-auto max-h-[60vh]">
+                    <div className="w-16 h-16 mx-auto rounded-full bg-rose-50 flex items-center justify-center mb-4">
+                        <i className="fa-solid fa-trash-can text-rose-500 text-2xl"></i>
+                    </div>
+                    <h4 className="text-lg font-bold text-slate-900 mb-2">Are you sure?</h4>
                     <p className="text-slate-500 text-[13px] mb-2">
                         You are about to permanently delete:
                     </p>
-                    <p className="font-bold text-slate-800 text-[15px] mb-4">{tour.title}</p>
+                    <p className="font-bold text-slate-900 text-[15px] mb-4">{tour.title}</p>
                     <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-left">
-                        <p className="text-[12px] text-amber-800">
+                        <p className="text-[12px] text-amber-800 leading-snug">
                             <i className="fa-solid fa-circle-info mr-1"></i>
                             This will also delete all scenes, hotspots, and uploaded images.{' '}
                             <strong>This action cannot be undone.</strong>
                         </p>
                     </div>
                 </div>
-                <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-slate-100 bg-slate-50">
+
+                <div className="p-5 border-t border-slate-100 flex justify-end gap-3 shrink-0">
                     <button
                         onClick={() => setModal(null)}
-                        className="px-5 py-2.5 text-[13px] font-semibold text-slate-600 hover:text-slate-800"
+                        disabled={saving}
+                        className="text-slate-600 text-[13.5px] font-semibold px-4 py-2 disabled:opacity-50"
                     >
                         Cancel
                     </button>
                     <button
                         disabled={saving}
                         onClick={confirmDelete}
-                        className="bg-rose-500 hover:bg-rose-600 disabled:opacity-50 text-white px-5 py-2.5 rounded-[10px] text-[13px] font-semibold inline-flex items-center gap-2"
+                        className="bg-rose-500 hover:bg-rose-600 disabled:opacity-50 text-white px-5 py-2.5 rounded-lg text-[13.5px] font-semibold inline-flex items-center gap-2 transition"
                     >
-                        <i className="fa-solid fa-trash-can"></i>
-                        {saving ? 'Deleting…' : 'Yes, Delete'}
+                        {saving ? (
+                            <>
+                                <i className="fa-solid fa-spinner fa-spin"></i>
+                                Deleting…
+                            </>
+                        ) : (
+                            <>
+                                <i className="fa-solid fa-trash-can"></i>
+                                Yes, Delete
+                            </>
+                        )}
                     </button>
                 </div>
             </Modal>

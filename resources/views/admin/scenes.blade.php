@@ -158,17 +158,16 @@
                                 </div>
 
                                 <div class="flex items-center gap-2 mt-3 pt-3 border-t border-slate-100">
+                                    {{-- Using discrete data attributes prevents Blade @json parse errors --}}
                                     <button type="button"
-                                            onclick='openEditScene({{ json_encode([
-                                                "id"              => $scene->id,
-                                                "title"           => $scene->title,
-                                                "description"     => $scene->description,
-                                                "default_yaw"     => (float) $scene->default_yaw,
-                                                "default_pitch"   => (float) $scene->default_pitch,
-                                                "auto_audio_text" => $scene->auto_audio_text,
-                                                "image_url"       => $scene->image_url,
-                                            ], JSON_HEX_APOS | JSON_HEX_QUOT) }})'
-                                            class="flex-1 bg-[#0b1930] hover:bg-[#162640] text-white px-3 py-2 rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition">
+                                            data-id="{{ $scene->id }}"
+                                            data-title="{{ $scene->title }}"
+                                            data-description="{{ $scene->description }}"
+                                            data-yaw="{{ (float) $scene->default_yaw }}"
+                                            data-pitch="{{ (float) $scene->default_pitch }}"
+                                            data-audio="{{ $scene->auto_audio_text }}"
+                                            data-image-url="{{ $scene->image_url }}"
+                                            class="flex-1 bg-[#0b1930] hover:bg-[#162640] text-white px-3 py-2 rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition open-edit-scene-btn">
                                         <i class="fa-regular fa-pen-to-square"></i> Edit
                                     </button>
 
@@ -186,18 +185,13 @@
                                         </form>
                                     @endif
 
-                                    <form method="POST"
-                                          action="{{ route('admin.virtual-tour.scenes.destroy', [$virtualTour->id, $scene->id]) }}"
-                                          onsubmit="return confirm('Delete this scene and all its hotspots?')"
-                                          class="inline">
-                                        @csrf
-                                        @method('DELETE')
-                                        <button type="submit"
-                                                class="bg-rose-50 border border-rose-200 text-rose-600 px-3 py-2 rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1.5 hover:bg-rose-100 transition"
-                                                title="Delete scene">
-                                            <i class="fa-regular fa-trash-can"></i>
-                                        </button>
-                                    </form>
+                                    <button type="button"
+                                            data-scene-id="{{ $scene->id }}"
+                                            data-scene-title="{{ $scene->title }}"
+                                            class="bg-rose-50 border border-rose-200 text-rose-600 px-3 py-2 rounded-lg text-xs font-semibold inline-flex items-center justify-center gap-1.5 hover:bg-rose-100 transition open-delete-scene-btn"
+                                            title="Delete scene">
+                                        <i class="fa-regular fa-trash-can"></i>
+                                    </button>
                                 </div>
                             </div>
                         </div>
@@ -208,121 +202,17 @@
     </div>
 </div>
 
-{{-- ============================================================
-     EDIT SCENE MODAL
-     ============================================================ --}}
-<div id="edit-scene-modal" class="fixed inset-0 z-50 hidden">
-    <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" onclick="closeEditScene()"></div>
-    <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-        <div class="bg-white rounded-2xl shadow-2xl">
-            {{-- action is set dynamically by JS --}}
-            <form id="edit-scene-form" method="POST" enctype="multipart/form-data" action="">
-                @csrf
-                @method('PUT')
-
-                <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100">
-                    <h3 class="text-lg font-bold text-slate-900">Edit Scene</h3>
-                    <button type="button" onclick="closeEditScene()" class="text-slate-400 hover:text-slate-600">
-                        <i class="fa-solid fa-xmark text-xl"></i>
-                    </button>
-                </div>
-
-                <div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-5">
-                    {{-- Left: Image --}}
-                    <div class="space-y-3">
-                        <label class="block text-[12.5px] font-semibold text-slate-700">Current Image</label>
-                        <div class="rounded-xl overflow-hidden bg-black h-[160px]">
-                            <img id="edit-scene-preview" src="" alt="Scene" class="w-full h-full object-cover">
-                        </div>
-                        <label class="block text-[12.5px] font-semibold text-slate-700">Replace Image (Optional)</label>
-                        <input type="file" name="scene_image" accept="image/*"
-                               class="w-full border border-slate-200 rounded-lg px-3 py-2 text-[13px] file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200">
-                        <p class="text-[11px] text-slate-400">Leave empty to keep the current image.</p>
-                    </div>
-
-                    {{-- Right: Fields --}}
-                    <div class="space-y-3">
-                        <div>
-                            <label class="block text-[12.5px] font-semibold text-slate-700 mb-1.5">Scene Title *</label>
-                            <input type="text" name="title" id="edit-scene-title" required
-                                   class="w-full border border-slate-200 rounded-lg px-3.5 py-2.5 text-[13px] outline-none focus:border-slate-400">
-                        </div>
-
-                        <div>
-                            <label class="block text-[12.5px] font-semibold text-slate-700 mb-1.5">Description</label>
-                            <textarea name="description" id="edit-scene-description" rows="2"
-                                      class="w-full border border-slate-200 rounded-lg px-3.5 py-2.5 text-[13px] outline-none focus:border-slate-400 resize-none"></textarea>
-                        </div>
-
-                        <div class="grid grid-cols-2 gap-3">
-                            <div>
-                                <label class="block text-[12.5px] font-semibold text-slate-700 mb-1.5">Default Yaw</label>
-                                <input type="number" step="any" name="default_yaw" id="edit-scene-yaw"
-                                       class="w-full border border-slate-200 rounded-lg px-3.5 py-2.5 text-[13px] outline-none focus:border-slate-400">
-                            </div>
-                            <div>
-                                <label class="block text-[12.5px] font-semibold text-slate-700 mb-1.5">Default Pitch</label>
-                                <input type="number" step="any" name="default_pitch" id="edit-scene-pitch"
-                                       class="w-full border border-slate-200 rounded-lg px-3.5 py-2.5 text-[13px] outline-none focus:border-slate-400">
-                            </div>
-                        </div>
-
-                        <div>
-                            <label class="block text-[12.5px] font-semibold text-slate-700 mb-1.5">Auto-Play Audio Text</label>
-                            <textarea name="auto_audio_text" id="edit-scene-audio" rows="3"
-                                      placeholder="Text to speak automatically when scene loads..."
-                                      class="w-full border border-slate-200 rounded-lg px-3.5 py-2.5 text-[13px] outline-none focus:border-slate-400 resize-none"></textarea>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="flex items-center justify-end gap-3 px-6 py-4 border-t border-slate-100 bg-slate-50 rounded-b-2xl">
-                    <button type="button" onclick="closeEditScene()"
-                            class="px-5 py-2.5 text-[13px] font-semibold text-slate-600 hover:text-slate-800">
-                        Cancel
-                    </button>
-                    <button type="submit"
-                            class="bg-[#0b1930] hover:bg-[#162640] text-white px-6 py-2.5 rounded-[10px] text-[13px] font-semibold inline-flex items-center gap-2 transition shadow-sm">
-                        <i class="fa-solid fa-floppy-disk"></i> Save Changes
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
+{{-- React Modal Mount Point --}}
+<div id="admin-scenes-modals" 
+     data-tour-id="{{ $virtualTour->id }}"
+     data-csrf="{{ csrf_token() }}"
+     class="hidden"></div>
 @endsection
 
 @push('scripts')
 <script>
-    const editSceneModal = document.getElementById('edit-scene-modal');
-    const editSceneForm  = document.getElementById('edit-scene-form');
-
-    // Base URL for updating a scene — {id} is appended in JS
-    // Example: /admin/virtual-tour/2/scenes  →  /admin/virtual-tour/2/scenes/15
-    const SCENE_UPDATE_BASE = @json(url('admin/virtual-tour/' . $virtualTour->id . '/scenes'));
-
-    function openEditScene(scene) {
-        document.getElementById('edit-scene-title').value       = scene.title || '';
-        document.getElementById('edit-scene-description').value = scene.description || '';
-        document.getElementById('edit-scene-yaw').value         = scene.default_yaw ?? 0;
-        document.getElementById('edit-scene-pitch').value       = scene.default_pitch ?? 0;
-        document.getElementById('edit-scene-audio').value       = scene.auto_audio_text || '';
-        document.getElementById('edit-scene-preview').src       = scene.image_url || '';
-
-        // Set the form action to PUT /admin/virtual-tour/{tour}/scenes/{scene}
-        editSceneForm.action = SCENE_UPDATE_BASE + '/' + scene.id;
-
-        editSceneModal.classList.remove('hidden');
-        document.body.style.overflow = 'hidden';
-    }
-
-    function closeEditScene() {
-        editSceneModal.classList.add('hidden');
-        document.body.style.overflow = '';
-    }
-
-    document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') closeEditScene();
-    });
+    // Base URLs for updating and deleting scenes — {id} is appended in React
+    window.SCENE_UPDATE_BASE = "{{ url('admin/virtual-tour/' . $virtualTour->id . '/scenes') }}";
+    window.SCENE_DESTROY_BASE = "{{ url('admin/virtual-tour/' . $virtualTour->id . '/scenes') }}";
 </script>
 @endpush

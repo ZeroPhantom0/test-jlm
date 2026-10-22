@@ -1,25 +1,130 @@
 // resources/js/Pages/Onboarding/PersonalInformation.jsx
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Head, Link, useForm } from '@inertiajs/react';
+import CameraCaptureModal from '../../components/CameraCaptureModal';
 
-export default function PersonalInformation({ user }) {
-    const { data, setData, post, processing, errors } = useForm({
-        fullname: user?.name || '',
-        email: user?.email || '',
-        contact_number: user?.phone || '',
-        current_address: '',
-        emergency_name: '',
-        emergency_number: '',
-    });
+const DRAFT_KEY = 'jlm_onboarding_personal_draft';
+
+const isMobile = () =>
+    typeof navigator !== 'undefined' &&
+    /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+
+export default function PersonalInformation({ user, personalInfo }) {
+    let initialDraft = {};
+    try {
+        const raw = localStorage.getItem(DRAFT_KEY);
+        if (raw) initialDraft = JSON.parse(raw) || {};
+    } catch (_) {}
+
+    const initial = {
+        fullname:         initialDraft.fullname         ?? personalInfo?.full_name        ?? user?.name  ?? '',
+        email:            initialDraft.email            ?? personalInfo?.email            ?? user?.email ?? '',
+        contact_number:   initialDraft.contact_number   ?? personalInfo?.contact_number   ?? user?.phone ?? '',
+        current_address:  initialDraft.current_address  ?? personalInfo?.current_address  ?? '',
+        emergency_name:   initialDraft.emergency_name   ?? personalInfo?.emergency_name   ?? '',
+        emergency_number: initialDraft.emergency_number ?? personalInfo?.emergency_number ?? '',
+        profile_picture:  null,
+    };
+
+    const { data, setData, post, processing, errors } = useForm(initial);
+
+    const [previewUrl, setPreviewUrl] = useState(
+        personalInfo?.profile_picture
+            ? `/storage/${personalInfo.profile_picture}`
+            : null
+    );
+    const [choiceTarget, setChoiceTarget] = useState(null);
+    const [showCamera, setShowCamera]     = useState(false);
+
+    const cameraInputRef  = useRef(null);
+    const galleryInputRef = useRef(null);
+
+    useEffect(() => {
+        const payload = {
+            fullname:         data.fullname,
+            email:            data.email,
+            contact_number:   data.contact_number,
+            current_address:  data.current_address,
+            emergency_name:   data.emergency_name,
+            emergency_number: data.emergency_number,
+        };
+        try {
+            localStorage.setItem(DRAFT_KEY, JSON.stringify(payload));
+        } catch (_) {}
+    }, [
+        data.fullname,
+        data.email,
+        data.contact_number,
+        data.current_address,
+        data.emergency_name,
+        data.emergency_number,
+    ]);
+
+    useEffect(() => {
+        return () => {
+            if (previewUrl && previewUrl.startsWith('blob:')) {
+                URL.revokeObjectURL(previewUrl);
+            }
+        };
+    }, [previewUrl]);
+
+    const handleFileSelected = useCallback((file) => {
+        if (!file) return;
+        setData('profile_picture', file);
+        if (previewUrl && previewUrl.startsWith('blob:')) {
+            URL.revokeObjectURL(previewUrl);
+        }
+        setPreviewUrl(URL.createObjectURL(file));
+    }, [previewUrl, setData]);
+
+    const openChooser  = () => setChoiceTarget('profile');
+    const closeChooser = () => setChoiceTarget(null);
+
+    const pickCamera = () => {
+        closeChooser();
+        setTimeout(() => {
+            if (isMobile()) cameraInputRef.current?.click();
+            else setShowCamera(true);
+        }, 60);
+    };
+
+    const pickGallery = () => {
+        closeChooser();
+        setTimeout(() => galleryInputRef.current?.click(), 60);
+    };
 
     const handleSubmit = (e) => {
         e.preventDefault();
-        post('/personal-information');
+        post('/personal-information', {
+            forceFormData: true,
+            onSuccess: () => {
+                try { localStorage.removeItem(DRAFT_KEY); } catch (_) {}
+            },
+        });
     };
 
     return (
         <div className="personal-page">
             <Head title="Personal Information | JLM Cozy Cabin" />
+
+            {choiceTarget && (
+                <UploadChoiceModal
+                    title="Profile Picture"
+                    onCamera={pickCamera}
+                    onGallery={pickGallery}
+                    onClose={closeChooser}
+                />
+            )}
+
+            {showCamera && (
+                <CameraCaptureModal
+                    onCapture={(file) => {
+                        setShowCamera(false);
+                        handleFileSelected(file);
+                    }}
+                    onClose={() => setShowCamera(false)}
+                />
+            )}
 
             <div className="personal-container">
                 {/* LEFT */}
@@ -75,16 +180,36 @@ export default function PersonalInformation({ user }) {
                         <div className="profile-picture-section">
                             <div className="profile-picture-wrapper">
                                 <div className="profile-picture-placeholder">
-                                    <i className="bi bi-person"></i>
+                                    {previewUrl ? (
+                                        <img src={previewUrl} alt="Profile preview" className="profile-picture-preview" />
+                                    ) : (
+                                        <i className="bi bi-person"></i>
+                                    )}
                                 </div>
-                                <label
-                                    htmlFor="profilePicture"
+                                <button
+                                    type="button"
                                     className="profile-camera-btn"
                                     aria-label="Upload profile picture"
+                                    onClick={openChooser}
                                 >
                                     <i className="bi bi-camera"></i>
-                                </label>
-                                <input type="file" id="profilePicture" name="profile_picture" accept="image/*" hidden />
+                                </button>
+
+                                <input
+                                    ref={cameraInputRef}
+                                    type="file"
+                                    accept="image/*"
+                                    capture="user"
+                                    hidden
+                                    onChange={(e) => handleFileSelected(e.target.files?.[0])}
+                                />
+                                <input
+                                    ref={galleryInputRef}
+                                    type="file"
+                                    accept="image/*"
+                                    hidden
+                                    onChange={(e) => handleFileSelected(e.target.files?.[0])}
+                                />
                             </div>
                             <div className="profile-picture-info">
                                 <h3>Profile Picture</h3>
@@ -212,6 +337,48 @@ export default function PersonalInformation({ user }) {
                             </button>
                         </div>
                     </form>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+export function UploadChoiceModal({ title = 'Upload Photo', onCamera, onGallery, onClose }) {
+    useEffect(() => {
+        const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+        document.addEventListener('keydown', onKey);
+        document.body.style.overflow = 'hidden';
+        return () => {
+            document.removeEventListener('keydown', onKey);
+            document.body.style.overflow = '';
+        };
+    }, [onClose]);
+
+    return (
+        <div className="upload-modal-overlay" onClick={onClose} role="dialog" aria-modal="true">
+            <div className="upload-modal" onClick={(e) => e.stopPropagation()}>
+                <button type="button" className="upload-modal-close" onClick={onClose} aria-label="Close">
+                    <i className="bi bi-x-lg"></i>
+                </button>
+
+                <h3 className="upload-modal-title">{title}</h3>
+                <p className="upload-modal-subtitle">Choose how you'd like to add your photo</p>
+
+                <div className="upload-modal-options">
+                    <button type="button" className="upload-modal-option" onClick={onCamera}>
+                        <span className="upload-modal-option-icon"><i className="bi bi-camera-fill"></i></span>
+                        <span className="upload-modal-option-text">
+                            <strong>Take a Photo</strong>
+                            <small>Use your camera</small>
+                        </span>
+                    </button>
+                    <button type="button" className="upload-modal-option" onClick={onGallery}>
+                        <span className="upload-modal-option-icon"><i className="bi bi-image-fill"></i></span>
+                        <span className="upload-modal-option-text">
+                            <strong>Upload Photo</strong>
+                            <small>Choose from your device</small>
+                        </span>
+                    </button>
                 </div>
             </div>
         </div>

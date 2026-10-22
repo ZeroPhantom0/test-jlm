@@ -23,7 +23,7 @@ const FALLBACK = {
     payment_method: 'Not Set',
     receipt_url: null,
     is_remaining: false,
-    date_paid: null, // Default to null
+    date_paid: null,
     receipt_no: '-',
 };
 
@@ -31,6 +31,12 @@ export default function BillingModals() {
     const [showEdit, setShowEdit]       = useState(false);
     const [showSummary, setShowSummary] = useState(false);
     const [showReceipt, setShowReceipt] = useState(false);
+
+    // Confirmation modals
+    const [showVerify, setShowVerify]   = useState(false);
+    const [showReject, setShowReject]   = useState(false);
+    const [rejectNotes, setRejectNotes] = useState('');
+
     const [invoice, setInvoice]         = useState(null);
     const [saving, setSaving]           = useState(false);
     const [invoicesData, setInvoicesData] = useState({});
@@ -53,8 +59,10 @@ export default function BillingModals() {
             const payBtn     = e.target.closest('.icon-payment');
             const receiptBtn = e.target.closest('.icon-receipt');
             const remindBtn  = e.target.closest('.icon-remind');
+            const verifyBtn  = e.target.closest('.icon-verify');
+            const rejectBtn  = e.target.closest('.icon-reject');
 
-            const btn = editBtn || viewBtn || payBtn || receiptBtn || remindBtn;
+            const btn = editBtn || viewBtn || payBtn || receiptBtn || remindBtn || verifyBtn || rejectBtn;
             if (!btn) return;
 
             const row  = btn.closest('tr');
@@ -67,6 +75,11 @@ export default function BillingModals() {
             if (payBtn)     return setShowReceipt(true);
             if (receiptBtn) return setShowReceipt(true);
             if (remindBtn)  return handleSendReminder(data);
+            if (verifyBtn)  return setShowVerify(true);
+            if (rejectBtn) {
+                setRejectNotes('');
+                return setShowReject(true);
+            }
         };
         document.addEventListener('click', handleClick);
         return () => document.removeEventListener('click', handleClick);
@@ -76,7 +89,21 @@ export default function BillingModals() {
         setShowEdit(false);
         setShowSummary(false);
         setShowReceipt(false);
+        setShowVerify(false);
+        setShowReject(false);
+        setRejectNotes('');
         setInvoice(null);
+    };
+
+    const closeVerifyModal = () => {
+        if (saving) return;
+        setShowVerify(false);
+    };
+
+    const closeRejectModal = () => {
+        if (saving) return;
+        setShowReject(false);
+        setRejectNotes('');
     };
 
     const handleSendReminder = async (data) => {
@@ -121,10 +148,12 @@ export default function BillingModals() {
         }
     };
 
-    const handleVerify = async () => {
+    // ============================================================
+    // Confirm Verify
+    // ============================================================
+    const confirmVerify = async () => {
         if (!invoice) return;
-        if (!confirm(`Verify payment for ${invoice.tn}?`)) return;
-
+        setSaving(true);
         try {
             const res = await fetch(`/admin/billing/${invoice.tn}/verify-payment`, {
                 method: 'POST',
@@ -139,14 +168,21 @@ export default function BillingModals() {
             window.location.reload();
         } catch (err) {
             alert(err.message);
+        } finally {
+            setSaving(false);
         }
     };
 
-    const handleReject = async () => {
+    // ============================================================
+    // Confirm Reject
+    // ============================================================
+    const confirmReject = async () => {
         if (!invoice) return;
-        const notes = prompt('Reason for rejection (required):');
-        if (!notes) return;
-
+        if (!rejectNotes.trim()) {
+            alert('Please provide a reason for rejection.');
+            return;
+        }
+        setSaving(true);
         try {
             const res = await fetch(`/admin/billing/${invoice.tn}/reject-payment`, {
                 method: 'POST',
@@ -155,7 +191,7 @@ export default function BillingModals() {
                     'Accept': 'application/json',
                     'X-CSRF-TOKEN': csrf(),
                 },
-                body: JSON.stringify({ admin_notes: notes }),
+                body: JSON.stringify({ admin_notes: rejectNotes }),
             });
             const result = await res.json();
             if (!res.ok) throw new Error(result.message || 'Rejection failed.');
@@ -163,12 +199,13 @@ export default function BillingModals() {
             window.location.reload();
         } catch (err) {
             alert(err.message);
+        } finally {
+            setSaving(false);
         }
     };
 
     const data = invoice || FALLBACK;
 
-    // If date_paid is missing, show '-' instead of falling back to due date
     const displayDatePaid = data.date_paid && data.date_paid !== '-' ? data.date_paid : '-';
 
     const statusBadgeClass = {
@@ -223,8 +260,7 @@ export default function BillingModals() {
                             <div className="bg-slate-50 rounded-xl p-3"><div className="text-[11px] text-slate-400">Amount Paid</div><div className="text-[13px] font-bold text-slate-900 mt-0.5">{data.paid}</div></div>
                             <div className="bg-slate-50 rounded-xl p-3"><div className="text-[11px] text-slate-400">Balance</div><div className="text-[13px] font-bold text-slate-900 mt-0.5">{data.balance}</div></div>
                             <div className="bg-slate-50 rounded-xl p-3 col-span-2"><div className="text-[11px] text-slate-400">Due Date</div><div className="text-[13px] font-bold text-slate-900 mt-0.5">{data.due}</div></div>
-                            
-                            {/* Always show for Pending, Partial, Overdue, and Paid */}
+
                             {['Pending', 'Partial', 'Overdue', 'Paid'].includes(data.status) && (
                                 <>
                                     <div className="bg-slate-50 rounded-xl p-3 col-span-1"><div className="text-[11px] text-slate-400">Payment Method</div><div className="text-[13px] font-bold text-blue-700 mt-0.5 uppercase">{data.payment_method || '-'}</div></div>
@@ -289,7 +325,7 @@ export default function BillingModals() {
                             </>
                         )}
                     </div>
-                    
+
                     <div className="p-5 border-t border-slate-100 flex justify-between">
                         <button onClick={closeAll} className="bg-[#02122b] text-white px-5 py-2.5 rounded-lg text-[13px] font-semibold hover:bg-slate-800 transition">
                             Close
@@ -298,13 +334,13 @@ export default function BillingModals() {
                         {data.status === 'Pending' && (
                             <div className="flex gap-2">
                                 <button
-                                    onClick={handleVerify}
+                                    onClick={() => { setShowSummary(false); setShowVerify(true); }}
                                     className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-lg text-[13px] font-semibold transition"
                                 >
                                     Approve
                                 </button>
                                 <button
-                                    onClick={handleReject}
+                                    onClick={() => { setShowSummary(false); setRejectNotes(''); setShowReject(true); }}
                                     className="bg-rose-500 hover:bg-rose-600 text-white px-4 py-2.5 rounded-lg text-[13px] font-semibold transition"
                                 >
                                     Reject
@@ -383,6 +419,181 @@ export default function BillingModals() {
 
                         <button className="w-full mt-3 border border-slate-300 bg-white rounded-lg py-2.5 text-[13px] font-bold text-slate-900 inline-flex items-center justify-center gap-2 hover:bg-slate-50 transition">
                             <i className="fa-solid fa-print"></i> Print Receipt
+                        </button>
+                    </div>
+                </Modal>
+            )}
+
+            {/* ============================================================ */}
+            {/* VERIFY PAYMENT CONFIRMATION MODAL */}
+            {/* ============================================================ */}
+            {showVerify && invoice && (
+                <Modal onClose={closeVerifyModal} maxWidth="max-w-[460px]">
+                    <div className="p-5 pb-4 flex items-center justify-between border-b border-slate-100">
+                        <h3 className="text-lg font-bold text-slate-900">Verify Payment</h3>
+                        <button
+                            onClick={closeVerifyModal}
+                            disabled={saving}
+                            className="text-slate-400 hover:text-slate-700 text-lg disabled:opacity-50"
+                        >
+                            <i className="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+
+                    <div className="p-6 text-center">
+                        <div className="w-16 h-16 mx-auto rounded-full bg-emerald-50 flex items-center justify-center mb-4">
+                            <i className="fa-solid fa-circle-check text-emerald-500 text-2xl"></i>
+                        </div>
+                        <h4 className="text-lg font-bold text-slate-900 mb-2">Verify this payment?</h4>
+                        <p className="text-slate-500 text-[13px] mb-4">
+                            This will mark the invoice as <strong>Paid</strong> and record the payment.
+                        </p>
+
+                        <div className="bg-slate-50 rounded-xl p-4 text-left flex flex-col gap-2.5 mb-4">
+                            <div className="flex justify-between text-xs">
+                                <span className="text-slate-500">Transaction</span>
+                                <span className="font-bold text-slate-900">{invoice.tn}</span>
+                            </div>
+                            <div className="flex justify-between text-xs">
+                                <span className="text-slate-500">Tenant</span>
+                                <span className="font-bold text-slate-900">{invoice.tenant}</span>
+                            </div>
+                            <div className="flex justify-between text-xs">
+                                <span className="text-slate-500">Amount</span>
+                                <span className="font-bold text-emerald-600">{invoice.paid}</span>
+                            </div>
+                            <div className="flex justify-between text-xs">
+                                <span className="text-slate-500">Method</span>
+                                <span className="font-bold text-slate-900 uppercase">{invoice.payment_method || '-'}</span>
+                            </div>
+                        </div>
+
+                        <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-left">
+                            <p className="text-[12px] text-emerald-800 leading-snug">
+                                <i className="fa-solid fa-circle-info mr-1"></i>
+                                Make sure you've reviewed the uploaded proof of payment before verifying.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="p-5 border-t border-slate-100 flex justify-end gap-3">
+                        <button
+                            onClick={closeVerifyModal}
+                            disabled={saving}
+                            className="text-slate-600 text-[13.5px] font-semibold px-4 py-2 disabled:opacity-50"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            onClick={confirmVerify}
+                            disabled={saving}
+                            className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-5 py-2.5 rounded-lg text-[13.5px] font-semibold inline-flex items-center gap-2 transition"
+                        >
+                            {saving ? (
+                                <>
+                                    <i className="fa-solid fa-spinner fa-spin"></i>
+                                    Verifying…
+                                </>
+                            ) : (
+                                <>
+                                    <i className="fa-solid fa-circle-check"></i>
+                                    Yes, Verify
+                                </>
+                            )}
+                        </button>
+                    </div>
+                </Modal>
+            )}
+
+            {/* ============================================================ */}
+            {/* REJECT PAYMENT CONFIRMATION MODAL */}
+            {/* ============================================================ */}
+            {showReject && invoice && (
+                <Modal onClose={closeRejectModal} maxWidth="max-w-[460px]">
+                    <div className="p-5 pb-4 flex items-center justify-between border-b border-slate-100 shrink-0">
+                        <h3 className="text-lg font-bold text-slate-900">Reject Payment</h3>
+                        <button
+                            onClick={closeRejectModal}
+                            disabled={saving}
+                            className="text-slate-400 hover:text-slate-700 text-lg disabled:opacity-50"
+                        >
+                            <i className="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+
+                    {/* Scrollable body */}
+                    <div className="p-6 overflow-y-auto max-h-[60vh]">
+                        <div className="text-center mb-4">
+                            <div className="w-16 h-16 mx-auto rounded-full bg-rose-50 flex items-center justify-center mb-4">
+                                <i className="fa-solid fa-circle-xmark text-rose-500 text-2xl"></i>
+                            </div>
+                            <h4 className="text-lg font-bold text-slate-900 mb-2">Reject this payment?</h4>
+                            <p className="text-slate-500 text-[13px]">
+                                This will revert the invoice to its previous unpaid state and delete the uploaded proof.
+                            </p>
+                        </div>
+
+                        <div className="bg-slate-50 rounded-xl p-4 text-left flex flex-col gap-2.5 mb-4">
+                            <div className="flex justify-between text-xs">
+                                <span className="text-slate-500">Transaction</span>
+                                <span className="font-bold text-slate-900">{invoice.tn}</span>
+                            </div>
+                            <div className="flex justify-between text-xs">
+                                <span className="text-slate-500">Tenant</span>
+                                <span className="font-bold text-slate-900">{invoice.tenant}</span>
+                            </div>
+                            <div className="flex justify-between text-xs">
+                                <span className="text-slate-500">Amount</span>
+                                <span className="font-bold text-slate-900">{invoice.paid}</span>
+                            </div>
+                        </div>
+
+                        <label className="block text-[13px] font-semibold text-slate-700 mb-1.5">
+                            Reason for rejection <span className="text-rose-500">*</span>
+                        </label>
+                        <textarea
+                            value={rejectNotes}
+                            onChange={(e) => setRejectNotes(e.target.value)}
+                            placeholder="Explain why this payment proof is being rejected..."
+                            className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-[13px] outline-none resize-y min-h-[90px] focus:border-slate-400"
+                        />
+                        <p className="text-[11px] text-slate-400 mt-1">
+                            The tenant will see this reason when they check their billing.
+                        </p>
+
+                        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-left mt-4">
+                            <p className="text-[12px] text-amber-800 leading-snug">
+                                <i className="fa-solid fa-circle-info mr-1"></i>
+                                The tenant will need to resubmit their proof of payment.
+                            </p>
+                        </div>
+                    </div>
+
+                    {/* Fixed footer */}
+                    <div className="p-5 border-t border-slate-100 flex justify-end gap-3 shrink-0">
+                        <button
+                            onClick={closeRejectModal}
+                            disabled={saving}
+                            className="text-slate-600 text-[13.5px] font-semibold px-4 py-2 disabled:opacity-50"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            onClick={confirmReject}
+                            disabled={saving || !rejectNotes.trim()}
+                            className="bg-rose-500 hover:bg-rose-600 disabled:opacity-50 text-white px-5 py-2.5 rounded-lg text-[13.5px] font-semibold inline-flex items-center gap-2 transition"
+                        >
+                            {saving ? (
+                                <>
+                                    <i className="fa-solid fa-spinner fa-spin"></i>
+                                    Rejecting…
+                                </>
+                            ) : (
+                                <>
+                                    <i className="fa-solid fa-circle-xmark"></i>
+                                    Yes, Reject
+                                </>
+                            )}
                         </button>
                     </div>
                 </Modal>

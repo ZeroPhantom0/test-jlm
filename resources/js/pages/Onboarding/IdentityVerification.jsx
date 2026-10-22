@@ -1,25 +1,142 @@
 // resources/js/Pages/Onboarding/IdentityVerification.jsx
-import React from 'react';
-import { Head, Link, useForm } from '@inertiajs/react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { Head, router, useForm } from '@inertiajs/react';
+import { UploadChoiceModal } from './PersonalInformation';
+import CameraCaptureModal from '../../components/CameraCaptureModal';
 
-export default function IdentityVerification() {
-    const { data, setData, post, processing, errors } = useForm({
-        id_type: '',
-        id_front: null,
-        id_back: null,
-        verification_agreement: false,
-    });
+const DRAFT_KEY = 'jlm_onboarding_identity_draft';
+
+const isMobile = () =>
+    typeof navigator !== 'undefined' &&
+    /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+
+export default function IdentityVerification({ identity }) {
+    let initialDraft = {};
+    try {
+        const raw = localStorage.getItem(DRAFT_KEY);
+        if (raw) initialDraft = JSON.parse(raw) || {};
+    } catch (_) {}
+
+    const initial = {
+        id_type:                initialDraft.id_type                ?? identity?.id_type                ?? '',
+        id_front:               null,
+        id_back:                null,
+        verification_agreement: initialDraft.verification_agreement ?? false,
+    };
+
+    const { data, setData, post, processing, errors } = useForm(initial);
+
+    const [frontPreview, setFrontPreview] = useState(
+        identity?.id_front ? `/storage/${identity.id_front}` : null
+    );
+    const [backPreview, setBackPreview] = useState(
+        identity?.id_back ? `/storage/${identity.id_back}` : null
+    );
+    const [choiceTarget, setChoiceTarget] = useState(null);
+    const [cameraTarget, setCameraTarget] = useState(null);
+
+    const frontCameraRef  = useRef(null);
+    const frontGalleryRef = useRef(null);
+    const backCameraRef   = useRef(null);
+    const backGalleryRef  = useRef(null);
+
+    useEffect(() => {
+        const payload = {
+            id_type: data.id_type,
+            verification_agreement: data.verification_agreement,
+        };
+        try {
+            localStorage.setItem(DRAFT_KEY, JSON.stringify(payload));
+        } catch (_) {}
+    }, [data.id_type, data.verification_agreement]);
+
+    useEffect(() => {
+        return () => {
+            if (frontPreview && frontPreview.startsWith('blob:')) URL.revokeObjectURL(frontPreview);
+            if (backPreview  && backPreview.startsWith('blob:'))  URL.revokeObjectURL(backPreview);
+        };
+    }, [frontPreview, backPreview]);
+
+    const handleFrontSelected = useCallback((file) => {
+        if (!file) return;
+        setData('id_front', file);
+        if (frontPreview && frontPreview.startsWith('blob:')) URL.revokeObjectURL(frontPreview);
+        setFrontPreview(URL.createObjectURL(file));
+    }, [frontPreview, setData]);
+
+    const handleBackSelected = useCallback((file) => {
+        if (!file) return;
+        setData('id_back', file);
+        if (backPreview && backPreview.startsWith('blob:')) URL.revokeObjectURL(backPreview);
+        setBackPreview(URL.createObjectURL(file));
+    }, [backPreview, setData]);
+
+    const openChooser  = (target) => setChoiceTarget(target);
+    const closeChooser = () => setChoiceTarget(null);
+
+    const runCamera = () => {
+        const target = choiceTarget;
+        closeChooser();
+        setTimeout(() => {
+            if (target === 'front') {
+                if (isMobile()) frontCameraRef.current?.click();
+                else setCameraTarget('front');
+            }
+            if (target === 'back') {
+                if (isMobile()) backCameraRef.current?.click();
+                else setCameraTarget('back');
+            }
+        }, 60);
+    };
+
+    const runGallery = () => {
+        const target = choiceTarget;
+        closeChooser();
+        setTimeout(() => {
+            if (target === 'front') frontGalleryRef.current?.click();
+            if (target === 'back')  backGalleryRef.current?.click();
+        }, 60);
+    };
 
     const handleSubmit = (e) => {
         e.preventDefault();
         post('/identity-verification', {
-            forceFormData: true, // required for file uploads
+            forceFormData: true,
+            onSuccess: () => {
+                try { localStorage.removeItem(DRAFT_KEY); } catch (_) {}
+            },
         });
+    };
+
+    const goBackToPersonal = (e) => {
+        e.preventDefault();
+        router.get('/personal-information');
     };
 
     return (
         <div className="identity-page">
             <Head title="Identity Verification | JLM Cozy Cabin" />
+
+            {choiceTarget && (
+                <UploadChoiceModal
+                    title={choiceTarget === 'front' ? 'Upload ID (Front)' : 'Upload ID (Back / Selfie)'}
+                    onCamera={runCamera}
+                    onGallery={runGallery}
+                    onClose={closeChooser}
+                />
+            )}
+
+            {cameraTarget && (
+                <CameraCaptureModal
+                    onCapture={(file) => {
+                        const target = cameraTarget;
+                        setCameraTarget(null);
+                        if (target === 'front') handleFrontSelected(file);
+                        if (target === 'back')  handleBackSelected(file);
+                    }}
+                    onClose={() => setCameraTarget(null)}
+                />
+            )}
 
             <div className="identity-container">
                 {/* LEFT */}
@@ -101,38 +218,86 @@ export default function IdentityVerification() {
                         {/* ID FRONT */}
                         <div className="identity-form-group">
                             <label>Upload Valid ID (Front) *</label>
-                            <label htmlFor="idFront" className="upload-box">
-                                <i className="bi bi-cloud-arrow-up"></i>
-                                <strong>{data.id_front ? data.id_front.name : 'Click to upload ID front'}</strong>
-                                <span>PNG, JPG, JPEG up to 10MB</span>
-                            </label>
+                            <button
+                                type="button"
+                                className="upload-box"
+                                onClick={() => openChooser('front')}
+                            >
+                                {frontPreview ? (
+                                    <img src={frontPreview} alt="ID front preview" className="upload-preview-img" />
+                                ) : (
+                                    <>
+                                        <i className="bi bi-cloud-arrow-up"></i>
+                                        <strong>{data.id_front ? data.id_front.name : 'Click to upload ID front'}</strong>
+                                        <span>PNG, JPG, JPEG up to 10MB</span>
+                                    </>
+                                )}
+                            </button>
+
                             <input
+                                ref={frontCameraRef}
                                 type="file"
-                                id="idFront"
-                                name="id_front"
-                                accept=".png,.jpg,.jpeg"
+                                accept="image/*"
+                                capture="environment"
                                 hidden
-                                onChange={(e) => setData('id_front', e.target.files[0])}
+                                onChange={(e) => handleFrontSelected(e.target.files?.[0])}
                             />
+                            <input
+                                ref={frontGalleryRef}
+                                type="file"
+                                accept=".png,.jpg,.jpeg,image/*"
+                                hidden
+                                onChange={(e) => handleFrontSelected(e.target.files?.[0])}
+                            />
+
+                            {data.id_front && (
+                                <p className="upload-filename">
+                                    <i className="bi bi-check-circle-fill"></i> {data.id_front.name}
+                                </p>
+                            )}
                             {errors.id_front && <p style={{ color: '#e11d48', fontSize: 12, marginTop: 6 }}>{errors.id_front}</p>}
                         </div>
 
                         {/* ID BACK */}
                         <div className="identity-form-group">
                             <label>Upload Valid ID (Back) or Selfie with ID</label>
-                            <label htmlFor="idBack" className="upload-box">
-                                <i className="bi bi-cloud-arrow-up"></i>
-                                <strong>{data.id_back ? data.id_back.name : 'Click to upload ID back or selfie'}</strong>
-                                <span>PNG, JPG, JPEG up to 10MB (Optional)</span>
-                            </label>
+                            <button
+                                type="button"
+                                className="upload-box"
+                                onClick={() => openChooser('back')}
+                            >
+                                {backPreview ? (
+                                    <img src={backPreview} alt="ID back preview" className="upload-preview-img" />
+                                ) : (
+                                    <>
+                                        <i className="bi bi-cloud-arrow-up"></i>
+                                        <strong>{data.id_back ? data.id_back.name : 'Click to upload ID back or selfie'}</strong>
+                                        <span>PNG, JPG, JPEG up to 10MB (Optional)</span>
+                                    </>
+                                )}
+                            </button>
+
                             <input
+                                ref={backCameraRef}
                                 type="file"
-                                id="idBack"
-                                name="id_back"
-                                accept=".png,.jpg,.jpeg"
+                                accept="image/*"
+                                capture="user"
                                 hidden
-                                onChange={(e) => setData('id_back', e.target.files[0])}
+                                onChange={(e) => handleBackSelected(e.target.files?.[0])}
                             />
+                            <input
+                                ref={backGalleryRef}
+                                type="file"
+                                accept=".png,.jpg,.jpeg,image/*"
+                                hidden
+                                onChange={(e) => handleBackSelected(e.target.files?.[0])}
+                            />
+
+                            {data.id_back && (
+                                <p className="upload-filename">
+                                    <i className="bi bi-check-circle-fill"></i> {data.id_back.name}
+                                </p>
+                            )}
                             {errors.id_back && <p style={{ color: '#e11d48', fontSize: 12, marginTop: 6 }}>{errors.id_back}</p>}
                         </div>
 
@@ -163,10 +328,14 @@ export default function IdentityVerification() {
 
                         {/* ACTIONS */}
                         <div className="identity-actions">
-                            <Link href="/personal-information" className="previous-step-btn">
+                            <button
+                                type="button"
+                                className="previous-step-btn"
+                                onClick={goBackToPersonal}
+                            >
                                 <i className="bi bi-chevron-left"></i>
                                 Previous Step
-                            </Link>
+                            </button>
                             <button
                                 type="submit"
                                 className="submit-finish-btn"

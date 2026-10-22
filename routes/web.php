@@ -23,6 +23,7 @@ use App\Http\Controllers\Admin\AnnouncementController;
 use App\Http\Controllers\Admin\HistoryController;
 use App\Http\Controllers\Admin\ReportsController;
 use App\Http\Controllers\Admin\MessageController;
+use App\Http\Controllers\Admin\AuditLogController;
 
 // Tenant Controllers
 use App\Http\Controllers\Tenant\TenantDashboardController;
@@ -71,20 +72,49 @@ Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 
 // ============================================================
 // ONBOARDING (auth only)
+// ------------------------------------------------------------
+// Flow:
+//   1. User signs up / logs in without completing onboarding
+//      → redirected to /personal-information (Step 1 ALWAYS first)
+//   2. After Step 1 saved → /identity-verification (Step 2)
+//   3. After Step 2 saved → /tenants (tenant portal)
+//
+// Guard behavior:
+//   - GET /personal-information  → always viewable while onboarding incomplete
+//   - POST /personal-information → always allowed while onboarding incomplete
+//   - GET /identity-verification → requires Step 1 to exist
+//   - POST /identity-verification → requires Step 1 to exist
 // ============================================================
 Route::middleware('auth')->group(function () {
-    Route::get('/personal-information',   [AuthController::class, 'showPersonalInformation'])->name('personal-information');
-    Route::post('/personal-information',  [AuthController::class, 'storePersonalInformation']);
 
-    Route::get('/identity-verification',  [AuthController::class, 'showIdentityVerification'])->name('identity-verification');
-    Route::post('/identity-verification', [AuthController::class, 'storeIdentityVerification']);
+    // ---------- Step 1: Personal Information ----------
+    Route::get('/personal-information', [AuthController::class, 'showPersonalInformation'])
+        ->middleware('onboarding.step:personal')
+        ->name('personal-information');
+
+    Route::post('/personal-information', [AuthController::class, 'storePersonalInformation'])
+        ->middleware('onboarding.step:personal');
+
+    // ---------- Step 2: Identity Verification ----------
+    Route::get('/identity-verification', [AuthController::class, 'showIdentityVerification'])
+        ->middleware('onboarding.step:identity')
+        ->name('identity-verification');
+
+    Route::post('/identity-verification', [AuthController::class, 'storeIdentityVerification'])
+        ->middleware('onboarding.step:identity');
 });
 
 
 // ============================================================
 // TENANT PORTAL
+// ------------------------------------------------------------
+// Gated behind `onboarding.complete` → users who haven't finished
+// BOTH steps are redirected back to /personal-information.
 // ============================================================
-Route::middleware('auth')->prefix('tenants')->name('tenants.')->group(function () {
+Route::middleware(['auth', 'onboarding.complete'])
+    ->prefix('tenants')
+    ->name('tenants.')
+    ->group(function () {
 
     // ---------- Dashboard ----------
     Route::get('/', [TenantDashboardController::class, 'index'])->name('dashboard');
@@ -105,11 +135,8 @@ Route::middleware('auth')->prefix('tenants')->name('tenants.')->group(function (
     Route::get('/messages/{conversation}',        [TenantMessageController::class, 'show'])->name('messages.show');
     Route::post('/messages/{conversation}/reply', [TenantMessageController::class, 'reply'])->name('messages.reply');
 
-    // Message-level actions (delete + react)
     Route::delete('/messages/{message}',           [TenantMessageController::class, 'deleteMessage'])->name('messages.delete');
     Route::post('/messages/{message}/react',       [TenantMessageController::class, 'reactToMessage'])->name('messages.react');
-
-    // Whole-conversation delete
     Route::delete('/messages/conversation/{conversation}', [TenantMessageController::class, 'deleteConversation'])->name('messages.conversation.delete');
 
     // ---------- Announcements / History / Settings ----------
@@ -151,24 +178,21 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
     Route::delete('/rooms/{room}', [RoomController::class, 'destroy'])->name('rooms.destroy');
 
     // ---------- Tenants ----------
-    Route::get('/tenants',              [TenantController::class, 'index'])->name('tenants');
-    Route::put('/tenants/{tenant}',     [TenantController::class, 'update'])->name('tenants.update');
+    Route::get('/tenants',          [TenantController::class, 'index'])->name('tenants');
+    Route::put('/tenants/{tenant}', [TenantController::class, 'update'])->name('tenants.update');
 
-    // ---------- Billing & Payments CRUD ----------
-    // NOTE: parameter binding uses `transaction_no` because the front-end
-    // sends the transaction number (e.g. `tn-101`), not the numeric ID.
-    Route::get('/billing',                                              [BillingController::class, 'index'])->name('billing');
-    Route::post('/billing',                                             [BillingController::class, 'store'])->name('billing.store');
+    // ---------- Billing ----------
+    Route::get('/billing',                                          [BillingController::class, 'index'])->name('billing');
+    Route::post('/billing',                                         [BillingController::class, 'store'])->name('billing.store');
+    Route::get('/billing/{invoice:transaction_no}',                 [BillingController::class, 'show'])->name('billing.show');
+    Route::put('/billing/{invoice:transaction_no}',                 [BillingController::class, 'update'])->name('billing.update');
+    Route::delete('/billing/{invoice:transaction_no}',              [BillingController::class, 'destroy'])->name('billing.destroy');
+    Route::post('/billing/{invoice:transaction_no}/mark-paid',      [BillingController::class, 'markPaid'])->name('billing.mark-paid');
+    Route::post('/billing/{invoice:transaction_no}/remind',         [BillingController::class, 'sendReminder'])->name('billing.remind');
+    Route::post('/billing/{invoice:transaction_no}/verify-payment', [BillingController::class, 'verifyPayment'])->name('billing.verify-payment');
+    Route::post('/billing/{invoice:transaction_no}/reject-payment', [BillingController::class, 'rejectPayment'])->name('billing.reject-payment');
 
-    Route::get('/billing/{invoice:transaction_no}',                     [BillingController::class, 'show'])->name('billing.show');
-    Route::put('/billing/{invoice:transaction_no}',                     [BillingController::class, 'update'])->name('billing.update');
-    Route::delete('/billing/{invoice:transaction_no}',                  [BillingController::class, 'destroy'])->name('billing.destroy');
-    Route::post('/billing/{invoice:transaction_no}/mark-paid',          [BillingController::class, 'markPaid'])->name('billing.mark-paid');
-    Route::post('/billing/{invoice:transaction_no}/remind',             [BillingController::class, 'sendReminder'])->name('billing.remind');
-    Route::post('/billing/{invoice:transaction_no}/verify-payment',     [BillingController::class, 'verifyPayment'])->name('billing.verify-payment');
-    Route::post('/billing/{invoice:transaction_no}/reject-payment',     [BillingController::class, 'rejectPayment'])->name('billing.reject-payment');
-
-    // ---------- Reservations CRUD ----------
+    // ---------- Reservations ----------
     Route::get('/reservations',                        [ReservationController::class, 'index'])->name('reservations');
     Route::post('/reservations',                       [ReservationController::class, 'store'])->name('reservations.store');
     Route::get('/reservations/{reservation}',          [ReservationController::class, 'show'])->name('reservations.show');
@@ -177,7 +201,7 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
     Route::post('/reservations/{reservation}/approve', [ReservationController::class, 'approve'])->name('reservations.approve');
     Route::post('/reservations/{reservation}/reject',  [ReservationController::class, 'reject'])->name('reservations.reject');
 
-    // ---------- Announcements CRUD ----------
+    // ---------- Announcements ----------
     Route::get('/announcements',                            [AnnouncementController::class, 'index'])->name('announcements');
     Route::post('/announcements',                           [AnnouncementController::class, 'store'])->name('announcements.store');
     Route::get('/announcements/{announcement}',             [AnnouncementController::class, 'show'])->name('announcements.show');
@@ -190,21 +214,20 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
     Route::post('/messages',                      [MessageController::class, 'store'])->name('messages.store');
     Route::get('/messages/{conversation}',        [MessageController::class, 'show'])->name('messages.show');
     Route::post('/messages/{conversation}/reply', [MessageController::class, 'reply'])->name('messages.reply');
-
-    // Message-level actions (delete + react)
     Route::delete('/messages/{message}',           [MessageController::class, 'deleteMessage'])->name('messages.delete');
     Route::post('/messages/{message}/react',       [MessageController::class, 'reactToMessage'])->name('messages.react');
-
-    // Whole-conversation delete
     Route::delete('/messages/conversation/{conversation}', [MessageController::class, 'deleteConversation'])->name('messages.conversation.delete');
 
     // ---------- History / Reports ----------
     Route::get('/history', [HistoryController::class, 'index'])->name('history');
     Route::get('/reports', [ReportsController::class, 'index'])->name('reports');
 
-    // ---------- Static views ----------
-    Route::view('/audit-logs', 'admin.audit-logs')->name('audit-logs');
-    Route::view('/settings',   'admin.settings')->name('settings');
+    // ---------- Audit Logs ----------
+    Route::get('/audit-logs',        [AuditLogController::class, 'index'])->name('audit-logs');
+    Route::get('/audit-logs/export', [AuditLogController::class, 'export'])->name('audit-logs.export');
+
+    // ---------- Settings ----------
+    Route::view('/settings', 'admin.settings')->name('settings');
 
     // ============================================================
     // SERVICES

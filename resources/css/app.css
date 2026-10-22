@@ -538,6 +538,299 @@ input::-webkit-strong-password-auto-fill-button {
     }
     .submit-finish-btn:hover { transform: translateY(-2px); opacity: 0.94; }
 
+        /* ---------- UPLOAD CHOICE MODAL ---------- */
+    .upload-modal-overlay {
+        position: fixed; inset: 0; z-index: 5000;
+        display: flex; align-items: center; justify-content: center;
+        background: rgba(0, 15, 38, 0.6);
+        backdrop-filter: blur(4px);
+        animation: upload-modal-fade 0.18s ease both;
+        padding: 20px;
+    }
+    @keyframes upload-modal-fade {
+        from { opacity: 0; }
+        to   { opacity: 1; }
+    }
+    .upload-modal {
+        position: relative;
+        width: 100%; max-width: 420px;
+        background: #ffffff; border-radius: 20px;
+        padding: 32px 28px 28px;
+        box-shadow: 0 24px 60px rgba(0, 0, 0, 0.28);
+        animation: upload-modal-pop 0.22s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+    }
+    @keyframes upload-modal-pop {
+        from { opacity: 0; transform: translateY(12px) scale(0.96); }
+        to   { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    .upload-modal-close {
+        position: absolute; top: 14px; right: 14px;
+        width: 32px; height: 32px;
+        display: flex; align-items: center; justify-content: center;
+        border: none; border-radius: 8px;
+        background: #F1F5F9; color: #64748B;
+        font-size: 14px; cursor: pointer; transition: 0.15s ease;
+    }
+    .upload-modal-close:hover { background: #E2E8F0; color: #111A30; }
+
+    .upload-modal-title {
+        margin: 0 0 6px; color: #111A30;
+        font-size: 20px; font-weight: 800; letter-spacing: -0.3px;
+    }
+    .upload-modal-subtitle {
+        margin: 0 0 22px; color: #7187A5;
+        font-size: 13.5px; line-height: 1.5;
+    }
+
+    .upload-modal-options {
+        display: flex; flex-direction: column; gap: 12px;
+    }
+    .upload-modal-option {
+        display: flex; align-items: center; gap: 14px;
+        padding: 16px; text-align: left;
+        border: 1px solid #DCE4ED; border-radius: 14px;
+        background: #F8FAFC; cursor: pointer;
+        font-family: inherit; transition: 0.18s ease;
+    }
+    .upload-modal-option:hover {
+        border-color: #FF8904; background: #FFF9F2;
+        transform: translateY(-1px);
+    }
+    .upload-modal-option-icon {
+        width: 44px; height: 44px; flex-shrink: 0;
+        display: flex; align-items: center; justify-content: center;
+        border-radius: 12px;
+        background: #FF8904; color: #ffffff;
+        font-size: 20px;
+    }
+    .upload-modal-option-text { display: flex; flex-direction: column; gap: 2px; }
+    .upload-modal-option-text strong {
+        color: #111A30; font-size: 15px; font-weight: 700;
+    }
+    .upload-modal-option-text small {
+        color: #7187A5; font-size: 12.5px;
+    }
+
+    /* ---------- UPLOAD PREVIEW + DRAFT BANNER ---------- */
+    .upload-preview-img {
+        max-width: 100%; max-height: 200px;
+        border-radius: 12px; object-fit: contain;
+    }
+    .upload-filename {
+        display: flex; align-items: center; gap: 6px;
+        margin: 8px 0 0; color: #087f68;
+        font-size: 13px; font-weight: 500;
+    }
+    .upload-filename i { font-size: 13px; }
+
+    .profile-picture-preview {
+        width: 100%; height: 100%;
+        object-fit: cover; border-radius: 18px; display: block;
+    }
+
+        /* ---------- DRAFT RESTORED BANNER (with field chips) ---------- */
+    .draft-restored-banner {
+        margin: 0 0 20px;
+        padding: 14px 16px;
+        border: 1px solid #A9D0FF;
+        border-radius: 12px;
+        background: #F0F7FF;
+        color: #2454A6;
+        font-size: 13px;
+        animation: draft-banner-in 0.4s ease both;
+    }
+    @keyframes draft-banner-in {
+        from { opacity: 0; transform: translateY(-6px); }
+        to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .draft-restored-head {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 6px;
+    }
+    .draft-restored-head i {
+        font-size: 16px;
+        color: #1769FF;
+    }
+    .draft-restored-head strong {
+        flex: 1;
+        font-size: 13.5px;
+        font-weight: 700;
+        color: #1e4fa0;
+    }
+
+    .draft-clear-btn {
+        padding: 4px 10px;
+        border: 1px solid rgba(36, 84, 166, 0.35);
+        border-radius: 6px;
+        background: transparent;
+        color: #2454A6;
+        font-family: inherit;
+        font-size: 11.5px;
+        font-weight: 700;
+        letter-spacing: 0.3px;
+        text-transform: uppercase;
+        cursor: pointer;
+        transition: 0.15s ease;
+    }
+    .draft-clear-btn:hover {
+        background: rgba(36, 84, 166, 0.08);
+        border-color: rgba(36, 84, 166, 0.6);
+    }
+
+    .draft-restored-text {
+        margin: 0 0 10px;
+        color: #3a5f8f;
+        font-size: 12.5px;
+        line-height: 1.5;
+    }
+
+    .draft-restored-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+    .draft-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 4px 10px;
+        border-radius: 999px;
+        background: #ffffff;
+        border: 1px solid #cfe1fb;
+        color: #2454A6;
+        font-size: 11.5px;
+        font-weight: 600;
+        white-space: nowrap;
+    }
+    .draft-chip i {
+        font-size: 11px;
+        color: #087f68;
+    }
+
+    .draft-restored-note {
+        display: flex;
+        align-items: flex-start;
+        gap: 6px;
+        margin: 10px 0 0;
+        padding-top: 10px;
+        border-top: 1px dashed rgba(36, 84, 166, 0.25);
+        color: #6b86b5;
+        font-size: 12px;
+        line-height: 1.5;
+    }
+    .draft-restored-note i {
+        flex-shrink: 0;
+        margin-top: 1px;
+        font-size: 12px;
+        color: #1769FF;
+    }
+
+        /* ---------- CAMERA CAPTURE MODAL (desktop webcam) ---------- */
+    .camera-modal-overlay {
+        position: fixed; inset: 0; z-index: 6000;
+        display: flex; align-items: center; justify-content: center;
+        background: rgba(0, 15, 38, 0.72);
+        backdrop-filter: blur(6px);
+        animation: upload-modal-fade 0.18s ease both;
+        padding: 20px;
+    }
+    .camera-modal {
+        width: 100%; max-width: 640px;
+        background: #0b1a33;
+        border-radius: 20px;
+        overflow: hidden;
+        box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+        animation: upload-modal-pop 0.22s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+        color: #ffffff;
+    }
+    .camera-modal-header {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 16px 20px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .camera-modal-header h3 {
+        margin: 0; font-size: 16px; font-weight: 700;
+    }
+    .camera-modal-close {
+        width: 32px; height: 32px;
+        display: flex; align-items: center; justify-content: center;
+        border: none; border-radius: 8px;
+        background: rgba(255, 255, 255, 0.08); color: #ffffff;
+        cursor: pointer; font-size: 13px;
+    }
+    .camera-modal-close:hover { background: rgba(255, 255, 255, 0.16); }
+
+    .camera-modal-body {
+        position: relative;
+        width: 100%;
+        aspect-ratio: 4 / 3;
+        background: #000;
+    }
+    .camera-modal-video-wrap { position: relative; width: 100%; height: 100%; }
+    .camera-modal-video {
+        width: 100%; height: 100%; object-fit: cover; display: block;
+        transform: scaleX(-1); /* mirror selfie */
+    }
+    .camera-modal-loading {
+        position: absolute; inset: 0;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        gap: 10px;
+        color: #9baec8; font-size: 13px;
+        background: rgba(0, 0, 0, 0.5);
+    }
+    .camera-modal-loading i { font-size: 22px; animation: spin 1s linear infinite; }
+
+    .camera-modal-error {
+        position: absolute; inset: 0;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        gap: 12px; padding: 24px; text-align: center;
+        color: #fca5a5; background: rgba(127, 29, 29, 0.4);
+    }
+    .camera-modal-error i { font-size: 36px; }
+    .camera-modal-error p { margin: 0; font-size: 14px; }
+    .camera-modal-retry {
+        margin-top: 8px; padding: 8px 16px;
+        border: 1px solid rgba(255, 255, 255, 0.25); border-radius: 8px;
+        background: transparent; color: #ffffff;
+        font-family: inherit; font-size: 13px; font-weight: 600;
+        cursor: pointer;
+    }
+    .camera-modal-retry:hover { background: rgba(255, 255, 255, 0.1); }
+
+    .camera-modal-actions {
+        display: flex; align-items: center; justify-content: space-between;
+        gap: 12px; padding: 16px 20px;
+    }
+    .camera-modal-flip,
+    .camera-modal-capture {
+        display: inline-flex; align-items: center; gap: 8px;
+        padding: 10px 18px;
+        border: none; border-radius: 10px;
+        font-family: inherit; font-size: 14px; font-weight: 700;
+        cursor: pointer; transition: 0.18s ease;
+    }
+    .camera-modal-flip {
+        background: rgba(255, 255, 255, 0.1); color: #ffffff;
+    }
+    .camera-modal-flip:hover:not(:disabled) { background: rgba(255, 255, 255, 0.2); }
+    .camera-modal-capture {
+        background: #FF8904; color: #ffffff;
+        box-shadow: 0 4px 14px rgba(255, 137, 4, 0.35);
+    }
+    .camera-modal-capture:hover:not(:disabled) { transform: translateY(-1px); }
+    .camera-modal-flip:disabled,
+    .camera-modal-capture:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    @media (max-width: 480px) {
+        .camera-modal { border-radius: 16px; }
+        .camera-modal-actions { flex-direction: column-reverse; }
+        .camera-modal-flip,
+        .camera-modal-capture { width: 100%; justify-content: center; }
+    }
+
     @media (max-width: 1000px) {
         .identity-container { grid-template-columns: 1fr; }
         .identity-left { height: auto; min-height: auto; position: relative; padding: 40px 8%; }

@@ -56,10 +56,10 @@ class HistoryService
         return [
             'total_payments'       => (float) $paidTotal,
             'total_payments_count' => $paidCount,
-            'past_reservations'    => Reservation::count(),
-            'service_requests'     => MaintenanceRequest::where('status', 'Completed')->count(),
-            'approved_requests'    => RoomChangeRequest::where('status', 'Approved')->count()
-                                    + StayExtensionRequest::where('status', 'Approved')->count(),
+            'past_reservations'    => Reservation::whereIn('status', ['Approved', 'Rejected'])->count(),
+            'service_requests'     => MaintenanceRequest::whereIn('status', ['Completed', 'Cancelled'])->count(),
+            'approved_requests'    => RoomChangeRequest::whereIn('status', ['Approved', 'Rejected'])->count()
+                                    + StayExtensionRequest::whereIn('status', ['Approved', 'Rejected'])->count(),
         ];
     }
 
@@ -108,21 +108,20 @@ class HistoryService
 
     protected function reservations(): Collection
     {
-        return Reservation::latest()
+        // ONLY Approved and Rejected
+        return Reservation::whereIn('status', ['Approved', 'Rejected'])
+            ->latest()
             ->get()
             ->map(function (Reservation $res) {
                 $statusMap = [
                     'Approved' => 'approved',
                     'Rejected' => 'rejected',
-                    'Expired'  => 'expired',
-                    'Pending'  => 'pending',
                 ];
                 $status = $statusMap[$res->status] ?? 'pending';
 
                 $color = match ($status) {
                     'approved' => 'blue',
                     'rejected' => 'red',
-                    'expired'  => 'yellow',
                     default    => 'gray',
                 };
 
@@ -151,7 +150,9 @@ class HistoryService
 
     protected function maintenance(): Collection
     {
+        // ONLY Completed and Cancelled
         return MaintenanceRequest::with(['tenant.user', 'room'])
+            ->whereIn('status', ['Completed', 'Cancelled'])
             ->latest()
             ->get()
             ->map(function (MaintenanceRequest $m) {
@@ -192,7 +193,9 @@ class HistoryService
 
     protected function roomChanges(): Collection
     {
+        // ONLY Approved and Rejected
         return RoomChangeRequest::with(['tenant.user'])
+            ->whereIn('status', ['Approved', 'Rejected'])
             ->latest()
             ->get()
             ->map(function (RoomChangeRequest $r) {
@@ -232,7 +235,9 @@ class HistoryService
 
     protected function stayExtensions(): Collection
     {
+        // ONLY Approved and Rejected
         return StayExtensionRequest::with(['tenant.user', 'room'])
+            ->whereIn('status', ['Approved', 'Rejected'])
             ->latest()
             ->get()
             ->map(function (StayExtensionRequest $s) {

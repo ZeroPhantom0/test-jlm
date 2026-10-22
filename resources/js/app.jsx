@@ -11,6 +11,9 @@ import TopHeader from './components/TopHeader';
 import AdminSidebar from './components/AdminSidebar';
 import AdminTopHeader from './components/AdminTopHeader';
 
+// Global Modals
+import LogoutModal from './components/LogoutModal';
+
 // Admin modal components
 import RoomsModals from './pages/Admin/RoomsModals';
 import TenantsModals from './pages/Admin/TenantsModals';
@@ -22,6 +25,7 @@ import VirtualTourModals from './pages/Admin/VirtualTourModals';
 import SettingsArchive from './pages/Admin/SettingsArchive';
 import RoomChangeModals from './pages/Admin/RoomChangeModals';
 import StayExtensionModals from './pages/Admin/StayExtensionModals';
+import ScenesModals from './pages/Admin/ScenesModals'; // <-- NEW
 
 // Tenant service modals
 import TenantMaintenanceModals   from './pages/Services/TenantMaintenanceModals';
@@ -112,6 +116,7 @@ function mountReact() {
     mountIfExists('admin-settings-archive',       SettingsArchive);
     mountIfExists('admin-room-change-modals',     RoomChangeModals);
     mountIfExists('admin-stay-extension-modals',  StayExtensionModals);
+    mountIfExists('admin-scenes-modals',          ScenesModals); // <-- NEW
 
     // ---------- TENANT SERVICE MODALS ----------
     mountIfExists('tenant-maintenance-modals',    TenantMaintenanceModals);
@@ -132,6 +137,20 @@ function mountReact() {
 
     // ---------- TENANT SETTINGS ACCORDIONS ---------- 
     mountIfExists('tenant-settings-accordions',   TenantSettingsAccordions);
+
+    // ---------- GLOBAL LOGOUT MODAL ----------
+    // Automatically creates the div and mounts it to the body so it works everywhere
+    let logoutModalRoot = document.getElementById('global-logout-modal-root');
+    if (!logoutModalRoot) {
+        logoutModalRoot = document.createElement('div');
+        logoutModalRoot.id = 'global-logout-modal-root';
+        document.body.appendChild(logoutModalRoot);
+    }
+    
+    if (!logoutModalRoot.dataset.mounted) {
+        createRoot(logoutModalRoot).render(<LogoutModal />);
+        logoutModalRoot.dataset.mounted = 'true';
+    }
 }
 
 if (document.readyState === 'loading') {

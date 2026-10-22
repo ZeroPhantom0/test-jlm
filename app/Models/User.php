@@ -4,6 +4,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
@@ -30,7 +31,7 @@ class User extends Authenticatable
     {
         return [
             'email_verified_at' => 'datetime',
-            'password' => 'hashed',
+            'password'          => 'hashed',
         ];
     }
 
@@ -48,18 +49,18 @@ class User extends Authenticatable
 
     // ---- Relationships ----
 
-    public function personalInformation()
+    public function personalInformation(): HasOne
     {
         return $this->hasOne(PersonalInformation::class);
     }
 
-    public function identityVerification()
+    public function identityVerification(): HasOne
     {
         return $this->hasOne(IdentityVerification::class);
     }
 
-    public function tenant()
-{
-    return $this->hasOne(Tenant::class);
-}
+    public function tenant(): HasOne
+    {
+        return $this->hasOne(Tenant::class);
+    }
 }

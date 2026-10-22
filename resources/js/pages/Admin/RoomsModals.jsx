@@ -32,6 +32,8 @@ export default function RoomsModals() {
     const [showAdd, setShowAdd] = useState(false);
     const [showView, setShowView] = useState(false);
     const [showEdit, setShowEdit] = useState(false);
+    const [showDelete, setShowDelete] = useState(false);
+    const [deleteTarget, setDeleteTarget] = useState(null);
     const [room, setRoom] = useState(null);
     const [form, setForm] = useState(emptyForm());
     const [saving, setSaving] = useState(false);
@@ -163,6 +165,13 @@ export default function RoomsModals() {
         setShowEdit(true);
     }, []);
 
+    const openDelete = useCallback((id) => {
+        const data = getRowData(id);
+        if (!data) return;
+        setDeleteTarget(data);
+        setShowDelete(true);
+    }, []);
+
     useEffect(() => {
         const handleClick = (e) => {
             if (e.target.closest('#open-add-room-btn')) return openAdd();
@@ -171,11 +180,11 @@ export default function RoomsModals() {
             const editBtn = e.target.closest('.edit-room-btn');
             if (editBtn) return openEdit(editBtn.dataset.id);
             const delBtn = e.target.closest('.delete-room-btn');
-            if (delBtn) return deleteRoom(delBtn.dataset.id);
+            if (delBtn) return openDelete(delBtn.dataset.id);
         };
         document.addEventListener('click', handleClick);
         return () => document.removeEventListener('click', handleClick);
-    }, [openAdd, openView, openEdit]);
+    }, [openAdd, openView, openEdit, openDelete]);
 
     const updateField = (key, value) => setForm((f) => ({ ...f, [key]: value }));
 
@@ -245,10 +254,11 @@ export default function RoomsModals() {
         }
     };
 
-    const deleteRoom = async (id) => {
-        if (!confirm('Delete this room permanently?')) return;
+    const confirmDelete = async () => {
+        if (!deleteTarget) return;
+        setSaving(true);
         try {
-            const res = await fetch(`/admin/rooms/${id}`, {
+            const res = await fetch(`/admin/rooms/${deleteTarget.id}`, {
                 method: 'DELETE',
                 headers: {
                     'Accept': 'application/json',
@@ -257,10 +267,20 @@ export default function RoomsModals() {
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.message || 'Failed to delete room.');
+            setShowDelete(false);
+            setDeleteTarget(null);
             window.location.reload();
         } catch (err) {
             alert(err.message);
+        } finally {
+            setSaving(false);
         }
+    };
+
+    const closeDeleteModal = () => {
+        if (saving) return;
+        setShowDelete(false);
+        setDeleteTarget(null);
     };
 
     return (
@@ -633,6 +653,72 @@ export default function RoomsModals() {
                         <button onClick={() => setShowEdit(false)} className="text-slate-600 text-[13.5px] font-semibold px-4 py-2">Cancel</button>
                         <button disabled={saving} onClick={submitEdit} className="bg-[#02122c] disabled:opacity-50 text-white px-5 py-2.5 rounded-lg text-[13.5px] font-semibold">
                             {saving ? 'Saving…' : 'Save Changes'}
+                        </button>
+                    </div>
+                </Modal>
+            )}
+
+            {/* ============================================================ */}
+            {/* DELETE CONFIRMATION MODAL */}
+            {/* ============================================================ */}
+            {showDelete && deleteTarget && (
+                <Modal onClose={closeDeleteModal} maxWidth="max-w-[460px]">
+                    <div className="p-5 pb-4 flex items-center justify-between border-b border-slate-100">
+                        <h3 className="text-lg font-bold text-slate-900">Delete Room</h3>
+                        <button
+                            onClick={closeDeleteModal}
+                            disabled={saving}
+                            className="text-slate-400 hover:text-slate-700 text-lg disabled:opacity-50"
+                        >
+                            <i className="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+
+                    <div className="p-6 text-center">
+                        <div className="w-16 h-16 mx-auto rounded-full bg-rose-50 flex items-center justify-center mb-4">
+                            <i className="fa-solid fa-trash-can text-rose-500 text-2xl"></i>
+                        </div>
+                        <h4 className="text-lg font-bold text-slate-900 mb-2">Are you sure?</h4>
+                        <p className="text-slate-500 text-[13px] mb-2">
+                            You are about to permanently delete:
+                        </p>
+                        <p className="font-bold text-slate-900 text-[15px] mb-4">
+                            Room {deleteTarget.room_number}
+                            {deleteTarget.room_type ? ` (${deleteTarget.room_type})` : ''}
+                        </p>
+                        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-left">
+                            <p className="text-[12px] text-amber-800 leading-snug">
+                                <i className="fa-solid fa-circle-info mr-1"></i>
+                                This will also remove all associated bed configurations and tenant assignments.{' '}
+                                <strong>This action cannot be undone.</strong>
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="p-5 border-t border-slate-100 flex justify-end gap-3">
+                        <button
+                            onClick={closeDeleteModal}
+                            disabled={saving}
+                            className="text-slate-600 text-[13.5px] font-semibold px-4 py-2 disabled:opacity-50"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            onClick={confirmDelete}
+                            disabled={saving}
+                            className="bg-rose-500 hover:bg-rose-600 disabled:opacity-50 text-white px-5 py-2.5 rounded-lg text-[13.5px] font-semibold inline-flex items-center gap-2 transition"
+                        >
+                            {saving ? (
+                                <>
+                                    <i className="fa-solid fa-spinner fa-spin"></i>
+                                    Deleting…
+                                </>
+                            ) : (
+                                <>
+                                    <i className="fa-solid fa-trash-can"></i>
+                                    Yes, Delete
+                                </>
+                            )}
                         </button>
                     </div>
                 </Modal>
