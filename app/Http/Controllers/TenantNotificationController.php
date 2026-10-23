@@ -1,0 +1,293 @@
+<?php
+// app/Http/Controllers/TenantNotificationController.php
+
+namespace App\Http\Controllers;
+
+use App\Models\Tenant;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
+
+class TenantNotificationController extends Controller
+{
+    public function index(Request $request)
+    {
+        $user   = Auth::user();
+        $tenant = Tenant::with('approvedReservation')
+            ->where('user_id', $user->id)
+            ->first();
+
+        $notifications = [];
+
+        if (!$tenant) {
+            return response()->json([
+                'notifications' => [],
+                'unread_count'  => 0,
+            ]);
+        }
+
+        // 1) Unread messages from admin
+        $unreadMessages = DB::table('messages as m')
+            ->join('conversations as c', 'c.id', '=', 'm.conversation_id')
+            ->where('c.tenant_id', $tenant->id)
+            ->where('m.sender_role', 'admin')
+            ->whereNull('m.read_at')
+            ->where('m.deleted_by_receiver', 0)
+            ->where('c.deleted_by_tenant', 0)
+            ->orderByDesc('m.created_at')
+            ->limit(10)
+            ->select(
+                'm.id',
+                'm.body',
+                'm.created_at',
+                'c.id as conversation_id',
+                'c.subject'
+            )
+            ->get();
+
+        foreach ($unreadMessages as $m) {
+            $notifications[] = [
+                'id'          => 'msg-' . $m->id,
+                'type'        => 'message',
+                'icon'        => 'fa-regular fa-comment-dots',
+                'color'       => 'text-blue-600 bg-blue-50',
+                'title'       => 'New message from Admin',
+                'description' => $m->subject ?: Str::limit($m->body, 60),
+                'time'        => $m->created_at,
+                'unread'      => true,
+                'link'        => '/tenants/messages?conversation=' . $m->conversation_id,
+            ];
+        }
+
+        // 2) Outstanding / overdue invoices
+        $invoices = DB::table('invoices')
+            ->where('tenant_id', $tenant->id)
+            ->whereIn('status', ['Unpaid', 'Partial', 'Overdue'])
+            ->orderByRaw("FIELD(status, 'Overdue', 'Unpaid', 'Partial')")
+            ->orderBy('due_date')
+            ->limit(10)
+            ->get();
+
+        foreach ($invoices as $i) {
+            $isOverdue = $i->status === 'Overdue'
+                || ($i->due_date && $i->due_date < now()->toDateString());
+
+            $notifications[] = [
+                'id'          => 'inv-' . $i->id,
+                'type'        => 'invoice',
+                'icon'        => 'fa-solid fa-credit-card',
+                'color'       => $isOverdue
+                                    ? 'text-rose-600 bg-rose-50'
+                                    : 'text-orange-600 bg-orange-50',
+                'title'       => $isOverdue ? 'Overdue invoice' : 'Outstanding balance',
+                'description' => $i->description . ' — ₱'
+                                 . number_format((float) $i->balance, 2),
+                'time'        => $i->due_date
+                                    ? $i->due_date . ' 00:00:00'
+                                    : $i->created_at,
+                'unread'      => true,
+                'link'        => '/tenants/billing',
+            ];
+        }
+
+        // 3) Reservation status updates (admin-processed only)
+        //    - Approved / Expired → always show
+        //    - Rejected → only when an admin did it (processed_by IS NOT NULL).
+        //      Tenant self-cancels also write status='Rejected' but leave
+        //      processed_by NULL, so those are intentionally hidden.
+        $reservations = DB::table('reservations')
+            ->where('user_id', $user->id)
+            ->where(function ($q) {
+                $q->whereIn('status', ['Approved', 'Expired'])
+                  ->orWhere(function ($q2) {
+                      $q2->where('status', 'Rejected')
+                         ->whereNotNull('processed_by');
+                  });
+            })
+            ->orderByDesc(DB::raw('COALESCE(processed_at, updated_at, created_at)'))
+            ->limit(10)
+            ->get();
+
+        foreach ($reservations as $r) {
+            $color = match ($r->status) {
+                'Approved' => 'text-emerald-600 bg-emerald-50',
+                'Rejected' => 'text-rose-600 bg-rose-50',
+                'Expired'  => 'text-slate-600 bg-slate-100',
+                default    => 'text-slate-600 bg-slate-100',
+            };
+            $icon = match ($r->status) {
+                'Approved' => 'fa-regular fa-circle-check',
+                'Rejected' => 'fa-regular fa-circle-xmark',
+                'Expired'  => 'fa-regular fa-clock',
+                default    => 'fa-regular fa-circle',
+            };
+
+            $notifications[] = [
+                'id'          => 'res-' . $r->id,
+                'type'        => 'reservation',
+                'icon'        => $icon,
+                'color'       => $color,
+                'title'       => 'Reservation ' . $r->status,
+                'description' => $r->desired_room . ' · ' . $r->reference_no,
+                'time'        => $r->processed_at ?? $r->updated_at ?? $r->created_at,
+                'unread'      => true,
+                'link'        => '/tenants/reservations',
+            ];
+        }
+
+        // 4) Maintenance requests — updates on status
+        $maintenance = DB::table('maintenance_requests')
+            ->where('tenant_id', $tenant->id)
+            ->whereIn('status', ['In Progress', 'Completed', 'Cancelled'])
+            ->orderByDesc('updated_at')
+            ->limit(10)
+            ->get();
+
+        foreach ($maintenance as $m) {
+            $color = match ($m->status) {
+                'Completed'   => 'text-emerald-600 bg-emerald-50',
+                'Cancelled'   => 'text-slate-600 bg-slate-100',
+                'In Progress' => 'text-blue-600 bg-blue-50',
+                default       => 'text-slate-600 bg-slate-100',
+            };
+
+            $notifications[] = [
+                'id'          => 'mnt-' . $m->id,
+                'type'        => 'maintenance',
+                'icon'        => 'fa-solid fa-wrench',
+                'color'       => $color,
+                'title'       => 'Maintenance ' . $m->status,
+                'description' => $m->title,
+                'time'        => $m->updated_at ?? $m->completed_at ?? $m->created_at,
+                'unread'      => true,
+                'link'        => '/tenants/services/maintenance',
+            ];
+        }
+
+        // 5) Room change requests — approved / rejected
+        $roomChanges = DB::table('room_change_requests')
+            ->where('tenant_id', $tenant->id)
+            ->whereIn('status', ['Approved', 'Rejected'])
+            ->orderByDesc(DB::raw('COALESCE(processed_at, updated_at, created_at)'))
+            ->limit(10)
+            ->get();
+
+        foreach ($roomChanges as $rc) {
+            $color = $rc->status === 'Approved'
+                ? 'text-emerald-600 bg-emerald-50'
+                : 'text-rose-600 bg-rose-50';
+            $icon = $rc->status === 'Approved'
+                ? 'fa-regular fa-circle-check'
+                : 'fa-regular fa-circle-xmark';
+
+            $notifications[] = [
+                'id'          => 'rc-' . $rc->id,
+                'type'        => 'room-change',
+                'icon'        => $icon,
+                'color'       => $color,
+                'title'       => 'Room change ' . $rc->status,
+                'description' => $rc->current_room . ' → ' . $rc->requested_room,
+                'time'        => $rc->processed_at ?? $rc->updated_at ?? $rc->created_at,
+                'unread'      => true,
+                'link'        => '/tenants/services/room-change',
+            ];
+        }
+
+        // 6) Stay extension requests — approved / rejected
+        $stayExtensions = DB::table('stay_extension_requests')
+            ->where('tenant_id', $tenant->id)
+            ->whereIn('status', ['Approved', 'Rejected'])
+            ->orderByDesc(DB::raw('COALESCE(processed_at, updated_at, created_at)'))
+            ->limit(10)
+            ->get();
+
+        foreach ($stayExtensions as $se) {
+            $color = $se->status === 'Approved'
+                ? 'text-emerald-600 bg-emerald-50'
+                : 'text-rose-600 bg-rose-50';
+            $icon = $se->status === 'Approved'
+                ? 'fa-regular fa-circle-check'
+                : 'fa-regular fa-circle-xmark';
+
+            $notifications[] = [
+                'id'          => 'se-' . $se->id,
+                'type'        => 'stay-extension',
+                'icon'        => $icon,
+                'color'       => $color,
+                'title'       => 'Stay extension ' . $se->status,
+                'description' => '+' . $se->extension_days . ' day(s) · ' . $se->reference_no,
+                'time'        => $se->processed_at ?? $se->updated_at ?? $se->created_at,
+                'unread'      => true,
+                'link'        => '/tenants/services/stay-extension',
+            ];
+        }
+
+        // 7) Recently published announcements (last 7 days)
+        $announcements = DB::table('announcements')
+            ->where('is_published', 1)
+            ->where('created_at', '>=', now()->subDays(7))
+            ->orderByDesc('created_at')
+            ->limit(5)
+            ->get();
+
+        foreach ($announcements as $a) {
+            $notifications[] = [
+                'id'          => 'ann-' . $a->id,
+                'type'        => 'announcement',
+                'icon'        => 'fa-solid fa-bullhorn',
+                'color'       => 'text-purple-600 bg-purple-50',
+                'title'       => 'Announcement: ' . $a->title,
+                'description' => Str::limit(strip_tags($a->content), 60),
+                'time'        => $a->created_at,
+                'unread'      => false,
+                'link'        => '/tenants/announcements',
+            ];
+        }
+
+        // Sort newest first
+        usort($notifications, fn ($x, $y) => strtotime($y['time']) <=> strtotime($x['time']));
+
+        $unreadCount = collect($notifications)->where('unread', true)->count();
+
+        return response()->json([
+            'notifications' => $notifications,
+            'unread_count'  => $unreadCount,
+        ]);
+    }
+
+    /**
+     * Mark an admin message as read.
+     */
+    public function markMessageRead(Request $request)
+    {
+        $validated = $request->validate([
+            'message_id' => ['required', 'integer', 'exists:messages,id'],
+        ]);
+
+        $user   = Auth::user();
+        $tenant = Tenant::where('user_id', $user->id)->first();
+
+        if (!$tenant) {
+            return response()->json(['success' => false], 403);
+        }
+
+        // Only allow messages belonging to this tenant's conversations
+        $belongs = DB::table('messages as m')
+            ->join('conversations as c', 'c.id', '=', 'm.conversation_id')
+            ->where('m.id', $validated['message_id'])
+            ->where('c.tenant_id', $tenant->id)
+            ->exists();
+
+        if (!$belongs) {
+            return response()->json(['success' => false], 403);
+        }
+
+        DB::table('messages')
+            ->where('id', $validated['message_id'])
+            ->whereNull('read_at')
+            ->update(['read_at' => now()]);
+
+        return response()->json(['success' => true]);
+    }
+}

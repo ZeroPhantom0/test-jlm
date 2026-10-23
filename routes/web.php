@@ -6,6 +6,8 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\LandingController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\PublicTourViewerController;
+use App\Http\Controllers\AdminNotificationController;
+use App\Http\Controllers\TenantNotificationController;
 
 // Admin Controllers
 use App\Http\Controllers\Admin\DashboardController;
@@ -72,18 +74,6 @@ Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 
 // ============================================================
 // ONBOARDING (auth only)
-// ------------------------------------------------------------
-// Flow:
-//   1. User signs up / logs in without completing onboarding
-//      → redirected to /personal-information (Step 1 ALWAYS first)
-//   2. After Step 1 saved → /identity-verification (Step 2)
-//   3. After Step 2 saved → /tenants (tenant portal)
-//
-// Guard behavior:
-//   - GET /personal-information  → always viewable while onboarding incomplete
-//   - POST /personal-information → always allowed while onboarding incomplete
-//   - GET /identity-verification → requires Step 1 to exist
-//   - POST /identity-verification → requires Step 1 to exist
 // ============================================================
 Route::middleware('auth')->group(function () {
 
@@ -107,9 +97,6 @@ Route::middleware('auth')->group(function () {
 
 // ============================================================
 // TENANT PORTAL
-// ------------------------------------------------------------
-// Gated behind `onboarding.complete` → users who haven't finished
-// BOTH steps are redirected back to /personal-information.
 // ============================================================
 Route::middleware(['auth', 'onboarding.complete'])
     ->prefix('tenants')
@@ -118,6 +105,10 @@ Route::middleware(['auth', 'onboarding.complete'])
 
     // ---------- Dashboard ----------
     Route::get('/', [TenantDashboardController::class, 'index'])->name('dashboard');
+
+    // ---------- Notifications (bell) ----------
+    Route::get('/notifications/feed', [TenantNotificationController::class, 'index'])
+        ->name('notifications.feed');
 
     // ---------- Billing ----------
     Route::get('/billing',         [TenantBillingController::class, 'index'])->name('billing');
@@ -169,6 +160,13 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
 
     // ---------- Dashboard ----------
     Route::get('/', [DashboardController::class, 'index'])->name('dashboard');
+
+    // ---------- Notifications (bell) ----------
+    Route::get('/notifications/feed', [AdminNotificationController::class, 'index'])
+        ->name('notifications.feed');
+
+    Route::post('/notifications/message-read', [AdminNotificationController::class, 'markMessageRead'])
+        ->name('notifications.message-read');
 
     // ---------- Rooms CRUD ----------
     Route::get('/rooms',           [RoomController::class, 'index'])->name('rooms');
@@ -233,6 +231,11 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
     // SERVICES
     // ============================================================
     Route::prefix('services')->name('services.')->group(function () {
+
+        // Landing redirect: /admin/services → /admin/services/maintenance
+        Route::get('/', function () {
+            return redirect()->route('admin.services.maintenance');
+        })->name('index');
 
         Route::get('/maintenance',                      [MaintenanceController::class, 'index'])->name('maintenance');
         Route::post('/maintenance',                     [MaintenanceController::class, 'store'])->name('maintenance.store');

@@ -52,8 +52,10 @@
     <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 space-y-5">
         <form method="GET" action="{{ route('admin.billing') }}" class="flex flex-col md:flex-row md:items-center md:justify-end gap-4">
             <select name="status" onchange="this.form.submit()" class="bg-white border border-slate-300 rounded-[10px] px-4 py-2.5 text-[13px] font-medium text-slate-700 outline-none cursor-pointer min-w-[160px]">
-                <option value="">All Statuses</option>
-                @foreach(['Unpaid','Overdue','Partial','Pending','Paid'] as $s)
+                <option value="">All (actionable)</option>
+                {{-- Only the actionable statuses are shown in the dropdown.
+                     Paid / Unpaid are intentionally hidden. --}}
+                @foreach($availableStatuses as $s)
                     <option value="{{ $s }}" {{ ($filters['status'] ?? '') === $s ? 'selected' : '' }}>{{ $s }}</option>
                 @endforeach
             </select>
@@ -134,5 +136,6 @@
 </div>
 
 {{-- React Modal Mount Point with data --}}
-<div id="admin-billing-modals" data-invoices='@json($invoicesForReact)'></div>
+<div id="admin-billing-modals"
+     data-invoices="{{ json_encode($invoicesForReact, JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP) }}"></div>
 @endsection

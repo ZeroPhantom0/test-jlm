@@ -25,9 +25,9 @@ class TenantReservationController extends Controller
 
         // ---------- My Reservations ----------
         $myReservations = Reservation::where(function ($q) use ($user, $tenant) {
-                $q->where('user_id', $user->id)
-                  ->orWhere('tenant_name', $user->name);
-            })
+            $q->where('user_id', $user->id)
+                ->orWhere('tenant_name', $user->name);
+        })
             ->latest()
             ->get();
 
@@ -61,12 +61,12 @@ class TenantReservationController extends Controller
         });
 
         // ---------- Available Rooms (only rooms WITH a published tour) ----------
-        $rooms = Room::with(['virtualTour' => fn ($q) => $q->where('status', 'Published')])
-            ->whereHas('virtualTour', fn ($q) => $q->where('status', 'Published'))
+        $rooms = Room::with(['virtualTour' => fn($q) => $q->where('status', 'Published')])
+            ->whereHas('virtualTour', fn($q) => $q->where('status', 'Published'))
             ->orderBy('room_number')
             ->get()
             ->map(function (Room $room) {
-                
+
                 // Build bed slots based on room capacity
                 $bedSlots = [];
                 if ($room->room_type !== 'Solo Room') {
@@ -94,7 +94,7 @@ class TenantReservationController extends Controller
                     'price'       => (float) $room->daily_rent,
                     'status'      => $room->status,
                     'img'         => $room->virtualTour?->thumbnail_url
-                                        ?? 'https://images.unsplash.com/photo-1598928506311-c55ded91a20c?auto=format&fit=crop&w=600&q=80',
+                        ?? 'https://images.unsplash.com/photo-1598928506311-c55ded91a20c?auto=format&fit=crop&w=600&q=80',
                     'pax'         => match (true) {
                         str_contains($room->room_type, 'Solo')     => '1-2 pax',
                         str_contains($room->room_type, 'Bedspace') => '1 pax',
@@ -102,7 +102,7 @@ class TenantReservationController extends Controller
                         default                                    => $room->total_beds . ' pax',
                     },
                     'beds'        => $room->total_beds . ' bed' . ($room->total_beds === 1 ? '' : 's'),
-                    'total_beds'  => (int) $room->total_beds, // <-- Added for logic
+                    'total_beds'  => (int) $room->total_beds,
                     'bath'        => '1 bath',
                     'floor'       => $room->floor,
                     'desc'        => $room->description ?? 'Cozy room with modern finishes.',
@@ -233,9 +233,10 @@ class TenantReservationController extends Controller
             'balance'        => $remaining,
             'due_date'       => now()->addDays(7)->toDateString(),
             'payment_method' => 'GCash',
-            'status'         => 'Pending', // Pending admin verification
+            'status'         => 'Pending',
             'receipt_no'     => $validated['reference_no'],
-            'receipt_path'   => $receiptPath, 
+            'receipt_path'   => $receiptPath,
+            'date_paid'      => now()->toDateString(),
         ]);
 
         return response()->json([
@@ -272,12 +273,14 @@ class TenantReservationController extends Controller
             'status' => 'Rejected',
         ]);
 
-        // Also cancel the associated invoice
+        // Also cancel the associated invoice.
+        // FIX: clear date_paid so a cancelled reservation doesn't show a stale "Date Paid".
         Invoice::where('tenant_name', $reservation->tenant_name)
             ->where('description', 'like', '%' . $reservation->reference_no . '%')
             ->update([
-                'status' => 'Unpaid',
+                'status'       => 'Unpaid',
                 'receipt_path' => null,
+                'date_paid'    => null,
             ]);
 
         return response()->json([

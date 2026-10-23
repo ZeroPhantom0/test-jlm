@@ -225,6 +225,9 @@ class Reservation extends Model
     public function toReactArray(): array
     {
         return [
+            // NEW — needed by ReservationsModals.jsx so
+            // /admin/reservations/{id}/approve hits the correct record.
+            'id'              => $this->id,
             'key'             => $this->reference_no,
             'name'            => $this->tenant_name,
             'initial'         => $this->tenant_initial,

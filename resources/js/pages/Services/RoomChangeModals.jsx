@@ -9,7 +9,9 @@ const csrf = () =>
 export default function RoomChangeModals() {
     const [showSubmit, setShowSubmit]     = useState(false);
     const [showDetails, setShowDetails]   = useState(false);
+    const [showDelete, setShowDelete]     = useState(false);
     const [request, setRequest]           = useState(null);
+    const [deleteTarget, setDeleteTarget] = useState(null);
     const [saving, setSaving]             = useState(false);
     const [requestsData, setRequestsData] = useState({});
     const [currentRoom, setCurrentRoom]   = useState('');
@@ -62,12 +64,15 @@ export default function RoomChangeModals() {
                 return;
             }
 
-            // Cancel request (from row)
+            // Open Delete Modal (from row)
             const cancelBtn = e.target.closest('.cancel-room-change-btn');
             if (cancelBtn) {
                 const id = cancelBtn.dataset.requestId;
-                if (!id) return;
-                handleCancel(id);
+                const data = requestsData[id];
+                if (data) {
+                    setDeleteTarget(data);
+                    setShowDelete(true);
+                }
                 return;
             }
         };
@@ -114,14 +119,28 @@ export default function RoomChangeModals() {
     };
 
     // ============================================================
-    // Cancel a pending request
+    // Open Delete Modal (from Details footer)
     // ============================================================
-    const handleCancel = async (id) => {
-        if (!confirm('Cancel this room change request?')) return;
+    const openDeleteModal = () => {
+        if (!request) return;
+        setDeleteTarget(request);
+        setShowDelete(true);
+    };
 
+    const closeDeleteModal = () => {
+        if (saving) return;
+        setShowDelete(false);
+        setDeleteTarget(null);
+    };
+
+    // ============================================================
+    // Confirm Cancel (Delete)
+    // ============================================================
+    const confirmCancel = async () => {
+        if (!deleteTarget) return;
         setSaving(true);
         try {
-            const res = await fetch(`/tenants/services/room-change/${id}/cancel`, {
+            const res = await fetch(`/tenants/services/room-change/${deleteTarget.id}/cancel`, {
                 method: 'POST',
                 headers: {
                     'Accept': 'application/json',
@@ -130,6 +149,9 @@ export default function RoomChangeModals() {
             });
             const data = await res.json().catch(() => ({}));
             if (!res.ok) throw new Error(data.message || 'Failed to cancel request.');
+            
+            setShowDelete(false);
+            setDeleteTarget(null);
             setShowDetails(false);
             window.location.reload();
         } catch (err) {
@@ -137,11 +159,6 @@ export default function RoomChangeModals() {
         } finally {
             setSaving(false);
         }
-    };
-
-    const handleCancelRequest = async () => {
-        if (!request) return;
-        await handleCancel(request.id);
     };
 
     return (
@@ -285,7 +302,7 @@ export default function RoomChangeModals() {
                     <div className="p-5 border-t border-slate-100 flex justify-between items-center">
                         {request.status === 'Pending' && (
                             <button
-                                onClick={handleCancelRequest}
+                                onClick={openDeleteModal}
                                 disabled={saving}
                                 className="border border-red-300 text-red-500 hover:bg-red-50 disabled:opacity-50 rounded-lg px-3.5 py-2 text-[12.5px] font-medium inline-flex items-center gap-1.5"
                             >
@@ -298,6 +315,74 @@ export default function RoomChangeModals() {
                             className="bg-[#001838] hover:bg-[#0d2347] text-white px-4 py-2 rounded-lg text-[12.5px] font-medium ml-auto"
                         >
                             Close
+                        </button>
+                    </div>
+                </Modal>
+            )}
+
+            {/* ============================================================ */}
+            {/* MODAL 3: Delete / Cancel Confirmation */}
+            {/* ============================================================ */}
+            {showDelete && deleteTarget && (
+                <Modal onClose={closeDeleteModal} maxWidth="max-w-[460px]">
+                    <div className="p-5 pb-4 flex items-center justify-between border-b border-slate-100">
+                        <h3 className="text-lg font-bold text-slate-900">Cancel Room Change</h3>
+                        <button
+                            onClick={closeDeleteModal}
+                            disabled={saving}
+                            className="text-slate-400 hover:text-slate-700 text-lg disabled:opacity-50"
+                        >
+                            <i className="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+
+                    <div className="p-6 text-center">
+                        <div className="w-16 h-16 mx-auto rounded-full bg-rose-50 flex items-center justify-center mb-4">
+                            <i className="fa-solid fa-trash-can text-rose-500 text-2xl"></i>
+                        </div>
+                        <h4 className="text-lg font-bold text-slate-900 mb-2">Are you sure?</h4>
+                        <p className="text-slate-500 text-[13px] mb-2">
+                            You are about to cancel this room change request:
+                        </p>
+                        <p className="text-[13px] text-slate-600 mb-4">
+                            <span className="font-semibold">{deleteTarget.current_room}</span>
+                            <i className="fa-solid fa-arrow-right text-slate-400 text-[10px] mx-2"></i>
+                            <span className="font-semibold text-emerald-600">{deleteTarget.requested_room}</span>
+                            <span className="text-slate-400 ml-2">({deleteTarget.ref})</span>
+                        </p>
+                        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-left">
+                            <p className="text-[12px] text-amber-800 leading-snug">
+                                <i className="fa-solid fa-circle-info mr-1"></i>
+                                This will permanently remove the request. You will need to submit a new one if you change your mind.{' '}
+                                <strong>This action cannot be undone.</strong>
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="p-5 border-t border-slate-100 flex justify-end gap-3">
+                        <button
+                            onClick={closeDeleteModal}
+                            disabled={saving}
+                            className="text-slate-600 text-[13.5px] font-semibold px-4 py-2 disabled:opacity-50"
+                        >
+                            Keep Request
+                        </button>
+                        <button
+                            onClick={confirmCancel}
+                            disabled={saving}
+                            className="bg-rose-500 hover:bg-rose-600 disabled:opacity-50 text-white px-5 py-2.5 rounded-lg text-[13.5px] font-semibold inline-flex items-center gap-2 transition"
+                        >
+                            {saving ? (
+                                <>
+                                    <i className="fa-solid fa-spinner fa-spin"></i>
+                                    Cancelling…
+                                </>
+                            ) : (
+                                <>
+                                    <i className="fa-solid fa-ban"></i>
+                                    Yes, Cancel
+                                </>
+                            )}
                         </button>
                     </div>
                 </Modal>

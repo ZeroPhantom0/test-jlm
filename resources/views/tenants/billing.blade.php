@@ -101,7 +101,7 @@
         </div>
     </div>
 
-    {{-- Reservation remaining card --}}
+    {{-- Reservation remaining card — only shown if there is UNBILLED remaining --}}
     @if($reservationDue)
         <div class="bg-white rounded-2xl border border-slate-100 overflow-hidden mb-6">
             <div class="bg-amber-50 px-6 py-4 border-b border-amber-100 flex items-center gap-2.5">
@@ -127,7 +127,7 @@
                     <div class="text-2xl font-extrabold text-slate-800">
                         ₱{{ number_format($reservationDue['amount'], 0) }}
                     </div>
-                    <button id="open-payment-modal"
+                    <button type="button" class="open-payment-modal"
                             data-invoice="{{ json_encode([
                                 'reference'    => $reservationDue['reference'],
                                 'title'        => $reservationDue['title'],
@@ -143,9 +143,8 @@
         </div>
     @endif
 
-    {{-- Pending payments --}}
+    {{-- Pending Payments — every outstanding invoice --}}
     @if($pendingInvoices->count() > 0)
-        @php $next = $pendingInvoices->first(); @endphp
         <div class="bg-white rounded-2xl border border-slate-100 overflow-hidden mb-6">
             <div class="bg-red-50 px-6 py-4 border-b border-red-100 flex items-center gap-2.5">
                 <i class="fa-solid fa-exclamation-circle text-red-500"></i>
@@ -156,39 +155,52 @@
                     </span>
                 </h4>
             </div>
-            <div class="p-6 flex flex-wrap items-center justify-between gap-4">
-                <div>
-                    <div class="flex items-center gap-3">
-                        <h4 class="text-[15px] font-bold">{{ $next->description }}</h4>
-                        <span class="bg-amber-100 text-amber-700 text-[11px] font-bold px-2.5 py-1 rounded-full inline-flex items-center gap-1">
-                            <i class="fa-regular fa-clock"></i> {{ $next->status }}
-                        </span>
+
+            @foreach($pendingInvoices as $inv)
+                @php
+                    $badgeClasses = match ($inv->status) {
+                        'Overdue' => 'bg-rose-100 text-rose-700',
+                        'Partial' => 'bg-yellow-100 text-amber-700',
+                        default   => 'bg-amber-100 text-amber-700',
+                    };
+                @endphp
+                <div class="p-6 flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 last:border-b-0">
+                    <div class="min-w-0">
+                        <div class="flex items-center gap-3 flex-wrap">
+                            <h4 class="text-[15px] font-bold">{{ $inv->description }}</h4>
+                            <span class="text-[11px] font-bold px-2.5 py-1 rounded-full inline-flex items-center gap-1 {{ $badgeClasses }}">
+                                <i class="fa-regular fa-clock"></i> {{ $inv->status }}
+                            </span>
+                        </div>
+                        <div class="text-xs text-slate-400 flex items-center gap-1.5 mt-1.5 flex-wrap">
+                            <i class="fa-regular fa-calendar"></i>
+                            <span>
+                                Due: {{ $inv->due_date?->format('M d, Y') ?? '—' }}
+                                · {{ $inv->transaction_no }}
+                            </span>
+                            @if((float) $inv->amount_paid > 0)
+                                <span class="text-slate-400">· Paid so far: ₱{{ number_format($inv->amount_paid, 0) }}</span>
+                            @endif
+                        </div>
                     </div>
-                    <div class="text-xs text-slate-400 flex items-center gap-1.5 mt-1.5">
-                        <i class="fa-regular fa-calendar"></i>
-                        <span>
-                            Due: {{ $next->due_date?->format('M d, Y') ?? '—' }}
-                            · {{ $next->transaction_no }}
-                        </span>
+                    <div class="flex items-center gap-5">
+                        <div class="text-2xl font-extrabold text-slate-800">
+                            ₱{{ number_format($inv->balance, 0) }}
+                        </div>
+                        <button type="button" class="open-payment-modal"
+                                data-invoice="{{ json_encode([
+                                    'reference'    => $inv->transaction_no,
+                                    'title'        => $inv->description,
+                                    'amount'       => (float) $inv->balance,
+                                    'due_date'     => $inv->due_date?->format('M j, Y') ?? '—',
+                                    'gcash_number' => '0917-123-4567',
+                                ], JSON_HEX_APOS | JSON_HEX_QUOT) }}"
+                                class="bg-[#00a86b] hover:bg-emerald-700 text-white px-5 py-2.5 rounded-lg font-bold text-[13px] inline-flex items-center gap-2">
+                            <i class="fa-regular fa-credit-card"></i> Pay Now
+                        </button>
                     </div>
                 </div>
-                <div class="flex items-center gap-5">
-                    <div class="text-2xl font-extrabold text-slate-800">
-                        ₱{{ number_format($next->balance, 0) }}
-                    </div>
-                    <button id="open-payment-modal"
-                            data-invoice="{{ json_encode([
-                                'reference'    => $next->transaction_no,
-                                'title'        => $next->description,
-                                'amount'       => (float) $next->balance,
-                                'due_date'     => $next->due_date?->format('M j, Y') ?? '—',
-                                'gcash_number' => '0917-123-4567',
-                            ], JSON_HEX_APOS | JSON_HEX_QUOT) }}"
-                            class="bg-[#00a86b] hover:bg-emerald-700 text-white px-5 py-2.5 rounded-lg font-bold text-[13px] inline-flex items-center gap-2">
-                        <i class="fa-regular fa-credit-card"></i> Pay Now
-                    </button>
-                </div>
-            </div>
+            @endforeach
         </div>
     @endif
 

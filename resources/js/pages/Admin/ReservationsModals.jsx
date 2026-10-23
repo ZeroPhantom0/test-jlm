@@ -24,6 +24,11 @@ export default function ReservationsModals() {
     }, []);
 
     const sendAction = useCallback(async (id, action, body = {}) => {
+        // Defensive: refuse to build a URL with a missing id.
+        if (id == null || id === '' || id === 'undefined') {
+            throw new Error('Missing reservation id.');
+        }
+
         const url = action === 'delete'
             ? `/admin/reservations/${id}`
             : `/admin/reservations/${id}/${action}`;
@@ -59,7 +64,10 @@ export default function ReservationsModals() {
             const approveBtn = e.target.closest('.icon-approve');
             if (approveBtn) {
                 const id = approveBtn.dataset.resId;
-                if (!id) return;
+                if (!id) {
+                    alert('Missing reservation id on the Approve button.');
+                    return;
+                }
                 if (!confirm('Approve this reservation?')) return;
 
                 setSaving(true);
@@ -73,7 +81,10 @@ export default function ReservationsModals() {
             const rejectBtn = e.target.closest('.icon-reject');
             if (rejectBtn) {
                 const id = rejectBtn.dataset.resId;
-                if (!id) return;
+                if (!id) {
+                    alert('Missing reservation id on the Reject button.');
+                    return;
+                }
                 if (!confirm('Reject this reservation?')) return;
 
                 setSaving(true);
@@ -96,6 +107,10 @@ export default function ReservationsModals() {
 
     const runModalAction = async (action, extra = {}) => {
         if (!data) return;
+        if (data.id == null) {
+            alert('Cannot perform this action: reservation id is missing.');
+            return;
+        }
         setSaving(true);
         try {
             await sendAction(data.id, action, { admin_notes: adminNotes, ...extra });
@@ -113,6 +128,10 @@ export default function ReservationsModals() {
 
     const handleDelete = async () => {
         if (!data) return;
+        if (data.id == null) {
+            alert('Cannot delete: reservation id is missing.');
+            return;
+        }
         if (!confirm('Delete this reservation permanently?')) return;
         setSaving(true);
         try {
@@ -172,7 +191,7 @@ export default function ReservationsModals() {
                     </div>
                 </div>
 
-                {/* Reservation Details — Check-in / Check-out only */}
+                {/* Reservation Details */}
                 <div className="bg-slate-50 rounded-xl p-4 flex flex-col gap-2.5">
                     <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Reservation Details</div>
 
@@ -183,24 +202,20 @@ export default function ReservationsModals() {
                         <i className="fa-solid fa-bed w-4 text-slate-400"></i> {data.bedId}
                     </div>
 
-                    {/* Check-in */}
                     <div className="flex items-center gap-2.5 text-[13px] text-slate-700">
                         <i className="fa-solid fa-right-to-bracket w-4 text-slate-400"></i>
                         Check-in: {data.formattedCheckIn}
                     </div>
 
-                    {/* Check-out */}
                     <div className="flex items-center gap-2.5 text-[13px] text-slate-700">
                         <i className="fa-solid fa-right-from-bracket w-4 text-slate-400"></i>
                         Check-out: {data.formattedCheckOut}
                     </div>
 
-                    {/* Submitted */}
                     <div className="flex items-center gap-2.5 text-[13px] text-slate-700">
                         <i className="fa-regular fa-calendar-plus w-4 text-slate-400"></i> {data.submitted}
                     </div>
 
-                    {/* Stay duration */}
                     {data.stayDuration != null && (
                         <div className="flex items-center gap-2.5 text-[13px] text-slate-700">
                             <i className="fa-regular fa-clock w-4 text-slate-400"></i>

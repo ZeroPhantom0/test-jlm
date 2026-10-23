@@ -2,29 +2,138 @@
 import React, { useState, useEffect, useRef } from "react";
 import { logout } from "../utils/logout";
 
+const STORAGE_KEY = "tenant.dismissedNotifications";
+
+function readDismissed() {
+    try {
+        return new Set(JSON.parse(sessionStorage.getItem(STORAGE_KEY) || "[]"));
+    } catch {
+        return new Set();
+    }
+}
+
+function saveDismissed(set) {
+    try {
+        sessionStorage.setItem(STORAGE_KEY, JSON.stringify([...set]));
+    } catch {}
+}
+
+function timeAgo(dateStr) {
+    if (!dateStr) return "";
+    const d = new Date(dateStr.replace(" ", "T"));
+    const diff = Math.floor((Date.now() - d.getTime()) / 1000);
+    if (diff < 60) return "Just now";
+    if (diff < 3600) return `${Math.floor(diff / 60)} min ago`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)} hr ago`;
+    if (diff < 604800) return `${Math.floor(diff / 86400)} day(s) ago`;
+    return d.toLocaleDateString();
+}
+
+function csrfToken() {
+    return document
+        .querySelector('meta[name="csrf-token"]')
+        ?.getAttribute("content") || "";
+}
+
 export default function TopHeader({
     title     = "Dashboard",
     userName  = "Tenant",
     userRole  = "Tenant",
     userEmail = "",
     avatar    = "https://i.pravatar.cc/100?img=47",
-    isTenant  = false, // ← new
+    isTenant  = false,
 }) {
     const [dropdownOpen, setDropdownOpen] = useState(false);
-    const dropdownRef = useRef(null);
+    const [notifOpen, setNotifOpen]       = useState(false);
+    const [rawNotifications, setRawNotifications] = useState([]);
+    const [loading, setLoading]                   = useState(false);
+    const [dismissed, setDismissed]               = useState(() => readDismissed());
 
-    // "New Tenant" until they have an approved reservation
+    const dropdownRef = useRef(null);
+    const notifRef    = useRef(null);
+
     const displayRole = isTenant ? "Tenant" : "New Tenant";
+
+    const notifications = rawNotifications.filter((n) => !dismissed.has(n.id));
+    const unreadCount   = notifications.filter((n) => n.unread).length;
+
+    const fetchNotifications = async () => {
+        try {
+            setLoading(true);
+            const res = await fetch("/tenants/notifications/feed", {
+                headers: {
+                    Accept: "application/json",
+                    "X-Requested-With": "XMLHttpRequest",
+                },
+                credentials: "same-origin",
+            });
+            if (!res.ok) throw new Error("Failed to load notifications");
+            const data = await res.json();
+            setRawNotifications(data.notifications || []);
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        fetchNotifications();
+        const id = setInterval(fetchNotifications, 30000);
+        return () => clearInterval(id);
+    }, []);
+
+    useEffect(() => {
+        if (notifOpen) fetchNotifications();
+    }, [notifOpen]);
 
     useEffect(() => {
         const handleClickOutside = (e) => {
             if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
                 setDropdownOpen(false);
             }
+            if (notifRef.current && !notifRef.current.contains(e.target)) {
+                setNotifOpen(false);
+            }
         };
         document.addEventListener("mousedown", handleClickOutside);
         return () => document.removeEventListener("mousedown", handleClickOutside);
     }, []);
+
+    const dismiss = (id) => {
+        setDismissed((prev) => {
+            const next = new Set(prev);
+            next.add(id);
+            saveDismissed(next);
+            return next;
+        });
+    };
+
+    const clearAll = () => {
+        const next = new Set(dismissed);
+        notifications.forEach((n) => next.add(n.id));
+        saveDismissed(next);
+        setDismissed(next);
+    };
+
+    const handleClickNotification = (n) => {
+        dismiss(n.id);
+
+        if (n.type === "message" && n.id.startsWith("msg-")) {
+            const messageId = n.id.replace("msg-", "");
+            fetch("/tenants/notifications/message-read", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Accept: "application/json",
+                    "X-Requested-With": "XMLHttpRequest",
+                    "X-CSRF-TOKEN": csrfToken(),
+                },
+                credentials: "same-origin",
+                body: JSON.stringify({ message_id: messageId }),
+            }).catch(console.error);
+        }
+    };
 
     return (
         <header className="bg-white px-4 md:px-8 py-[14px] flex items-center justify-between border-b border-slate-200 sticky top-0 z-[90] flex-shrink-0">
@@ -41,6 +150,95 @@ export default function TopHeader({
             </div>
 
             <div className="flex items-center gap-5 md:gap-6">
+                {/* Notification Bell */}
+                <div className="relative" ref={notifRef}>
+                    <button
+                        type="button"
+                        onClick={() => setNotifOpen(!notifOpen)}
+                        className="relative w-9 h-9 flex items-center justify-center rounded-full text-slate-600 hover:bg-slate-100 transition"
+                        aria-label="Notifications"
+                    >
+                        <i className="fa-solid fa-bell text-[16px]" />
+                        {unreadCount > 0 && (
+                            <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 flex items-center justify-center bg-rose-500 text-white text-[10px] font-bold rounded-full border-2 border-white">
+                                {unreadCount > 99 ? "99+" : unreadCount}
+                            </span>
+                        )}
+                    </button>
+
+                    {notifOpen && (
+                        <div className="absolute right-0 mt-3 w-[340px] bg-white rounded-2xl border border-slate-200 shadow-xl z-[2000] overflow-hidden">
+                            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
+                                <div className="flex items-center gap-2">
+                                    <h4 className="text-[14px] font-bold text-slate-900">
+                                        Notifications
+                                    </h4>
+                                    {unreadCount > 0 && (
+                                        <span className="px-2 py-0.5 bg-rose-100 text-rose-600 text-[10px] font-bold rounded-full">
+                                            {unreadCount} new
+                                        </span>
+                                    )}
+                                </div>
+                                {notifications.length > 0 && (
+                                    <button
+                                        type="button"
+                                        onClick={clearAll}
+                                        className="text-[11px] font-semibold text-orange-600 hover:text-orange-700"
+                                    >
+                                        Clear all
+                                    </button>
+                                )}
+                            </div>
+
+                            <div className="max-h-[380px] overflow-y-auto">
+                                {loading && notifications.length === 0 ? (
+                                    <div className="py-12 text-center text-[12px] text-slate-500">
+                                        Loading…
+                                    </div>
+                                ) : notifications.length === 0 ? (
+                                    <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
+                                        <div className="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center text-slate-400 text-lg mb-2">
+                                            <i className="fa-solid fa-inbox"></i>
+                                        </div>
+                                        <p className="text-[12px] text-slate-500">
+                                            No notifications
+                                        </p>
+                                    </div>
+                                ) : (
+                                    notifications.map((n) => (
+                                        <a
+                                            key={n.id}
+                                            href={n.link}
+                                            onClick={() => handleClickNotification(n)}
+                                            className={`flex items-start gap-3 px-4 py-3 border-b border-slate-50 last:border-b-0 hover:bg-slate-50 transition ${
+                                                n.unread ? "bg-orange-50/40" : ""
+                                            }`}
+                                        >
+                                            <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${n.color}`}>
+                                                <i className={`${n.icon} text-[13px]`}></i>
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-[12.5px] font-semibold text-slate-900 leading-tight">
+                                                    {n.title}
+                                                </p>
+                                                <p className="text-[11.5px] text-slate-500 mt-0.5 truncate">
+                                                    {n.description}
+                                                </p>
+                                                <p className="text-[10.5px] text-slate-400 mt-1">
+                                                    {timeAgo(n.time)}
+                                                </p>
+                                            </div>
+                                            {n.unread && (
+                                                <span className="w-2 h-2 rounded-full bg-rose-500 mt-1.5 flex-shrink-0" />
+                                            )}
+                                        </a>
+                                    ))
+                                )}
+                            </div>
+                        </div>
+                    )}
+                </div>
+
                 {/* Profile Dropdown */}
                 <div className="relative" ref={dropdownRef}>
                     <div

@@ -7,10 +7,12 @@ const csrf = () =>
     document.querySelector('input[name="_token"]')?.value;
 
 export default function TenantMaintenanceModals() {
-    const [showNew, setShowNew]         = useState(false);
-    const [showDetails, setShowDetails] = useState(false);
-    const [request, setRequest]         = useState(null);
-    const [saving, setSaving]           = useState(false);
+    const [showNew, setShowNew]           = useState(false);
+    const [showDetails, setShowDetails]   = useState(false);
+    const [showDelete, setShowDelete]     = useState(false);
+    const [request, setRequest]           = useState(null);
+    const [deleteTarget, setDeleteTarget] = useState(null);
+    const [saving, setSaving]             = useState(false);
     const [requestsData, setRequestsData] = useState({});
 
     // New-request form state
@@ -64,12 +66,15 @@ export default function TenantMaintenanceModals() {
                 return;
             }
 
-            // Cancel Request (from row)
+            // Open Delete Modal (from row)
             const cancelBtn = e.target.closest('.cancel-request-btn');
             if (cancelBtn) {
                 const id = cancelBtn.dataset.requestId;
-                if (!id) return;
-                handleCancel(id);
+                const data = requestsData[id];
+                if (data) {
+                    setDeleteTarget(data);
+                    setShowDelete(true);
+                }
                 return;
             }
         };
@@ -81,13 +86,28 @@ export default function TenantMaintenanceModals() {
     const updateField = (key, value) => setForm((f) => ({ ...f, [key]: value }));
 
     // ============================================================
-    // Cancel a pending request
+    // Open Delete Modal (from Details footer)
     // ============================================================
-    const handleCancel = async (id) => {
-        if (!confirm('Cancel this maintenance request?')) return;
+    const openDeleteModal = () => {
+        if (!request) return;
+        setDeleteTarget(request);
+        setShowDelete(true);
+    };
+
+    const closeDeleteModal = () => {
+        if (saving) return;
+        setShowDelete(false);
+        setDeleteTarget(null);
+    };
+
+    // ============================================================
+    // Confirm Cancel (Delete)
+    // ============================================================
+    const confirmCancel = async () => {
+        if (!deleteTarget) return;
         setSaving(true);
         try {
-            const res = await fetch(`/tenants/services/maintenance/${id}/cancel`, {
+            const res = await fetch(`/tenants/services/maintenance/${deleteTarget.id}/cancel`, {
                 method: 'POST',
                 headers: {
                     'Accept': 'application/json',
@@ -96,6 +116,9 @@ export default function TenantMaintenanceModals() {
             });
             const data = await res.json().catch(() => ({}));
             if (!res.ok) throw new Error(data.message || 'Failed to cancel request.');
+            
+            setShowDelete(false);
+            setDeleteTarget(null);
             setShowDetails(false);
             window.location.reload();
         } catch (err) {
@@ -133,14 +156,6 @@ export default function TenantMaintenanceModals() {
         } finally {
             setSaving(false);
         }
-    };
-
-    // ============================================================
-    // Cancel a pending request (from modal footer)
-    // ============================================================
-    const handleCancelRequest = async () => {
-        if (!request) return;
-        await handleCancel(request.id);
     };
 
     return (
@@ -317,7 +332,7 @@ export default function TenantMaintenanceModals() {
                     <div className="p-5 border-t border-slate-100 flex items-center justify-end gap-3">
                         {request.status === 'Pending' && (
                             <button
-                                onClick={handleCancelRequest}
+                                onClick={openDeleteModal}
                                 disabled={saving}
                                 className="border border-red-300 text-red-500 hover:bg-red-50 disabled:opacity-50 rounded-lg px-4 py-2 text-xs font-semibold inline-flex items-center gap-1.5"
                             >
@@ -330,6 +345,71 @@ export default function TenantMaintenanceModals() {
                             className="bg-[#02122c] hover:bg-[#0d2347] text-white px-4 py-2 rounded-lg text-[13px] font-semibold"
                         >
                             Close
+                        </button>
+                    </div>
+                </Modal>
+            )}
+
+            {/* ============================================================ */}
+            {/* MODAL 3: Delete / Cancel Confirmation */}
+            {/* ============================================================ */}
+            {showDelete && deleteTarget && (
+                <Modal onClose={closeDeleteModal} maxWidth="max-w-[460px]">
+                    <div className="p-5 pb-4 flex items-center justify-between border-b border-slate-100">
+                        <h3 className="text-lg font-bold text-slate-900">Cancel Request</h3>
+                        <button
+                            onClick={closeDeleteModal}
+                            disabled={saving}
+                            className="text-slate-400 hover:text-slate-700 text-lg disabled:opacity-50"
+                        >
+                            <i className="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+
+                    <div className="p-6 text-center">
+                        <div className="w-16 h-16 mx-auto rounded-full bg-rose-50 flex items-center justify-center mb-4">
+                            <i className="fa-solid fa-trash-can text-rose-500 text-2xl"></i>
+                        </div>
+                        <h4 className="text-lg font-bold text-slate-900 mb-2">Are you sure?</h4>
+                        <p className="text-slate-500 text-[13px] mb-2">
+                            You are about to cancel this maintenance request:
+                        </p>
+                        <p className="font-bold text-slate-900 text-[15px] mb-4">
+                            {deleteTarget.title} <span className="text-slate-400 font-normal">({deleteTarget.ref})</span>
+                        </p>
+                        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-left">
+                            <p className="text-[12px] text-amber-800 leading-snug">
+                                <i className="fa-solid fa-circle-info mr-1"></i>
+                                This will permanently remove the request. You will need to submit a new one if you change your mind.{' '}
+                                <strong>This action cannot be undone.</strong>
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="p-5 border-t border-slate-100 flex justify-end gap-3">
+                        <button
+                            onClick={closeDeleteModal}
+                            disabled={saving}
+                            className="text-slate-600 text-[13.5px] font-semibold px-4 py-2 disabled:opacity-50"
+                        >
+                            Keep Request
+                        </button>
+                        <button
+                            onClick={confirmCancel}
+                            disabled={saving}
+                            className="bg-rose-500 hover:bg-rose-600 disabled:opacity-50 text-white px-5 py-2.5 rounded-lg text-[13.5px] font-semibold inline-flex items-center gap-2 transition"
+                        >
+                            {saving ? (
+                                <>
+                                    <i className="fa-solid fa-spinner fa-spin"></i>
+                                    Cancelling…
+                                </>
+                            ) : (
+                                <>
+                                    <i className="fa-solid fa-ban"></i>
+                                    Yes, Cancel
+                                </>
+                            )}
                         </button>
                     </div>
                 </Modal>

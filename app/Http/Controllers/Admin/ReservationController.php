@@ -8,8 +8,11 @@ use App\Models\Invoice;
 use App\Models\Reservation;
 use App\Models\Room;
 use App\Models\Tenant;
+use App\Services\AuditLogger;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 
 class ReservationController extends Controller
@@ -17,21 +20,14 @@ class ReservationController extends Controller
     /**
      * Display the reservations list.
      *
-     * Only reservations that still need admin attention are shown:
-     *   - Pending  → awaiting approval/rejection
-     *   - Rejected → admin may want to revisit / follow up
-     *
-     * Approved reservations are hidden because they've already been
-     * processed and now live in the History page as active tenants.
-     * Expired reservations are hidden because they're stale.
-     *
-     * Both are still counted in the metrics so admins see the full picture.
+     * Only Pending and Rejected are shown in this list — Approved and
+     * Expired reservations live in the History page. Both are still
+     * counted in the metrics so admins see the full picture.
      */
     public function index(Request $request)
     {
         $filters = $request->only(['search', 'status']);
 
-        // Hide Approved + Expired — they live in History now.
         $reservations = Reservation::filter($filters)
             ->whereNotIn('status', ['Approved', 'Expired'])
             ->latest()
@@ -49,7 +45,12 @@ class ReservationController extends Controller
             return [$res->reference_no => $res->toReactArray()];
         })->toArray();
 
-        return view('admin.reservations', compact('reservations', 'metrics', 'filters', 'reservationsForReact'));
+        return view('admin.reservations', compact(
+            'reservations',
+            'metrics',
+            'filters',
+            'reservationsForReact'
+        ));
     }
 
     /**
@@ -92,6 +93,15 @@ class ReservationController extends Controller
             'status'             => 'Pending',
         ]);
 
+        AuditLogger::log([
+            'action'       => 'CREATE',
+            'module'       => 'RESERVATIONS',
+            'description'  => 'Created reservation ' . $reservation->reference_no
+                             . ' for ' . $reservation->tenant_name,
+            'subject_type' => Reservation::class,
+            'subject_id'   => $reservation->id,
+        ]);
+
         return response()->json([
             'success' => true,
             'message' => 'Reservation created successfully.',
@@ -127,6 +137,15 @@ class ReservationController extends Controller
 
         $reservation->update($validated);
 
+        AuditLogger::log([
+            'action'       => 'UPDATE',
+            'module'       => 'RESERVATIONS',
+            'description'  => 'Updated reservation ' . $reservation->reference_no
+                             . ' (' . $reservation->tenant_name . ')',
+            'subject_type' => Reservation::class,
+            'subject_id'   => $reservation->id,
+        ]);
+
         return response()->json([
             'success' => true,
             'message' => 'Reservation updated successfully.',
@@ -137,13 +156,17 @@ class ReservationController extends Controller
     /**
      * Approve a reservation.
      *
-     * - Creates / refreshes the Tenant record.
-     * - Does NOT force the room to "Reserved"; instead we let Room::syncStatus()
-     *   decide the status based on ACTUAL occupancy:
-     *      occupied < total_beds → Available
-     *      occupied >= total_beds → Reserved
-     * - Creates an "Unpaid" invoice for the reservation's `remaining`
-     *   balance so the tenant sees it on their dashboard.
+     * Behaviour:
+     *   • Reservation  → Approved  (always — regardless of invoice state)
+     *   • Tenant       → created / refreshed
+     *   • Room         → re-synced
+     *   • Invoice tied to this reservation:
+     *       - If already Paid → do nothing (money side settled elsewhere).
+     *       - Otherwise, derive the correct state from what the tenant
+     *         actually paid (reservation_fee vs total_charges):
+     *           reservation_fee >= total_charges        → Paid
+     *           0 < reservation_fee < total_charges     → Partial
+     *           reservation_fee == 0                    → Unpaid
      */
     public function approve(Request $request, Reservation $reservation)
     {
@@ -152,7 +175,8 @@ class ReservationController extends Controller
         ]);
 
         DB::transaction(function () use ($request, $reservation, $validated) {
-            // 1. Approve the reservation BEFORE creating the tenant.
+            // 1. Approve the reservation — this always happens, independent
+            //    of how much the tenant has paid.
             $reservation->update([
                 'status'       => 'Approved',
                 'admin_notes'  => $validated['admin_notes'] ?? $reservation->admin_notes,
@@ -160,7 +184,7 @@ class ReservationController extends Controller
                 'processed_at' => now(),
             ]);
 
-            // 2. Create / refresh the tenant link.
+            // 2. Create / refresh the tenant.
             $tenant = null;
             if ($reservation->user_id) {
                 $tenant = Tenant::updateOrCreate(
@@ -174,15 +198,24 @@ class ReservationController extends Controller
                 );
             }
 
-            // 3. Recompute the room status based on real occupancy.
+            // 3. Re-sync the room.
             if ($reservation->room) {
                 $reservation->room->syncStatus();
             }
 
-            // 4. Auto-create an Unpaid invoice for the remaining balance,
-            //    unless one already exists for this reservation.
-            $this->createRemainingBalanceInvoice($reservation, $tenant);
+            // 4. Reconcile the invoice against what was actually paid.
+            $this->settleReservationInvoice($reservation, $tenant);
         });
+
+        AuditLogger::log([
+            'action'       => 'APPROVE',
+            'module'       => 'RESERVATIONS',
+            'description'  => 'Approved reservation ' . $reservation->reference_no
+                             . ' for ' . $reservation->tenant_name
+                             . ' (' . $reservation->desired_room . ')',
+            'subject_type' => Reservation::class,
+            'subject_id'   => $reservation->id,
+        ]);
 
         return response()->json([
             'success' => true,
@@ -193,6 +226,9 @@ class ReservationController extends Controller
 
     /**
      * Reject a reservation.
+     *
+     * Deletes any Unpaid / Partial / Pending invoice tied to this
+     * reservation (and its receipt file). Paid invoices are kept.
      */
     public function reject(Request $request, Reservation $reservation)
     {
@@ -208,11 +244,23 @@ class ReservationController extends Controller
                 'processed_at' => now(),
             ]);
 
-            // Room status may have been set to "Reserved" earlier — re-sync it.
             if ($reservation->room) {
                 $reservation->room->syncStatus();
             }
+
+            $this->deleteInvoicesOnRejection($reservation);
         });
+
+        AuditLogger::log([
+            'action'       => 'REJECT',
+            'module'       => 'RESERVATIONS',
+            'description'  => 'Rejected reservation ' . $reservation->reference_no
+                             . ' for ' . $reservation->tenant_name
+                             . ($validated['admin_notes'] ? ' (' . $validated['admin_notes'] . ')' : ''),
+            'status'       => 'warning',
+            'subject_type' => Reservation::class,
+            'subject_id'   => $reservation->id,
+        ]);
 
         return response()->json([
             'success' => true,
@@ -226,6 +274,16 @@ class ReservationController extends Controller
      */
     public function destroy(Reservation $reservation)
     {
+        AuditLogger::log([
+            'action'       => 'DELETE',
+            'module'       => 'RESERVATIONS',
+            'description'  => 'Deleted reservation ' . $reservation->reference_no
+                             . ' (' . $reservation->tenant_name . ')',
+            'status'       => 'warning',
+            'subject_type' => Reservation::class,
+            'subject_id'   => $reservation->id,
+        ]);
+
         $reservation->delete();
 
         return response()->json([
@@ -234,58 +292,124 @@ class ReservationController extends Controller
         ]);
     }
 
-    /**
-     * Create an Unpaid invoice for the reservation's remaining balance.
-     *
-     * The invoice's description includes both "Remaining" and the
-     * reservation reference number, so the dashboard's dedup check
-     * (description LIKE '%remaining%' OR '%reservation%') recognises
-     * it and won't double-count the reservation remaining.
-     */
-    private function createRemainingBalanceInvoice(Reservation $reservation, ?Tenant $tenant): void
-    {
-        // Nothing to bill.
-        if ((float) $reservation->remaining <= 0) {
-            return;
-        }
+    // ============================================================
+    // HELPERS
+    // ============================================================
 
-        // Skip if we already created one for this reservation.
-        $alreadyBilled = Invoice::where('tenant_id', $tenant?->id)
-            ->where(function ($q) use ($reservation) {
-                $q->where('description', 'like', '%' . $reservation->reference_no . '%')
-                  ->orWhere('description', 'like', '%remaining%');
-            })
+    /**
+     * Reconcile the invoice tied to a reservation against what the
+     * tenant actually paid.
+     *
+     * The invoice status is derived purely from `reservation_fee` vs
+     * `total_charges`:
+     *
+     *   paid >= total  → Paid    (balance = 0)
+     *   paid >  0      → Partial (balance = total - paid)
+     *   paid == 0      → Unpaid  (balance = total)
+     *
+     * The reservation itself is always Approved — that decision is
+     * made in `approve()` and is independent of the invoice state.
+     *
+     * Exits early (does nothing) if an invoice for this reservation is
+     * already Paid — the money side has already been settled from the
+     * Billing page, and we must not create a duplicate.
+     */
+    private function settleReservationInvoice(Reservation $reservation, ?Tenant $tenant): void
+    {
+        $totalCharges = (float) $reservation->total_charges;
+        $paidAmount   = (float) $reservation->reservation_fee;
+        $remaining    = max(0, $totalCharges - $paidAmount);
+
+        // Derive the correct invoice status from what was paid.
+        [$status, $balance] = match (true) {
+            $paidAmount <= 0            => ['Unpaid',  $totalCharges],
+            $paidAmount + 0.005 >= $totalCharges
+                                        => ['Paid',    0.0],
+            default                     => ['Partial', $remaining],
+        };
+
+        // ── Guard: if any invoice for this reservation is already Paid,
+        //    the money side was handled elsewhere (Billing page). Do
+        //    nothing on the invoice side.
+        $alreadyPaid = Invoice::query()
+            ->where('description', 'like', '%' . $reservation->reference_no . '%')
+            ->where('status', 'Paid')
             ->exists();
 
-        if ($alreadyBilled) {
+        if ($alreadyPaid) {
             return;
         }
 
-        $roomNumber = $reservation->room?->room_number
-            ?? $reservation->desired_room
-            ?? 'N/A';
+        // ── Find the existing invoice (if any) for this reservation.
+        $invoice = Invoice::query()
+            ->where('description', 'like', '%' . $reservation->reference_no . '%')
+            ->latest()
+            ->first();
 
-        $days = $reservation->stay_duration ?? 1;
-        $rate = (float) ($reservation->room?->daily_rent
-            ?? ($reservation->total_charges / max($days, 1)));
+        // ── Case A: no invoice yet — create one at the correct state.
+        if (! $invoice) {
+            Invoice::create([
+                'transaction_no' => Invoice::generateTransactionNo(),
+                'tenant_id'      => $tenant?->id,
+                'room_id'        => $reservation->room_id,
+                'tenant_name'    => $reservation->tenant_name,
+                'room_number'    => $reservation->room?->room_number
+                                    ?? $reservation->desired_room,
+                'description'    => $status === 'Paid'
+                    ? 'Reservation Payment — ' . $reservation->reference_no
+                    : 'Remaining Balance — Reservation ' . $reservation->reference_no,
+                'check_in'       => $reservation->check_in,
+                'check_out'      => $reservation->check_out,
+                'rate_per_day'   => (float) ($reservation->room?->daily_rent ?? 0),
+                'days'           => $reservation->stay_duration ?? 1,
+                'total_amount'   => $totalCharges,
+                'amount_paid'    => $paidAmount,
+                'balance'        => $balance,
+                'due_date'       => $status === 'Unpaid'
+                    ? now()->addDays(7)->toDateString()
+                    : $reservation->check_in,
+                'payment_method' => $reservation->payment_method ?? 'Not Set',
+                'status'         => $status,
+                'date_paid'      => $status !== 'Unpaid' ? now()->toDateString() : null,
+                'verified_by'    => $status === 'Paid' ? Auth::id() : null,
+                'verified_at'    => $status === 'Paid' ? now() : null,
+            ]);
+            return;
+        }
 
-        Invoice::create([
-            'transaction_no' => Invoice::generateTransactionNo(),
-            'tenant_id'      => $tenant?->id,
-            'room_id'        => $reservation->room_id,
-            'tenant_name'    => $reservation->tenant_name,
-            'room_number'    => $roomNumber,
-            'description'    => 'Remaining Balance — Reservation ' . $reservation->reference_no,
-            'check_in'       => $reservation->check_in,
-            'check_out'      => $reservation->check_out,
-            'rate_per_day'   => $rate,
-            'days'           => $days,
-            'total_amount'   => (float) $reservation->total_charges,
-            'amount_paid'    => (float) $reservation->reservation_fee,
-            'balance'        => (float) $reservation->remaining,
-            'due_date'       => now()->addDays(7)->toDateString(),
-            'payment_method' => $reservation->payment_method ?? 'Not Set',
-            'status'         => 'Unpaid',
+        // ── Case B: invoice exists — update it to match the paid amount.
+        $invoice->update([
+            'total_amount' => $totalCharges,
+            'amount_paid'  => $paidAmount,
+            'balance'      => $balance,
+            'status'       => $status,
+            'date_paid'    => $status !== 'Unpaid'
+                ? ($invoice->date_paid ?? now()->toDateString())
+                : null,
+            'verified_by'  => $status === 'Paid'
+                ? ($invoice->verified_by ?? Auth::id())
+                : null,
+            'verified_at'  => $status === 'Paid'
+                ? ($invoice->verified_at ?? now())
+                : null,
         ]);
+    }
+
+    /**
+     * Delete any non-paid invoice tied to this reservation (used on reject).
+     */
+    private function deleteInvoicesOnRejection(Reservation $reservation): void
+    {
+        $invoices = Invoice::query()
+            ->where('description', 'like', '%' . $reservation->reference_no . '%')
+            ->whereIn('status', ['Unpaid', 'Partial', 'Pending'])
+            ->get();
+
+        foreach ($invoices as $inv) {
+            if ($inv->receipt_path && Storage::disk('public')->exists($inv->receipt_path)) {
+                Storage::disk('public')->delete($inv->receipt_path);
+            }
+            $inv->delete();
+        }
     }
 }

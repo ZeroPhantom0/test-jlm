@@ -32,6 +32,9 @@ export default function ReservationsModal() {
     // ---------- Modal state ----------
     const [showDetails, setShowDetails] = useState(false);
     const [showReserve, setShowReserve] = useState(false);
+    const [showCancel, setShowCancel]   = useState(false);
+    const [cancelTarget, setCancelTarget] = useState(null);
+    
     const [room, setRoom]               = useState(FALLBACK_ROOM);
     const [saving, setSaving]           = useState(false);
 
@@ -70,7 +73,7 @@ export default function ReservationsModal() {
     }, []);
 
     // ============================================================
-    // Event delegation: open Details / Reserve modals
+    // Event delegation: open Details / Reserve / Cancel modals
     // ============================================================
     useEffect(() => {
         const handler = (e) => {
@@ -104,28 +107,32 @@ export default function ReservationsModal() {
                 setShowReserve(true);
                 return;
             }
+
+            // ---- Cancel ----
+            const cancelBtn = e.target.closest('.cancel-reservation-btn');
+            if (cancelBtn) {
+                const key = cancelBtn.dataset.resKey;
+                const data = reservationsData[key];
+                if (data) {
+                    setCancelTarget(data);
+                    setShowCancel(true);
+                }
+                return;
+            }
         };
 
         document.addEventListener('click', handler);
         return () => document.removeEventListener('click', handler);
-    }, []);
-
-    // ============================================================
-    // Cancel a pending reservation (via .cancel-reservation-btn)
-    // ============================================================
-    useEffect(() => {
-        const handler = (e) => {
-            const btn = e.target.closest('.cancel-reservation-btn');
-            if (!btn) return;
-            handleCancelReservation(btn.dataset.resKey);
-        };
-        document.addEventListener('click', handler);
-        return () => document.removeEventListener('click', handler);
-        // eslint-disable-next-line
     }, [reservationsData]);
 
     const closeDetails = () => setShowDetails(false);
     const closeReserve = () => setShowReserve(false);
+    
+    const closeCancelModal = () => {
+        if (saving) return;
+        setShowCancel(false);
+        setCancelTarget(null);
+    };
 
     const updateField = (key, value) =>
         setForm((f) => ({ ...f, [key]: value }));
@@ -225,16 +232,14 @@ export default function ReservationsModal() {
     };
 
     // ============================================================
-    // Cancel a pending reservation
+    // Confirm Cancel Reservation
     // ============================================================
-    const handleCancelReservation = async (key) => {
-        const data = reservationsData[key];
-        if (!data) return;
-        if (!confirm('Cancel this reservation?')) return;
+    const confirmCancelReservation = async () => {
+        if (!cancelTarget) return;
 
         setSaving(true);
         try {
-            const res = await fetch(`/tenants/reservations/${data.id}/cancel`, {
+            const res = await fetch(`/tenants/reservations/${cancelTarget.id}/cancel`, {
                 method: 'POST',
                 headers: {
                     'Accept': 'application/json',
@@ -243,6 +248,9 @@ export default function ReservationsModal() {
             });
             const result = await res.json().catch(() => ({}));
             if (!res.ok) throw new Error(result.message || 'Failed to cancel.');
+            
+            setShowCancel(false);
+            setCancelTarget(null);
             window.location.reload();
         } catch (err) {
             alert(err.message);
@@ -725,6 +733,71 @@ export default function ReservationsModal() {
                                 {saving ? 'Submitting…' : 'Submit Reservation'}
                             </button>
                         </div>
+                    </div>
+                </Modal>
+            )}
+
+            {/* ============================================================ */}
+            {/* CANCEL RESERVATION CONFIRMATION MODAL */}
+            {/* ============================================================ */}
+            {showCancel && cancelTarget && (
+                <Modal onClose={closeCancelModal} maxWidth="max-w-[460px]">
+                    <div className="p-5 pb-4 flex items-center justify-between border-b border-slate-100 shrink-0">
+                        <h3 className="text-lg font-bold text-slate-900">Cancel Reservation</h3>
+                        <button
+                            onClick={closeCancelModal}
+                            disabled={saving}
+                            className="text-slate-400 hover:text-slate-700 text-lg disabled:opacity-50"
+                        >
+                            <i className="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+
+                    <div className="p-6 text-center overflow-y-auto max-h-[60vh]">
+                        <div className="w-16 h-16 mx-auto rounded-full bg-rose-50 flex items-center justify-center mb-4">
+                            <i className="fa-solid fa-trash-can text-rose-500 text-2xl"></i>
+                        </div>
+                        <h4 className="text-lg font-bold text-slate-900 mb-2">Are you sure?</h4>
+                        <p className="text-slate-500 text-[13px] mb-2">
+                            You are about to cancel your reservation for:
+                        </p>
+                        <p className="font-bold text-slate-900 text-[15px] mb-4">
+                            {cancelTarget.room} <span className="text-slate-400 font-normal">({cancelTarget.key})</span>
+                        </p>
+                        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-left">
+                            <p className="text-[12px] text-amber-800 leading-snug">
+                                <i className="fa-solid fa-circle-info mr-1"></i>
+                                This will permanently remove your reservation request and you will need to submit a new one if you change your mind.{' '}
+                                <strong>This action cannot be undone.</strong>
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="p-5 border-t border-slate-100 flex justify-end gap-3 shrink-0">
+                        <button
+                            onClick={closeCancelModal}
+                            disabled={saving}
+                            className="text-slate-600 text-[13.5px] font-semibold px-4 py-2 disabled:opacity-50"
+                        >
+                            Keep Reservation
+                        </button>
+                        <button
+                            onClick={confirmCancelReservation}
+                            disabled={saving}
+                            className="bg-rose-500 hover:bg-rose-600 disabled:opacity-50 text-white px-5 py-2.5 rounded-lg text-[13.5px] font-semibold inline-flex items-center gap-2 transition"
+                        >
+                            {saving ? (
+                                <>
+                                    <i className="fa-solid fa-spinner fa-spin"></i>
+                                    Cancelling…
+                                </>
+                            ) : (
+                                <>
+                                    <i className="fa-solid fa-ban"></i>
+                                    Yes, Cancel
+                                </>
+                            )}
+                        </button>
                     </div>
                 </Modal>
             )}
