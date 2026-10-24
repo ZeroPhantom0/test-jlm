@@ -50,16 +50,14 @@
 
     {{-- Table Card --}}
     <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 space-y-5">
-        <form method="GET" action="{{ route('admin.billing') }}" class="flex flex-col md:flex-row md:items-center md:justify-end gap-4">
-            <select name="status" onchange="this.form.submit()" class="bg-white border border-slate-300 rounded-[10px] px-4 py-2.5 text-[13px] font-medium text-slate-700 outline-none cursor-pointer min-w-[160px]">
-                <option value="">All (actionable)</option>
-                {{-- Only the actionable statuses are shown in the dropdown.
-                     Paid / Unpaid are intentionally hidden. --}}
+        <div class="flex flex-col md:flex-row md:items-center md:justify-end gap-4">
+            <select id="billing-status-filter" class="bg-white border border-slate-300 rounded-[10px] px-4 py-2.5 text-[13px] font-medium text-slate-700 outline-none cursor-pointer min-w-[160px]">
+                <option value="">All Statuses</option>
                 @foreach($availableStatuses as $s)
-                    <option value="{{ $s }}" {{ ($filters['status'] ?? '') === $s ? 'selected' : '' }}>{{ $s }}</option>
+                    <option value="{{ $s }}">{{ $s }}</option>
                 @endforeach
             </select>
-        </form>
+        </div>
 
         <div class="overflow-x-auto">
             <table class="w-full text-left">
@@ -75,12 +73,21 @@
                         <th class="py-3 px-4">Actions</th>
                     </tr>
                 </thead>
-                <tbody>
+                <tbody id="billing-tbody">
                     @forelse($invoices as $inv)
-                    <tr class="border-b border-slate-50 last:border-0"
+                    @php
+                        $rowSearch = strtolower(trim(
+                            ($inv->transaction_no ?? '') . ' ' .
+                            ($inv->tenant_name    ?? '') . ' ' .
+                            ($inv->room_number    ?? '') . ' ' .
+                            ($inv->description    ?? '')
+                        ));
+                    @endphp
+                    <tr class="billing-row border-b border-slate-50 last:border-0"
                         data-tn="{{ $inv->transaction_no }}"
                         data-kind="invoice"
-                        data-status="{{ $inv->status }}">
+                        data-status="{{ $inv->status }}"
+                        data-search="{{ $rowSearch }}">
                         <td class="py-4 px-4">
                             <div class="font-semibold text-slate-700 text-[13px]">{{ $inv->transaction_no }}</div>
                             <div class="text-[11px] text-slate-400 mt-0.5">{{ $inv->description }}</div>
@@ -129,6 +136,13 @@
                         </td>
                     </tr>
                     @endforelse
+
+                    <tr id="billing-empty-filter" class="hidden">
+                        <td colspan="8" class="text-center py-12 text-slate-400">
+                            <i class="fa-solid fa-magnifying-glass text-4xl mb-3 opacity-50"></i>
+                            <p class="text-sm">No invoices match your current filters.</p>
+                        </td>
+                    </tr>
                 </tbody>
             </table>
         </div>
@@ -139,3 +153,32 @@
 <div id="admin-billing-modals"
      data-invoices="{{ json_encode($invoicesForReact, JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_TAG | JSON_HEX_AMP) }}"></div>
 @endsection
+
+@push('scripts')
+<script>
+(function () {
+    const rows         = Array.from(document.querySelectorAll('.billing-row'));
+    const statusFilter = document.getElementById('billing-status-filter');
+    const emptyRow     = document.getElementById('billing-empty-filter');
+
+    function applyFilters() {
+        const status = (statusFilter?.value || '').trim();
+        let visible = 0;
+
+        rows.forEach((row) => {
+            const rowStatus = row.dataset.status || '';
+            const show = !status || rowStatus === status;
+            row.style.display = show ? '' : 'none';
+            if (show) visible++;
+        });
+
+        if (emptyRow) {
+            emptyRow.classList.toggle('hidden', !(visible === 0 && rows.length > 0));
+        }
+    }
+
+    statusFilter?.addEventListener('change', applyFilters);
+    applyFilters();
+})();
+</script>
+@endpush

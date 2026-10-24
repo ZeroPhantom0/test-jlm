@@ -7,7 +7,7 @@ const csrf = () =>
     document.querySelector('input[name="_token"]')?.value;
 
 const EMPTY_FORM = {
-    id:           null,       // ← ADDED — used to build the correct PUT URL
+    id:           null,
     title:        '',
     content:      '',
     priority:     'Normal',
@@ -16,10 +16,12 @@ const EMPTY_FORM = {
 };
 
 export default function AnnouncementsModals() {
-    const [showForm, setShowForm] = useState(false);
-    const [editMode, setEditMode] = useState(false);
-    const [form, setForm]         = useState(EMPTY_FORM);
-    const [saving, setSaving]     = useState(false);
+    const [showForm, setShowForm]       = useState(false);
+    const [showDelete, setShowDelete]   = useState(false);
+    const [editMode, setEditMode]       = useState(false);
+    const [form, setForm]               = useState(EMPTY_FORM);
+    const [deleteTarget, setDeleteTarget] = useState(null);
+    const [saving, setSaving]           = useState(false);
     const [announcementsData, setAnnouncementsData] = useState({});
 
     // ============================================================
@@ -79,7 +81,7 @@ export default function AnnouncementsModals() {
                 const found = announcementsData[id];
                 if (found) {
                     setForm({
-                        id:           found.id,           // ← CRITICAL: store the ID
+                        id:           found.id,
                         title:        found.title,
                         content:      found.content,
                         priority:     found.priority,
@@ -92,27 +94,15 @@ export default function AnnouncementsModals() {
                 return;
             }
 
-            // Delete (row-level)
+            // Open Delete Modal (row-level)
             const delBtn = e.target.closest('.icon-delete');
             if (delBtn) {
                 const id = delBtn.dataset.annId;
-                if (!id) return;
-                if (!confirm('Delete this announcement permanently?')) return;
-                setSaving(true);
-                fetch(`/admin/announcements/${id}`, {
-                    method: 'DELETE',
-                    headers: {
-                        'Accept': 'application/json',
-                        'X-CSRF-TOKEN': csrf(),
-                    },
-                })
-                    .then(async (res) => {
-                        const data = await res.json();
-                        if (!res.ok) throw new Error(data.message || 'Failed to delete.');
-                        window.location.reload();
-                    })
-                    .catch((err) => alert(err.message))
-                    .finally(() => setSaving(false));
+                const found = announcementsData[id];
+                if (found) {
+                    setDeleteTarget(found);
+                    setShowDelete(true);
+                }
                 return;
             }
         };
@@ -127,6 +117,12 @@ export default function AnnouncementsModals() {
         setForm(EMPTY_FORM);
     };
 
+    const closeDeleteModal = () => {
+        if (saving) return;
+        setShowDelete(false);
+        setDeleteTarget(null);
+    };
+
     const updateField = (key, value) => setForm((f) => ({ ...f, [key]: value }));
 
     // ============================================================
@@ -138,14 +134,12 @@ export default function AnnouncementsModals() {
             return;
         }
 
-        // Build the right URL based on editMode AND form.id
         const isEdit = editMode && form.id;
         const url    = isEdit
             ? `/admin/announcements/${form.id}`
             : '/admin/announcements';
         const method = isEdit ? 'PUT' : 'POST';
 
-        // Only send editable fields (strip id)
         const payload = {
             title:        form.title,
             content:      form.content,
@@ -168,6 +162,33 @@ export default function AnnouncementsModals() {
             const data = await res.json();
             if (!res.ok) throw new Error(data.message || 'Failed to save announcement.');
             closeModal();
+            window.location.reload();
+        } catch (err) {
+            alert(err.message);
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    // ============================================================
+    // Confirm Delete
+    // ============================================================
+    const confirmDelete = async () => {
+        if (!deleteTarget) return;
+        setSaving(true);
+        try {
+            const res = await fetch(`/admin/announcements/${deleteTarget.id}`, {
+                method: 'DELETE',
+                headers: {
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': csrf(),
+                },
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.message || 'Failed to delete.');
+            
+            setShowDelete(false);
+            setDeleteTarget(null);
             window.location.reload();
         } catch (err) {
             alert(err.message);
@@ -248,6 +269,70 @@ export default function AnnouncementsModals() {
                             className="bg-[#0b1930] hover:bg-[#162640] disabled:opacity-50 text-white px-5 py-2.5 rounded-[10px] text-[13.5px] font-semibold"
                         >
                             {saving ? 'Saving…' : (editMode ? 'Save Changes' : 'Post Announcement')}
+                        </button>
+                    </div>
+                </Modal>
+            )}
+
+            {/* ============================================================ */}
+            {/* DELETE CONFIRMATION MODAL */}
+            {/* ============================================================ */}
+            {showDelete && deleteTarget && (
+                <Modal onClose={closeDeleteModal} maxWidth="max-w-[460px]">
+                    <div className="p-5 pb-4 flex items-center justify-between border-b border-slate-100 shrink-0">
+                        <h3 className="text-lg font-bold text-slate-900">Delete Announcement</h3>
+                        <button
+                            onClick={closeDeleteModal}
+                            disabled={saving}
+                            className="text-slate-400 hover:text-slate-700 text-lg disabled:opacity-50"
+                        >
+                            <i className="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+
+                    <div className="p-6 text-center overflow-y-auto max-h-[60vh]">
+                        <div className="w-16 h-16 mx-auto rounded-full bg-rose-50 flex items-center justify-center mb-4">
+                            <i className="fa-solid fa-trash-can text-rose-500 text-2xl"></i>
+                        </div>
+                        <h4 className="text-lg font-bold text-slate-900 mb-2">Are you sure?</h4>
+                        <p className="text-slate-500 text-[13px] mb-2">
+                            You are about to permanently delete:
+                        </p>
+                        <p className="font-bold text-slate-900 text-[15px] mb-4">
+                            {deleteTarget.title}
+                        </p>
+                        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-left">
+                            <p className="text-[12px] text-amber-800 leading-snug">
+                                <i className="fa-solid fa-circle-info mr-1"></i>
+                                This will permanently remove the announcement from all tenants' announcements. <strong>This action cannot be undone.</strong>
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="p-5 border-t border-slate-100 flex justify-end gap-3 shrink-0">
+                        <button
+                            onClick={closeDeleteModal}
+                            disabled={saving}
+                            className="text-slate-600 text-[13.5px] font-semibold px-4 py-2 disabled:opacity-50"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            onClick={confirmDelete}
+                            disabled={saving}
+                            className="bg-rose-500 hover:bg-rose-600 disabled:opacity-50 text-white px-5 py-2.5 rounded-lg text-[13.5px] font-semibold inline-flex items-center gap-2 transition"
+                        >
+                            {saving ? (
+                                <>
+                                    <i className="fa-solid fa-spinner fa-spin"></i>
+                                    Deleting…
+                                </>
+                            ) : (
+                                <>
+                                    <i className="fa-solid fa-trash-can"></i>
+                                    Yes, Delete
+                                </>
+                            )}
                         </button>
                     </div>
                 </Modal>

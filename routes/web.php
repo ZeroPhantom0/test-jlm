@@ -59,14 +59,26 @@ Route::get('/tour-scene-data/{scene}', function (TourScene $scene) {
 
 
 // ============================================================
-// AUTHENTICATION
+// AUTHENTICATION (UPDATED)
 // ============================================================
 Route::middleware('guest')->group(function () {
+    // Standard Login (Step 1: Credentials)
     Route::get('/login',  [AuthController::class, 'showLogin'])->name('login');
     Route::post('/login', [AuthController::class, 'login']);
 
+    // Standard Signup
     Route::get('/signup',  [AuthController::class, 'showSignup'])->name('signup');
     Route::post('/signup', [AuthController::class, 'signup']);
+
+    // Google OAuth
+    Route::get('/auth/google',          [AuthController::class, 'redirectToGoogle'])->name('auth.google');
+    Route::get('/auth/google/callback', [AuthController::class, 'handleGoogleCallback'])->name('auth.google.callback');
+
+    // Email Verification Code (Step 2: After Password or Google Login)
+    Route::get('/login/verify',   [AuthController::class, 'showVerify'])->name('login.verify');
+    Route::post('/login/verify',  [AuthController::class, 'verify'])->name('login.verify.submit');
+    Route::post('/login/resend',  [AuthController::class, 'resendCode'])->name('login.resend');
+    Route::post('/login/cancel',  [AuthController::class, 'cancelVerification'])->name('login.cancel');
 });
 
 Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
@@ -222,6 +234,7 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
 
     // ---------- Audit Logs ----------
     Route::get('/audit-logs',        [AuditLogController::class, 'index'])->name('audit-logs');
+    Route::get('/audit-logs/data',   [AuditLogController::class, 'data'])->name('audit-logs.data');
     Route::get('/audit-logs/export', [AuditLogController::class, 'export'])->name('audit-logs.export');
 
     // ---------- Settings ----------

@@ -28,6 +28,7 @@ class AuditLog extends Model
 
     protected $casts = [
         'properties' => 'array',
+        'created_at' => 'datetime',
     ];
 
     public function user()
@@ -77,6 +78,18 @@ class AuditLog extends Model
         return $module ? $query->where('module', $module) : $query;
     }
 
+    /**
+     * Sort by created_at.
+     *
+     * @param  string|null  $order  'newest' (default) or 'oldest'
+     */
+    public function scopeOrderByDate($query, ?string $order)
+    {
+        $direction = strtolower((string) $order) === 'oldest' ? 'asc' : 'desc';
+
+        return $query->orderBy('created_at', $direction)->orderBy('id', $direction);
+    }
+
     /* ---------- Helpers for the view ---------- */
 
     public function getInitialAttribute(): string
@@ -88,9 +101,20 @@ class AuditLog extends Model
     {
         return match (strtolower($this->user_role)) {
             'admin'    => 'purple',
-            'tenant',  => 'tenant',
-            'resident' => 'tenant',
+            'tenant'   => 'teal',
+            'resident' => 'teal',
             default    => 'gray',
         };
+    }
+
+    /**
+     * Unix timestamp in milliseconds — used by the client-side
+     * newest/oldest sorter. Falls back to 0 if created_at is null.
+     */
+    public function getTimestampAttribute(): int
+    {
+        return $this->created_at
+            ? (int) $this->created_at->getTimestampMs()
+            : 0;
     }
 }

@@ -2,10 +2,6 @@
 @section('title', 'Reservations')
 
 @section('content')
-
-{{-- React mount point for all reservation modals --}}
-<div id="tenant-reservations-modals" data-reservations='@json($reservations ?? [])'></div>
-
 <div class="p-4 md:p-8 max-w-6xl mx-auto">
 
     {{-- ============ BANNER ============ --}}
@@ -93,35 +89,49 @@
             <p class="text-xs mt-1">The admin needs to publish at least one virtual tour.</p>
         </div>
     @else
+        @php
+            $fromPath = '/' . ltrim(request()->path(), '/');
+        @endphp
+
         <div class="grid grid-cols-1 md:grid-cols-2 gap-5 mb-8">
             @foreach($rooms as $room)
                 @php
-                    $roomJson = json_encode([
-                        'id'          => $room['id'],
-                        'name'        => $room['name'],
-                        'roomNumber'  => 'ROOM ' . $room['num'],
-                        'floor'       => $room['floor'],
-                        'status'      => $room['status'],
-                        'price'       => $room['price'],
-                        'img'         => $room['img'],
-                        'pax'         => $room['pax'],
-                        'beds'        => $room['beds'],
-                        'total_beds'  => $room['total_beds'], // Added for logic
-                        'bath'        => $room['bath'],
-                        'description' => $room['desc'],
-                        'estDate'     => $room['estDate'],
-                        'estApprox'   => $room['estApprox'],
-                        'tourId'      => $room['tourId'],
-                        'bed_slots'   => $room['bed_slots'],
+                    $roomData = [
+                        'id'             => $room['id'],
+                        'name'           => $room['name'],
+                        'roomNumber'     => 'ROOM ' . $room['num'],
+                        'floor'          => $room['floor'],
+                        'status'         => $room['status'],
+                        'price'          => $room['price'],
+                        'img'            => $room['img'],
+                        'pax'            => $room['pax'],
+                        'beds'           => $room['beds'],
+                        'total_beds'     => $room['total_beds'],
+                        'bath'           => $room['bath'],
+                        'description'    => $room['desc'],
+                        'estDate'        => $room['estDate'],
+                        'estApprox'      => $room['estApprox'],
+                        'tourId'         => $room['tourId'],
+                        'bed_slots'      => $room['bed_slots'],
                         'is_female_only' => $room['is_female_only'],
                         'is_male_only'   => $room['is_male_only'],
+                    ];
+
+                    $tourUrl = route('tour.viewer', [
+                        'virtualTour' => $room['tourId'],
+                        'from'        => $fromPath,
                     ]);
                 @endphp
 
                 <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden flex flex-col shadow-sm">
-                    <div class="relative h-52">
-                        <img src="{{ $room['img'] }}" alt="Room {{ $room['num'] }}" class="w-full h-full object-cover">
+                    {{-- ===== IMAGE (click → opens 360° tour in the SAME tab) ===== --}}
+                    <a href="{{ $tourUrl }}"
+                       aria-label="Open 360° tour for {{ $room['name'] }}"
+                       class="relative h-52 block group cursor-pointer">
+                        <img src="{{ $room['img'] }}" alt="Room {{ $room['num'] }}"
+                             class="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105">
 
+                        {{-- status badge (top-left) --}}
                         <span class="absolute top-3 left-3 text-[11px] font-bold px-3 py-1 rounded-full
                             {{ $room['status'] === 'Occupied' ? 'bg-rose-200 text-rose-700' : '' }}
                             {{ $room['status'] === 'Available' ? 'bg-green-100 text-green-700' : '' }}
@@ -129,15 +139,16 @@
                             {{ $room['status'] }}
                         </span>
 
-                        <a href="{{ route('tour.viewer', $room['tourId']) }}" target="_blank"
-                           class="absolute top-3 right-3 bg-black/60 hover:bg-black/80 text-white text-[10px] font-semibold px-2.5 py-1 rounded-full backdrop-blur transition">
-                            <i class="fa-solid fa-camera mr-1"></i> 360° Tour
-                        </a>
+                        {{-- hover hint --}}
+                        <span class="absolute top-3 right-3 bg-black/60 text-white text-[10px] font-semibold px-2.5 py-1 rounded-full backdrop-blur opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
+                            <i class="fa-solid fa-camera mr-1"></i> View 360° Tour
+                        </span>
 
+                        {{-- room number (bottom-left) --}}
                         <span class="absolute bottom-3 left-3 bg-blue-50 text-blue-600 text-[10px] font-extrabold uppercase px-2.5 py-1 rounded-md">
                             ROOM {{ $room['num'] }}
                         </span>
-                    </div>
+                    </a>
 
                     <div class="p-4 flex flex-col gap-2.5 flex-1">
                         <div class="flex justify-between items-center">
@@ -150,14 +161,13 @@
                         <div class="flex gap-3.5 text-[11px] text-slate-500">
                             <span class="flex items-center gap-1"><i class="fa-solid fa-users"></i> {{ $room['pax'] }}</span>
                             <span class="flex items-center gap-1"><i class="fa-solid fa-bed"></i> {{ $room['beds'] }}</span>
-                            <span class="flex items-center gap-1"><i class="fa-solid fa-bath"></i> {{ $room['bath'] }}</span>
                         </div>
 
                         <div class="grid grid-cols-2 gap-2.5 mt-1.5">
                             <button
                                 type="button"
                                 class="open-room-details-btn bg-white border border-slate-200 rounded-lg py-2 text-xs font-semibold inline-flex items-center justify-center gap-1.5 hover:bg-slate-50 transition"
-                                data-room='{{ $roomJson }}'
+                                data-room="{{ json_encode($roomData) }}"
                             >
                                 <i class="fa-regular fa-eye"></i> Details
                             </button>
@@ -166,7 +176,7 @@
                                 <button
                                     type="button"
                                     class="open-reserve-modal-btn bg-[#02122c] hover:bg-[#0d2347] text-white rounded-lg py-2 text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition"
-                                    data-room='{{ $roomJson }}'
+                                    data-room="{{ json_encode($roomData) }}"
                                 >
                                     <i class="fa-regular fa-calendar-check"></i> Reserve
                                 </button>
@@ -182,4 +192,7 @@
         </div>
     @endif
 </div>
+
+{{-- React Modal Mount Point --}}
+<div id="tenant-reservations-modals" data-reservations='@json($reservations ?? [])'></div>
 @endsection

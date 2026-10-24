@@ -33,9 +33,6 @@ class TenantController extends Controller
 
     /**
      * Update the tenant (spans users, tenants, and the approved reservation).
-     *
-     * Lease dates live on the reservation — the tenant record only holds
-     * rent_rate + status. We keep it that way.
      */
     public function update(Request $request, Tenant $tenant)
     {
@@ -54,12 +51,52 @@ class TenantController extends Controller
             'status'        => ['required', Rule::in(['active', 'inactive'])],
         ]);
 
-        // Normalise time strings to 24h "H:i:s" (or null)
         $checkInTime  = $this->normaliseTime($validated['check_in_time']  ?? null);
         $checkOutTime = $this->normaliseTime($validated['check_out_time'] ?? null);
 
+        // ── 1. Determine if data actually changed ─────────────────────
+        $hasChanges = false;
+
+        // Check User table
+        if ($tenant->user) {
+            if (
+                $tenant->user->name !== $validated['name'] ||
+                $tenant->user->email !== $validated['email'] ||
+                (string) $tenant->user->phone !== (string) ($validated['phone'] ?? null)
+            ) {
+                $hasChanges = true;
+            }
+        }
+
+        // Check Tenant table
+        if (
+            (float) $tenant->rent_rate !== (float) ($validated['rent_rate'] ?? 0) ||
+            $tenant->status !== $validated['status']
+        ) {
+            $hasChanges = true;
+        }
+
+        // Check Reservation table (if exists)
+        if ($tenant->approvedReservation && !$hasChanges) {
+            $res = $tenant->approvedReservation;
+            $incomingCheckIn = $validated['check_in'] ?? null;
+            $existingCheckIn = $res->check_in ? $res->check_in->format('Y-m-d') : null;
+            
+            $incomingCheckOut = $validated['check_out'] ?? null;
+            $existingCheckOut = $res->check_out ? $res->check_out->format('Y-m-d') : null;
+
+            if (
+                $incomingCheckIn !== $existingCheckIn ||
+                $checkInTime !== $res->check_in_time ||
+                $incomingCheckOut !== $existingCheckOut ||
+                $checkOutTime !== $res->check_out_time
+            ) {
+                $hasChanges = true;
+            }
+        }
+
+        // ── 2. Save Data ──────────────────────────────────────────────
         DB::transaction(function () use ($tenant, $validated, $checkInTime, $checkOutTime) {
-            // 1. users table
             if ($tenant->user) {
                 $tenant->user->update([
                     'name'  => $validated['name'],
@@ -68,13 +105,11 @@ class TenantController extends Controller
                 ]);
             }
 
-            // 2. tenants table
             $tenant->update([
                 'rent_rate' => $validated['rent_rate'] ?? 0,
                 'status'    => $validated['status'],
             ]);
 
-            // 3. reservation table (source of truth for lease dates)
             if ($tenant->approvedReservation) {
                 $tenant->approvedReservation->update([
                     'check_in'       => $validated['check_in']  ?? null,
@@ -84,6 +119,19 @@ class TenantController extends Controller
                 ]);
             }
         });
+
+        // ── 3. Log Only if Changes Occurred ───────────────────────────
+        if ($hasChanges) {
+            // Assuming you have an AuditLogger facade/service for Admin actions
+            // If not, you can use \App\Services\AuditLogger::log(...)
+            \App\Services\AuditLogger::log([
+                'action'       => 'UPDATE',
+                'module'       => 'TENANTS',
+                'description'  => 'Updated tenant details for ' . $tenant->name,
+                'subject_type' => Tenant::class,
+                'subject_id'   => $tenant->id,
+            ]);
+        }
 
         return response()->json([
             'success' => true,
@@ -97,10 +145,6 @@ class TenantController extends Controller
         ]);
     }
 
-    /**
-     * Accepts "9:30 AM", "09:30", "9:30", "21:30", "21:30:00" → "HH:mm:ss".
-     * Returns null for empty input.
-     */
     private function normaliseTime(?string $time): ?string
     {
         if (!$time) {

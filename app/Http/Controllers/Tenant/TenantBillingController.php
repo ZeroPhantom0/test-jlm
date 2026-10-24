@@ -19,15 +19,11 @@ class TenantBillingController extends Controller
         $user   = Auth::user();
         $tenant = Tenant::where('user_id', $user->id)->firstOrFail();
 
-        // ── Outstanding invoices ─────────────────────────────────────────
-        // Pending invoices are shown separately below (awaiting verification).
-        // Unpaid / Partial / Overdue are what the tenant still owes.
         $pendingInvoices = Invoice::where('tenant_id', $tenant->id)
             ->whereIn('status', ['Unpaid', 'Overdue', 'Partial'])
             ->orderBy('due_date')
             ->get();
 
-        // ── Awaiting verification ────────────────────────────────────────
         $verifyingInvoices = Invoice::where('tenant_id', $tenant->id)
             ->where('status', 'Pending')
             ->latest()
@@ -39,7 +35,6 @@ class TenantBillingController extends Controller
                 return $inv;
             });
 
-        // ── Paid history ─────────────────────────────────────────────────
         $paidInvoices = Invoice::where('tenant_id', $tenant->id)
             ->where('status', 'Paid')
             ->latest('date_paid')
@@ -51,11 +46,6 @@ class TenantBillingController extends Controller
                 return $inv;
             });
 
-        // ── Reservation remaining — ONLY if it isn't already invoiced ────
-        // After approval, an invoice is created for the remaining balance.
-        // We only want to surface a reservation-remaining "due" here when
-        // there is *no* invoice yet (edge case: old data, or a reservation
-        // approved before the invoice-sync logic existed).
         $reservationDue      = null;
         $unbilledRemaining   = 0.0;
 
@@ -89,7 +79,6 @@ class TenantBillingController extends Controller
             }
         }
 
-        // ── Summary cards ────────────────────────────────────────────────
         $totalDue = $pendingInvoices->sum('balance') + $unbilledRemaining;
 
         $status = 'Paid';
@@ -111,7 +100,6 @@ class TenantBillingController extends Controller
                 : 'No pending dues',
         ];
 
-        // First pending invoice becomes the default modal payload
         $next = $pendingInvoices->first();
         $paymentPayload = $next ? [
             'reference'    => $next->transaction_no,
@@ -131,10 +119,6 @@ class TenantBillingController extends Controller
         ));
     }
 
-    /**
-     * Tenant submits a payment (GCash / Bank / Counter).
-     * POST /tenants/billing/pay
-     */
     public function pay(Request $request)
     {
         $validated = $request->validate([
@@ -160,14 +144,12 @@ class TenantBillingController extends Controller
 
         DB::beginTransaction();
         try {
-            // ── 1) Try invoices first ────────────────────────────────
             $invoice = Invoice::where('transaction_no', $validated['invoice_ref'])
                 ->where('tenant_id', $tenant->id)
                 ->whereIn('status', ['Unpaid', 'Overdue', 'Partial'])
                 ->lockForUpdate()
                 ->first();
 
-            // ── 2) Otherwise try reservations ────────────────────────
             $reservation = null;
             if (! $invoice) {
                 $reservation = Reservation::where('reference_no', $validated['invoice_ref'])
@@ -185,22 +167,23 @@ class TenantBillingController extends Controller
                 ], 404);
             }
 
-            // ── 3) Store receipt ────────────────────────────────────
             $receiptPath = null;
             if ($request->hasFile('receipt')) {
                 $receiptPath = $request->file('receipt')->store('receipts', 'public');
             }
 
             if ($invoice) {
+                // Add the current balance to the amount_paid
+                $newAmountPaid = (float) $invoice->amount_paid + (float) $invoice->balance;
+                
                 $invoice->update([
                     'payment_method' => $method,
                     'receipt_no'     => $validated['reference_number'] ?? $invoice->receipt_no,
                     'receipt_path'   => $receiptPath ?? $invoice->receipt_path,
                     'status'         => 'Pending',
+                    'amount_paid'    => $newAmountPaid, 
                 ]);
             } else {
-                // Reservation: create a corresponding invoice so admin
-                // can verify it through the same billing table.
                 $invoice = Invoice::create([
                     'transaction_no' => 'INV-' . strtoupper(uniqid()),
                     'tenant_id'      => $tenant->id,
@@ -238,9 +221,6 @@ class TenantBillingController extends Controller
         }
     }
 
-    /**
-     * Tenant cancels their pending submission so they can resubmit.
-     */
     public function cancelPayment(Request $request)
     {
         $validated = $request->validate([
@@ -263,11 +243,17 @@ class TenantBillingController extends Controller
             Storage::disk('public')->delete($invoice->receipt_path);
         }
 
-        $revertStatus = $invoice->amount_paid > 0 ? 'Partial' : 'Unpaid';
+        // Revert the amount_paid back by subtracting the current balance
+        $revertedAmount = max(0, (float) $invoice->amount_paid - (float) $invoice->balance);
+        
+        // Determine if it should go back to Partial or Unpaid
+        $revertStatus = $revertedAmount > 0 ? 'Partial' : 'Unpaid';
+
         $invoice->update([
             'status'       => $revertStatus,
             'receipt_path' => null,
             'receipt_no'   => null,
+            'amount_paid'  => $revertedAmount,
         ]);
 
         return back()->with('success', 'Submission cancelled. You can pay again.');

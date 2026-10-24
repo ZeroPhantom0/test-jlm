@@ -3,22 +3,30 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\User;
-use App\Models\PersonalInformation;
+use App\Mail\LoginVerificationCodeMail;
 use App\Models\IdentityVerification;
+use App\Models\LoginVerificationCode;
+use App\Models\PersonalInformation;
+use App\Models\User;
 use App\Services\AuditLogger;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\Rules\Password;
 use Inertia\Inertia;
+use Laravel\Socialite\Facades\Socialite;
 
 class AuthController extends Controller
 {
-    // ============ LOGIN ============
+    // ============ LOGIN (STEP 1) ============
     public function showLogin()
     {
-        return Inertia::render('Auth/Login');
+        return Inertia::render('Auth/Login', [
+            'flash' => [
+                'error' => session('error'),
+            ],
+        ]);
     }
 
     public function login(Request $request)
@@ -30,49 +38,231 @@ class AuthController extends Controller
 
         $remember = $request->boolean('remember');
 
-        if (Auth::attempt($credentials, $remember)) {
-            $request->session()->regenerate();
-
-            /** @var User $user */
-            $user = Auth::user();
-
+        if (! Auth::validate($credentials)) {
             AuditLogger::log([
-                'action'      => 'LOGIN',
+                'action'      => 'LOGIN FAILED',
                 'module'      => 'AUTHENTICATION',
-                'description' => ucfirst($user->role) . ' logged in successfully',
+                'description' => 'Failed login attempt for ' . $request->input('email'),
+                'status'      => 'error',
+                'user_name'   => 'Unknown',
+                'user_role'   => 'Unknown',
             ]);
 
-            // Admins → admin dashboard (no onboarding).
-            if ($user->isAdmin()) {
-                return Inertia::location('/admin');
-            }
-
-            // Tenants:
-            //   - If BOTH onboarding steps are done → tenant dashboard
-            //   - Otherwise → START FROM STEP 1 (Personal Information), always
-            $hasPersonal = $user->personalInformation()->exists();
-            $hasIdentity = $user->identityVerification()->exists();
-
-            if ($hasPersonal && $hasIdentity) {
-                return Inertia::location('/tenants');
-            }
-
-            // Fresh login for a not-fully-onboarded user → always Step 1.
-            return Inertia::location('/personal-information');
+            return back()->withErrors([
+                'email' => 'The provided credentials do not match our records.',
+            ])->onlyInput('email');
         }
 
-        AuditLogger::log([
-            'action'      => 'LOGIN FAILED',
-            'module'      => 'AUTHENTICATION',
-            'description' => 'Failed login attempt for ' . $request->input('email'),
-            'status'      => 'error',
-            'user_name'   => 'Unknown',
-            'user_role'   => 'Unknown',
+        $user = User::where('email', $credentials['email'])->firstOrFail();
+
+        // Go to email code step
+        return $this->beginVerification($user, $remember, 'password');
+    }
+
+    // ============ GOOGLE OAUTH ============
+    public function redirectToGoogle(Request $request)
+    {
+        $request->session()->put('google_remember', $request->boolean('remember'));
+
+        return Socialite::driver('google')->redirect();
+    }
+
+    public function handleGoogleCallback(Request $request)
+    {
+        try {
+            $googleUser = Socialite::driver('google')->user();
+        } catch (\Throwable $e) {
+            report($e);
+            return redirect()->route('login')->with('error', 'Google sign-in failed. Please try again.');
+        }
+
+        $email = $googleUser->getEmail();
+
+        if (! $email) {
+            return redirect()->route('login')->with('error', 'Google did not return an email address.');
+        }
+
+        $user = User::where('email', $email)->first();
+
+        if (! $user) {
+            $user = User::create([
+                'name'     => $googleUser->getName() ?: explode('@', $email)[0],
+                'email'    => $email,
+                'phone'    => null,
+                'password' => Hash::make(\Illuminate\Support\Str::random(32)),
+                'role'     => 'tenant',
+            ]);
+
+            AuditLogger::log([
+                'action'       => 'CREATE',
+                'module'       => 'TENANTS',
+                'description'  => 'New tenant registered via Google: ' . $email,
+                'subject_type' => User::class,
+                'subject_id'   => $user->id,
+            ]);
+        }
+
+        $remember = (bool) $request->session()->pull('google_remember', false);
+
+        return $this->beginVerification($user, $remember, 'google');
+    }
+
+    // ============ VERIFICATION CODE (STEP 2) ============
+    private function beginVerification(User $user, bool $remember, string $method)
+    {
+        $verification = LoginVerificationCode::generateFor($user);
+
+        session([
+            'login_pending' => [
+                'user_id'  => $user->id,
+                'remember' => $remember,
+                'method'   => $method,
+                'token'    => $verification->token,
+            ],
         ]);
 
-        return back()->withErrors([
-            'email' => 'The provided credentials do not match our records.',
-        ])->onlyInput('email');
+        try {
+            Mail::to($user->email)->send(new LoginVerificationCodeMail($verification));
+        } catch (\Throwable $e) {
+            report($e);
+            // If email fails, we log the error but STILL redirect to the verify page
+            // so the user can request a resend.
+        }
+
+        return redirect()->route('login.verify');
+    }
+
+    public function showVerify(Request $request)
+    {
+        $pending = session('login_pending');
+
+        if (! $pending) {
+            return redirect()->route('login');
+        }
+
+        $user = User::find($pending['user_id']);
+
+        if (! $user) {
+            $request->session()->forget('login_pending');
+            return redirect()->route('login');
+        }
+
+        return Inertia::render('Auth/VerifyCode', [
+            'email'  => $this->maskEmail($user->email),
+            'method' => $pending['method'],
+        ]);
+    }
+
+    public function verify(Request $request)
+    {
+        $pending = session('login_pending');
+
+        if (! $pending) {
+            return redirect()->route('login')->with('error', 'Your session expired. Please sign in again.');
+        }
+
+        $validated = $request->validate([
+            'code' => ['required', 'string', 'size:6'],
+        ]);
+
+        $verification = LoginVerificationCode::where('token', $pending['token'])
+            ->where('user_id', $pending['user_id'])
+            ->first();
+
+        if (! $verification || ! $verification->isValid()) {
+            return back()->withErrors(['code' => 'This code has expired. Please request a new one.']);
+        }
+
+        if (! hash_equals($verification->code, $validated['code'])) {
+            return back()->withErrors(['code' => 'The code you entered is incorrect.']);
+        }
+
+        $verification->update(['verified_at' => now()]);
+
+        $user = User::findOrFail($pending['user_id']);
+        $remember = (bool) ($pending['remember'] ?? false);
+
+        Auth::login($user, $remember);
+        $request->session()->regenerate();
+        $request->session()->forget('login_pending');
+
+        AuditLogger::log([
+            'action'      => 'LOGIN',
+            'module'      => 'AUTHENTICATION',
+            'description' => ucfirst($user->role) . ' logged in successfully' . ($pending['method'] === 'google' ? ' (Google)' : ''),
+        ]);
+
+        return $this->redirectAfterLogin($user);
+    }
+
+    public function resendCode(Request $request)
+    {
+        $pending = session('login_pending');
+
+        if (! $pending) {
+            return redirect()->route('login')->with('error', 'Your session expired. Please sign in again.');
+        }
+
+        $user = User::find($pending['user_id']);
+
+        if (! $user) {
+            $request->session()->forget('login_pending');
+            return redirect()->route('login');
+        }
+
+        $verification = LoginVerificationCode::generateFor($user);
+
+        session([
+            'login_pending' => [
+                ...$pending,
+                'token' => $verification->token,
+            ],
+        ]);
+
+        try {
+            Mail::to($user->email)->send(new LoginVerificationCodeMail($verification));
+        } catch (\Throwable $e) {
+            report($e);
+            return back()->with('error', 'Could not send a new code. Please try again.');
+        }
+
+        return back()->with('success', 'A new code has been sent to your email.');
+    }
+
+    public function cancelVerification(Request $request)
+    {
+        $request->session()->forget('login_pending');
+        return redirect()->route('login');
+    }
+
+    private function redirectAfterLogin(User $user)
+    {
+        if ($user->isAdmin()) {
+            return Inertia::location('/admin');
+        }
+
+        $hasPersonal = $user->personalInformation()->exists();
+        $hasIdentity = $user->identityVerification()->exists();
+
+        if ($hasPersonal && $hasIdentity) {
+            return Inertia::location('/tenants');
+        }
+
+        return Inertia::location('/personal-information');
+    }
+
+    private function maskEmail(string $email): string
+    {
+        [$local, $domain] = explode('@', $email, 2);
+        $len = mb_strlen($local);
+
+        if ($len <= 2) {
+            $masked = $local[0] . str_repeat('*', max(1, $len - 1));
+        } else {
+            $masked = $local[0] . str_repeat('*', $len - 2) . $local[$len - 1];
+        }
+
+        return $masked . '@' . $domain;
     }
 
     // ============ SIGNUP ============
@@ -116,7 +306,6 @@ class AuthController extends Controller
     // ============ LOGOUT ============
     public function logout(Request $request)
     {
-        /** @var User|null $user */
         $user = Auth::user();
 
         if ($user) {
@@ -134,12 +323,11 @@ class AuthController extends Controller
         return Inertia::location('/');
     }
 
-    // ============ ONBOARDING: PERSONAL INFO ============
+    // ============ ONBOARDING ============
     public function showPersonalInformation()
     {
         /** @var User $user */
         $user = Auth::user();
-
         return Inertia::render('Onboarding/PersonalInformation', [
             'user'         => $user,
             'personalInfo' => $user->personalInformation,
@@ -160,8 +348,35 @@ class AuthController extends Controller
 
         /** @var User $user */
         $user = Auth::user();
+        $existing = $user->personalInformation;
 
-        $profilePath = $user->personalInformation?->profile_picture;
+        $hasChanges = false;
+        $textFields = ['full_name', 'email', 'contact_number', 'current_address', 'emergency_name', 'emergency_number'];
+        $incoming = [
+            'full_name'        => $validated['fullname'],
+            'email'            => $validated['email'],
+            'contact_number'   => $validated['contact_number'],
+            'current_address'  => $validated['current_address'] ?? null,
+            'emergency_name'   => $validated['emergency_name'],
+            'emergency_number' => $validated['emergency_number'],
+        ];
+
+        if (! $existing) {
+            $hasChanges = true;
+        } else {
+            foreach ($textFields as $field) {
+                if ((string) $existing->$field !== (string) $incoming[$field]) {
+                    $hasChanges = true;
+                    break;
+                }
+            }
+        }
+
+        if ($request->hasFile('profile_picture')) {
+            $hasChanges = true;
+        }
+
+        $profilePath = $existing?->profile_picture;
         if ($request->hasFile('profile_picture')) {
             $profilePath = $request->file('profile_picture')->store('profiles/' . $user->id, 'public');
         }
@@ -184,23 +399,23 @@ class AuthController extends Controller
             'phone' => $validated['contact_number'],
         ]);
 
-        AuditLogger::log([
-            'action'       => 'UPDATE',
-            'module'       => 'TENANTS',
-            'description'  => 'Completed personal information for ' . $user->name,
-            'subject_type' => User::class,
-            'subject_id'   => $user->id,
-        ]);
+        if ($hasChanges) {
+            AuditLogger::log([
+                'action'       => 'UPDATE',
+                'module'       => 'TENANTS',
+                'description'  => 'Completed personal information for ' . $user->name,
+                'subject_type' => User::class,
+                'subject_id'   => $user->id,
+            ]);
+        }
 
         return redirect()->route('identity-verification');
     }
 
-    // ============ ONBOARDING: IDENTITY ============
     public function showIdentityVerification()
     {
         /** @var User $user */
         $user = Auth::user();
-
         return Inertia::render('Onboarding/IdentityVerification', [
             'identity' => $user->identityVerification,
         ]);
@@ -218,6 +433,18 @@ class AuthController extends Controller
             'id_back'                => ['nullable', 'file', 'mimes:png,jpg,jpeg,webp', 'max:10240'],
             'verification_agreement' => ['accepted'],
         ]);
+
+        $hasChanges = false;
+
+        if (! $existing) {
+            $hasChanges = true;
+        } elseif ($existing->id_type !== $validated['id_type']) {
+            $hasChanges = true;
+        }
+
+        if ($request->hasFile('id_front') || $request->hasFile('id_back')) {
+            $hasChanges = true;
+        }
 
         $frontPath = $existing?->id_front;
         if ($request->hasFile('id_front')) {
@@ -239,13 +466,15 @@ class AuthController extends Controller
             ]
         );
 
-        AuditLogger::log([
-            'action'       => 'SUBMIT',
-            'module'       => 'TENANTS',
-            'description'  => 'Submitted identity verification (' . $validated['id_type'] . ')',
-            'subject_type' => IdentityVerification::class,
-            'subject_id'   => $verification->id,
-        ]);
+        if ($hasChanges) {
+            AuditLogger::log([
+                'action'       => 'SUBMIT',
+                'module'       => 'TENANTS',
+                'description'  => 'Submitted identity verification (' . $validated['id_type'] . ')',
+                'subject_type' => IdentityVerification::class,
+                'subject_id'   => $verification->id,
+            ]);
+        }
 
         return Inertia::location('/tenants');
     }

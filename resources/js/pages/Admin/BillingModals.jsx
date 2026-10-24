@@ -14,6 +14,32 @@ const FALLBACK = {
     date_paid: null, receipt_no: '-',
 };
 
+// Parse "₱1,234" or "₱ 1,234.56" → 1234 (or 1234.56)
+const parseMoney = (str) => {
+    if (str === null || str === undefined) return 0;
+    const n = parseFloat(String(str).replace(/[^\d.]/g, ''));
+    return Number.isFinite(n) ? n : 0;
+};
+
+// Decide whether verifying this payment leaves the invoice Partial.
+// On the server, verification sets status from `amount_paid` vs `total_amount`.
+// `paid` already includes the tenant's submitted balance (added in TenantBillingController::pay),
+// so the question is just: is `paid` >= `total`?
+const willBePartial = (invoice) => {
+    if (!invoice) return false;
+    const total = parseMoney(invoice.total);
+    const paid  = parseMoney(invoice.paid);
+    if (total <= 0) return false;
+    return (paid + 0.005) < total;
+};
+
+const projectedRemaining = (invoice) => {
+    if (!invoice) return 0;
+    const total = parseMoney(invoice.total);
+    const paid  = parseMoney(invoice.paid);
+    return Math.max(0, total - paid);
+};
+
 export default function BillingModals() {
     const [showEdit, setShowEdit]       = useState(false);
     const [showSummary, setShowSummary] = useState(false);
@@ -106,10 +132,40 @@ export default function BillingModals() {
             });
             const result = await res.json();
             if (!res.ok) throw new Error(result.message || 'Verification failed.');
+
             closeAll();
-            window.location.reload();
-        } catch (err) { alert(err.message); }
-        finally { setSaving(false); }
+
+            const row = document.querySelector(`tr[data-tn="${invoice.tn}"]`);
+            if (row) {
+                const statusBadge = row.querySelector('.px-3\\.5.py-1');
+
+                if (result.status === 'Paid') {
+                    row.style.display = 'none';
+                    alert('Payment fully verified. Invoice has been removed from the pending list.');
+                } else if (result.status === 'Partial') {
+                    if (statusBadge) {
+                        statusBadge.className = 'inline-block px-3.5 py-1 rounded-full text-[11px] font-bold bg-yellow-100 text-yellow-700';
+                        statusBadge.innerText = 'Partial';
+                    }
+
+                    const actionDiv = row.querySelector('.flex.items-center.gap-3');
+                    if (actionDiv) {
+                        actionDiv.innerHTML = `
+                            <i class="fa-solid fa-pen text-slate-700 text-[15px] cursor-pointer hover:text-orange-500 transition icon-edit" title="Edit Invoice"></i>
+                            <i class="fa-solid fa-bell text-slate-700 text-[15px] cursor-pointer hover:text-orange-500 transition icon-remind" title="Send Reminder"></i>
+                            <i class="fa-solid fa-eye text-slate-700 text-[15px] cursor-pointer hover:text-orange-500 transition icon-view" title="View Summary"></i>
+                        `;
+                    }
+                    alert('Partial payment verified successfully.');
+                }
+            } else {
+                window.location.reload();
+            }
+        } catch (err) {
+            alert(err.message);
+        } finally {
+            setSaving(false);
+        }
     };
 
     const confirmReject = async () => {
@@ -128,6 +184,7 @@ export default function BillingModals() {
             });
             const result = await res.json();
             if (!res.ok) throw new Error(result.message || 'Rejection failed.');
+
             closeAll();
             window.location.reload();
         } catch (err) { alert(err.message); }
@@ -142,6 +199,13 @@ export default function BillingModals() {
         Partial: 'bg-yellow-100 text-yellow-700', Pending: 'bg-blue-100 text-blue-600',
         Paid: 'bg-green-100 text-green-600',
     }[data.status] || 'bg-slate-100 text-slate-500';
+
+    // ── Pre-compute the "will this be Partial?" flag for the verify modal ──
+    const verifyWillBePartial = willBePartial(invoice);
+    const verifyRemaining     = projectedRemaining(invoice);
+    const formattedRemaining  = '₱' + verifyRemaining.toLocaleString(undefined, {
+        minimumFractionDigits: 0, maximumFractionDigits: 2,
+    });
 
     return (
         <>
@@ -285,17 +349,41 @@ export default function BillingModals() {
                         </button>
                     </div>
                     <div className="p-6 text-center">
-                        <div className="w-16 h-16 mx-auto rounded-full bg-emerald-50 flex items-center justify-center mb-4">
-                            <i className="fa-solid fa-circle-check text-emerald-500 text-2xl"></i>
+                        <div className={`w-16 h-16 mx-auto rounded-full flex items-center justify-center mb-4 ${
+                            verifyWillBePartial ? 'bg-amber-50' : 'bg-emerald-50'
+                        }`}>
+                            <i className={`fa-solid text-2xl ${
+                                verifyWillBePartial
+                                    ? 'fa-circle-exclamation text-amber-500'
+                                    : 'fa-circle-check text-emerald-500'
+                            }`}></i>
                         </div>
-                        <h4 className="text-lg font-bold text-slate-900 mb-2">Verify this payment?</h4>
+                        <h4 className="text-lg font-bold text-slate-900 mb-2">
+                            Verify this payment?
+                        </h4>
                         <p className="text-slate-500 text-[13px] mb-4">
-                            This will mark the invoice as <strong>Paid</strong> and record the payment.
+                            {verifyWillBePartial ? (
+                                <>
+                                    This will mark the invoice as <strong className="text-amber-700">Partial</strong> and record the payment.{' '}
+                                    The tenant will still have an outstanding balance of <strong>{formattedRemaining}</strong>.
+                                </>
+                            ) : (
+                                <>
+                                    This will mark the invoice as <strong>Paid</strong> and record the payment.
+                                </>
+                            )}
                         </p>
                         <div className="bg-slate-50 rounded-xl p-4 text-left flex flex-col gap-2.5 mb-4">
                             <div className="flex justify-between text-xs"><span className="text-slate-500">Transaction</span><span className="font-bold text-slate-900">{invoice.tn}</span></div>
                             <div className="flex justify-between text-xs"><span className="text-slate-500">Tenant</span><span className="font-bold text-slate-900">{invoice.tenant}</span></div>
-                            <div className="flex justify-between text-xs"><span className="text-slate-500">Amount</span><span className="font-bold text-emerald-600">{invoice.paid}</span></div>
+                            <div className="flex justify-between text-xs"><span className="text-slate-500">Total</span><span className="font-bold text-slate-900">{invoice.total}</span></div>
+                            <div className="flex justify-between text-xs"><span className="text-slate-500">Amount Paid</span><span className="font-bold text-emerald-600">{invoice.paid}</span></div>
+                            {verifyWillBePartial && (
+                                <div className="flex justify-between text-xs border-t border-slate-200 pt-2 mt-1">
+                                    <span className="text-slate-500">Remaining After Verification</span>
+                                    <span className="font-bold text-amber-600">{formattedRemaining}</span>
+                                </div>
+                            )}
                             <div className="flex justify-between text-xs"><span className="text-slate-500">Method</span><span className="font-bold text-slate-900 uppercase">{invoice.payment_method || '-'}</span></div>
                         </div>
                     </div>
@@ -303,8 +391,18 @@ export default function BillingModals() {
                         <button onClick={() => setShowVerify(false)} disabled={saving}
                             className="text-slate-600 text-[13.5px] font-semibold px-4 py-2 disabled:opacity-50">Cancel</button>
                         <button onClick={confirmVerify} disabled={saving}
-                            className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-5 py-2.5 rounded-lg text-[13.5px] font-semibold inline-flex items-center gap-2 transition">
-                            {saving ? <><i className="fa-solid fa-spinner fa-spin"></i> Verifying…</> : <><i className="fa-solid fa-circle-check"></i> Yes, Verify</>}
+                            className={`disabled:opacity-50 text-white px-5 py-2.5 rounded-lg text-[13.5px] font-semibold inline-flex items-center gap-2 transition ${
+                                verifyWillBePartial
+                                    ? 'bg-amber-500 hover:bg-amber-600'
+                                    : 'bg-emerald-600 hover:bg-emerald-700'
+                            }`}>
+                            {saving ? (
+                                <><i className="fa-solid fa-spinner fa-spin"></i> Verifying…</>
+                            ) : verifyWillBePartial ? (
+                                <><i className="fa-solid fa-circle-exclamation"></i> Yes, Verify as Partial</>
+                            ) : (
+                                <><i className="fa-solid fa-circle-check"></i> Yes, Verify</>
+                            )}
                         </button>
                     </div>
                 </Modal>
@@ -354,17 +452,27 @@ export default function BillingModals() {
 }
 
 function EditInvoiceModal({ data, onClose, onSave, saving }) {
+    // Was this invoice submitted by the tenant and awaiting review?
+    // If so, "Amount Paid" and "Status" are locked — use Verify/Reject.
+    const isPending = data.status === 'Pending';
+
+    const toNumber = (str) => {
+        if (str === null || str === undefined) return 0;
+        const n = parseFloat(String(str).replace(/[^\d.]/g, ''));
+        return Number.isFinite(n) ? n : 0;
+    };
+
     const [form, setForm] = useState({
         tenant_name:    data.tenant,
         room_number:    data.room,
         description:    data.description,
         check_in:       data.check_in,
         check_out:      data.check_out,
-        rate_per_day:   data.rate.replace(/[₱\s,]/g, '').replace('/day', ''),
-        days:           data.days.replace(/\D/g, ''),
-        amount_paid:    data.paid.replace(/[₱\s,]/g, ''),
+        rate_per_day:   toNumber(data.rate),
+        days:           parseInt(String(data.days).replace(/\D/g, ''), 10) || 1,
+        amount_paid:    toNumber(data.paid),
         due_date:       data.due,
-        payment_method: data.payment_method,
+        payment_method: data.payment_method || 'Not Set',
         status:         data.status,
     });
 
@@ -376,6 +484,10 @@ function EditInvoiceModal({ data, onClose, onSave, saving }) {
             rate_per_day: parseFloat(form.rate_per_day) || 0,
             days:         parseInt(form.days, 10) || 1,
             amount_paid:  parseFloat(form.amount_paid) || 0,
+            // Server parses "M j, Y" and "Y-m-d".
+            due_date:     form.due_date === '-' ? null : form.due_date,
+            check_in:     form.check_in === '-' ? null : form.check_in,
+            check_out:    form.check_out === '-' ? null : form.check_out,
         });
     };
 
@@ -388,6 +500,16 @@ function EditInvoiceModal({ data, onClose, onSave, saving }) {
                 </button>
             </div>
             <div className="p-6 overflow-y-auto">
+
+                {isPending && (
+                    <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-4 text-[12px] text-amber-800 leading-snug">
+                        <i className="fa-solid fa-circle-info mr-1"></i>
+                        This invoice is awaiting payment verification.{' '}
+                        <strong>Use Verify or Reject</strong> to settle it — editing here is for corrections only,
+                        and "Amount Paid" is locked to the submitted amount.
+                    </div>
+                )}
+
                 <div className="grid grid-cols-2 gap-3.5">
                     {[
                         ['tenant_name', 'Tenant Name', 'text'],
@@ -397,58 +519,108 @@ function EditInvoiceModal({ data, onClose, onSave, saving }) {
                     ].map(([key, label, type]) => (
                         <div key={key}>
                             <label className="block text-xs font-semibold text-slate-600 mb-1.5">{label}</label>
-                            <input type={type} value={form[key]} onChange={(e) => updateField(key, e.target.value)}
-                                className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-[13px] outline-none"/>
+                            <input
+                                type={type}
+                                value={form[key] ?? ''}
+                                onChange={(e) => updateField(key, e.target.value)}
+                                className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-[13px] outline-none"
+                            />
                         </div>
                     ))}
                     <div className="col-span-2">
                         <label className="block text-xs font-semibold text-slate-600 mb-1.5">Description</label>
-                        <input type="text" value={form.description} onChange={(e) => updateField('description', e.target.value)}
-                            className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-[13px] outline-none"/>
+                        <input
+                            type="text"
+                            value={form.description}
+                            onChange={(e) => updateField('description', e.target.value)}
+                            className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-[13px] outline-none"
+                        />
                     </div>
                     <div>
                         <label className="block text-xs font-semibold text-slate-600 mb-1.5">Rate Per Day (₱)</label>
-                        <input type="text" value={form.rate_per_day}
+                        <input
+                            type="text"
+                            value={form.rate_per_day}
                             onChange={(e) => updateField('rate_per_day', e.target.value.replace(/[^\d.]/g, ''))}
-                            className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-[13px] outline-none"/>
+                            className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-[13px] outline-none"
+                        />
                     </div>
                     <div>
                         <label className="block text-xs font-semibold text-slate-600 mb-1.5">Days</label>
-                        <input type="text" value={form.days}
+                        <input
+                            type="text"
+                            value={form.days}
                             onChange={(e) => updateField('days', e.target.value.replace(/\D/g, ''))}
-                            className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-[13px] outline-none"/>
+                            className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-[13px] outline-none"
+                        />
                     </div>
                     <div>
-                        <label className="block text-xs font-semibold text-slate-600 mb-1.5">Amount Paid (₱)</label>
-                        <input type="text" value={form.amount_paid}
+                        <label className="block text-xs font-semibold text-slate-600 mb-1.5">
+                            Amount Paid (₱)
+                            {isPending && (
+                                <span className="ml-1 text-[10px] text-amber-600 font-normal">(locked)</span>
+                            )}
+                        </label>
+                        <input
+                            type="text"
+                            value={form.amount_paid}
+                            disabled={isPending}
                             onChange={(e) => updateField('amount_paid', e.target.value.replace(/[^\d.]/g, ''))}
-                            className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-[13px] outline-none"/>
+                            className={`w-full border border-slate-300 rounded-lg px-3 py-2.5 text-[13px] outline-none ${
+                                isPending ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''
+                            }`}
+                        />
                     </div>
                     <div>
                         <label className="block text-xs font-semibold text-slate-600 mb-1.5">Due Date</label>
-                        <input type="text" value={form.due_date} onChange={(e) => updateField('due_date', e.target.value)}
-                            className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-[13px] outline-none"/>
+                        <input
+                            type="text"
+                            value={form.due_date ?? ''}
+                            onChange={(e) => updateField('due_date', e.target.value)}
+                            className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-[13px] outline-none"
+                        />
                     </div>
                     <div>
                         <label className="block text-xs font-semibold text-slate-600 mb-1.5">Payment Method</label>
-                        <select value={form.payment_method} onChange={(e) => updateField('payment_method', e.target.value)}
-                            className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-[13px] outline-none bg-white">
-                            <option>Not Set</option><option>GCash</option><option>Over The Counter</option><option>Bank Transfer</option>
+                        <select
+                            value={form.payment_method}
+                            onChange={(e) => updateField('payment_method', e.target.value)}
+                            className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-[13px] outline-none bg-white"
+                        >
+                            <option>Not Set</option>
+                            <option>GCash</option>
+                            <option>Over The Counter</option>
+                            <option>Bank Transfer</option>
                         </select>
                     </div>
                     <div>
                         <label className="block text-xs font-semibold text-slate-600 mb-1.5">Status</label>
-                        <select value={form.status} onChange={(e) => updateField('status', e.target.value)}
-                            className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-[13px] outline-none bg-white">
-                            <option>Unpaid</option><option>Overdue</option><option>Partial</option><option>Pending</option><option>Paid</option>
+                        <select
+                            value={form.status}
+                            disabled={isPending}
+                            onChange={(e) => updateField('status', e.target.value)}
+                            className={`w-full border border-slate-300 rounded-lg px-3 py-2.5 text-[13px] outline-none bg-white ${
+                                isPending ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''
+                            }`}
+                        >
+                            <option>Unpaid</option>
+                            <option>Overdue</option>
+                            <option>Partial</option>
+                            <option>Pending</option>
+                            <option>Paid</option>
                         </select>
                     </div>
                 </div>
             </div>
             <div className="p-5 border-t border-slate-100 flex justify-end gap-3">
-                <button onClick={onClose} className="text-slate-600 text-[13px] font-semibold px-4 py-2">Cancel</button>
-                <button onClick={handleSubmit} disabled={saving}
-                    className="bg-[#02122b] text-white px-5 py-2.5 rounded-lg text-[13px] font-semibold disabled:opacity-50">
+                <button onClick={onClose} className="text-slate-600 text-[13px] font-semibold px-4 py-2">
+                    Cancel
+                </button>
+                <button
+                    onClick={handleSubmit}
+                    disabled={saving}
+                    className="bg-[#02122b] text-white px-5 py-2.5 rounded-lg text-[13px] font-semibold disabled:opacity-50"
+                >
                     {saving ? 'Saving…' : 'Save Changes'}
                 </button>
             </div>

@@ -97,7 +97,7 @@ class ReservationController extends Controller
             'action'       => 'CREATE',
             'module'       => 'RESERVATIONS',
             'description'  => 'Created reservation ' . $reservation->reference_no
-                             . ' for ' . $reservation->tenant_name,
+                . ' for ' . $reservation->tenant_name,
             'subject_type' => Reservation::class,
             'subject_id'   => $reservation->id,
         ]);
@@ -141,7 +141,7 @@ class ReservationController extends Controller
             'action'       => 'UPDATE',
             'module'       => 'RESERVATIONS',
             'description'  => 'Updated reservation ' . $reservation->reference_no
-                             . ' (' . $reservation->tenant_name . ')',
+                . ' (' . $reservation->tenant_name . ')',
             'subject_type' => Reservation::class,
             'subject_id'   => $reservation->id,
         ]);
@@ -173,6 +173,36 @@ class ReservationController extends Controller
         $validated = $request->validate([
             'admin_notes' => ['nullable', 'string'],
         ]);
+
+        // ── Re-validate bed availability at approval time ──
+        if (
+            in_array($reservation->room?->room_type, ['Bedspace', 'Barkada Room'], true)
+            && $reservation->room_bed_id
+        ) {
+
+            $in  = $reservation->check_in;
+            $out = $reservation->check_out;
+
+            $conflict = Reservation::where('room_id', $reservation->room_id)
+                ->where('room_bed_id', $reservation->room_bed_id)
+                ->where('id', '!=', $reservation->id)
+                ->where('status', 'Approved')
+                ->when($in && $out, function ($q) use ($in, $out) {
+                    $q->whereDate('check_in', '<', $out->toDateString())
+                        ->where(function ($q2) use ($in) {
+                            $q2->whereDate('check_out', '>', $in->toDateString())
+                                ->orWhereNull('check_out');
+                        });
+                })
+                ->exists();
+
+            if ($conflict) {
+                return response()->json([
+                    'message' => 'That bed slot was approved for another reservation. Reject this one or ask the tenant to pick a different bed.',
+                ], 422);
+            }
+        }
+
 
         DB::transaction(function () use ($request, $reservation, $validated) {
             // 1. Approve the reservation — this always happens, independent
@@ -211,8 +241,8 @@ class ReservationController extends Controller
             'action'       => 'APPROVE',
             'module'       => 'RESERVATIONS',
             'description'  => 'Approved reservation ' . $reservation->reference_no
-                             . ' for ' . $reservation->tenant_name
-                             . ' (' . $reservation->desired_room . ')',
+                . ' for ' . $reservation->tenant_name
+                . ' (' . $reservation->desired_room . ')',
             'subject_type' => Reservation::class,
             'subject_id'   => $reservation->id,
         ]);
@@ -255,8 +285,8 @@ class ReservationController extends Controller
             'action'       => 'REJECT',
             'module'       => 'RESERVATIONS',
             'description'  => 'Rejected reservation ' . $reservation->reference_no
-                             . ' for ' . $reservation->tenant_name
-                             . ($validated['admin_notes'] ? ' (' . $validated['admin_notes'] . ')' : ''),
+                . ' for ' . $reservation->tenant_name
+                . ($validated['admin_notes'] ? ' (' . $validated['admin_notes'] . ')' : ''),
             'status'       => 'warning',
             'subject_type' => Reservation::class,
             'subject_id'   => $reservation->id,
@@ -278,7 +308,7 @@ class ReservationController extends Controller
             'action'       => 'DELETE',
             'module'       => 'RESERVATIONS',
             'description'  => 'Deleted reservation ' . $reservation->reference_no
-                             . ' (' . $reservation->tenant_name . ')',
+                . ' (' . $reservation->tenant_name . ')',
             'status'       => 'warning',
             'subject_type' => Reservation::class,
             'subject_id'   => $reservation->id,
@@ -324,7 +354,7 @@ class ReservationController extends Controller
         [$status, $balance] = match (true) {
             $paidAmount <= 0            => ['Unpaid',  $totalCharges],
             $paidAmount + 0.005 >= $totalCharges
-                                        => ['Paid',    0.0],
+            => ['Paid',    0.0],
             default                     => ['Partial', $remaining],
         };
 
@@ -354,7 +384,7 @@ class ReservationController extends Controller
                 'room_id'        => $reservation->room_id,
                 'tenant_name'    => $reservation->tenant_name,
                 'room_number'    => $reservation->room?->room_number
-                                    ?? $reservation->desired_room,
+                    ?? $reservation->desired_room,
                 'description'    => $status === 'Paid'
                     ? 'Reservation Payment — ' . $reservation->reference_no
                     : 'Remaining Balance — Reservation ' . $reservation->reference_no,

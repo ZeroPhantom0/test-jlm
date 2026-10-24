@@ -2,7 +2,7 @@
 @section('title', 'Messages')
 
 @section('content')
-<div class="p-4 md:p-8 max-w-5xl mx-auto space-y-5" id="admin-messages-root" data-conversations='@json($conversationsForReact)'>
+<div class="p-4 md:p-8 max-w-5xl mx-auto space-y-5">
 
     <div class="flex flex-col md:flex-row justify-between md:items-start gap-4">
         <div>
@@ -130,7 +130,7 @@
         </div>
     </div>
 
-    {{-- THREAD VIEW — ADDED: Delete Conversation button on the right --}}
+    {{-- THREAD VIEW --}}
     <div id="admin-messages-thread-view" class="hidden">
         <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
             <div class="px-5 py-4 bg-slate-50 border-b border-slate-100 flex items-start gap-3">
@@ -145,7 +145,6 @@
                         <span id="admin-thread-count">0 message(s)</span>
                     </div>
                 </div>
-                {{-- NEW: Delete Conversation button --}}
                 <button id="admin-delete-conversation-btn"
                         class="text-rose-500 hover:text-rose-700 text-[12px] font-semibold inline-flex items-center gap-1.5">
                     <i class="fa-regular fa-trash-can"></i> Delete Conversation
@@ -166,6 +165,9 @@
         </div>
     </div>
 </div>
+
+{{-- React Modal Mount Point (empty div — React only renders the confirmation modals here) --}}
+<div id="admin-messages-root"></div>
 @endsection
 
 @push('styles')
@@ -264,22 +266,12 @@
                 if (badge) badge.remove();
             }
 
-            // NEW: Wire up "Delete Conversation" for this thread
+            // Wire up "Delete Conversation" to open the React confirmation modal
             const delConvBtn = document.getElementById('admin-delete-conversation-btn');
-            delConvBtn.onclick = async () => {
-                if (!confirm('Delete this whole conversation from your inbox? The tenant will still see it unless they also delete it.')) return;
-                try {
-                    const r = await fetch(`/admin/messages/conversation/${id}`, {
-                        method: 'DELETE',
-                        headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': csrf() },
-                    });
-                    const d = await r.json();
-                    if (!r.ok) throw new Error(d.message || 'Failed to delete.');
-                    if (item) item.remove();
-                    showView(listView);
-                } catch (e) {
-                    alert(e.message);
-                }
+            delConvBtn.onclick = () => {
+                document.dispatchEvent(new CustomEvent('open-delete-conv-modal', {
+                    detail: { id: id, tenant: data.data.tenant }
+                }));
             };
 
             showView(threadView);
@@ -302,7 +294,6 @@
             const bubble = document.createElement('div');
             bubble.className = `bubble ${isAdmin ? 'self' : 'them'}`;
 
-            // NEW: show placeholder when "deleted for everyone"
             bubble.innerHTML = m.deleted_for_everyone
                 ? `
                     <div class="flex items-center justify-between mb-1.5 gap-6">
@@ -360,21 +351,13 @@
         container.scrollTop = container.scrollHeight;
     }
 
-    async function deleteMessage(messageId) {
-        if (!confirm('Delete this message for you? The other side will still see it.')) return;
-        try {
-            const res = await fetch(`/admin/messages/${messageId}`, {
-                method: 'DELETE',
-                headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': csrf() },
-            });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.message || 'Failed to delete.');
+    function deleteMessage(messageId) {
+        const msg = currentMessages.find(m => m.id == messageId);
+        if (!msg) return;
 
-            currentMessages = currentMessages.filter(x => x.id != messageId);
-            renderMessages(currentMessages);
-        } catch (err) {
-            alert(err.message);
-        }
+        document.dispatchEvent(new CustomEvent('open-delete-msg-modal', {
+            detail: { id: messageId, body: msg.body }
+        }));
     }
 
     async function reactTo(messageId, emoji) {
@@ -487,6 +470,19 @@
     function escapeHTML(str) {
         return String(str).replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[s]);
     }
+
+    document.addEventListener('conv-deleted', (e) => {
+        const { id } = e.detail;
+        const item = document.querySelector(`.admin-conversation-item[data-conv-id="${id}"]`);
+        if (item) item.remove();
+        showView(listView);
+    });
+
+    document.addEventListener('msg-deleted', (e) => {
+        const { id } = e.detail;
+        currentMessages = currentMessages.filter(x => x.id != id);
+        renderMessages(currentMessages);
+    });
 })();
 </script>
 @endpush

@@ -39,14 +39,14 @@
                 <div
                     class="flex-1 bg-slate-50 border border-slate-200 rounded-[10px] px-3.5 py-1.5 flex items-center gap-2.5">
                     <i class="fa-solid fa-magnifying-glass text-slate-400 text-sm"></i>
-                    <input type="text" placeholder="Search name or email..."
+                    <input type="text" id="tenant-search" placeholder="Search name or email..."
                         class="w-full text-[13px] outline-none bg-transparent">
                 </div>
-                <select
+                <select id="tenant-status-filter"
                     class="bg-white border border-slate-300 rounded-[10px] px-4 py-1.5 text-[13px] font-medium text-slate-700 outline-none cursor-pointer min-w-[140px]">
-                    <option>All Statuses</option>
-                    <option>Active</option>
-                    <option>Inactive</option>
+                    <option value="">All Statuses</option>
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
                 </select>
             </div>
 
@@ -64,10 +64,21 @@
                             <th class="py-3 px-3.5">Actions</th>
                         </tr>
                     </thead>
-                    <tbody>
+                    <tbody id="tenant-tbody">
                         @forelse ($tenants as $tenant)
-                            @php $reservation = $tenant->approvedReservation; @endphp
-                            <tr class="border-b border-slate-50 last:border-0" data-tenant='@json($tenant->toReactArray())'>
+                            @php
+                                $reservation = $tenant->approvedReservation;
+                                $rowSearch = strtolower(trim(
+                                    ($tenant->user->name        ?? '') . ' ' .
+                                    ($tenant->user->email       ?? '') . ' ' .
+                                    ($tenant->user->phone       ?? '') . ' ' .
+                                    ($tenant->room->room_number ?? '')
+                                ));
+                            @endphp
+                            <tr class="tenant-row border-b border-slate-50 last:border-0"
+                                data-tenant='@json($tenant->toReactArray())'
+                                data-status="{{ $tenant->status }}"
+                                data-search="{{ $rowSearch }}">
                                 <td class="py-4 px-3.5">
                                     <div class="flex items-center gap-3">
                                         <div
@@ -123,12 +134,9 @@
                                 </td>
                                 <td class="py-4 px-3.5">
                                     <div class="flex items-center gap-3">
-                                        <i
-                                            class="fa-regular fa-eye text-green-500 text-sm cursor-pointer hover:scale-110 transition view-tenant-btn"></i>
-                                        <i
-                                            class="fa-solid fa-pencil text-slate-700 text-sm cursor-pointer hover:scale-110 transition edit-tenant-btn"></i>
-                                        <i
-                                            class="fa-regular fa-trash-can text-red-500 text-sm cursor-pointer hover:scale-110 transition delete-tenant-btn"></i>
+                                        <i class="fa-regular fa-eye text-green-500 text-sm cursor-pointer hover:scale-110 transition view-tenant-btn"></i>
+                                        <i class="fa-solid fa-pencil text-slate-700 text-sm cursor-pointer hover:scale-110 transition edit-tenant-btn"></i>
+                                        <i class="fa-regular fa-trash-can text-red-500 text-sm cursor-pointer hover:scale-110 transition delete-tenant-btn"></i>
                                     </div>
                                 </td>
                             </tr>
@@ -139,6 +147,13 @@
                                 </td>
                             </tr>
                         @endforelse
+
+                        <tr id="tenant-empty-filter" class="hidden">
+                            <td colspan="8" class="py-10 text-center text-slate-400 text-sm">
+                                <i class="fa-solid fa-magnifying-glass text-3xl mb-2 block opacity-50"></i>
+                                No tenants match your current filters.
+                            </td>
+                        </tr>
                     </tbody>
                 </table>
             </div>
@@ -147,3 +162,43 @@
 
     <div id="admin-tenants-modals"></div>
 @endsection
+
+@push('scripts')
+<script>
+(function () {
+    const rows         = Array.from(document.querySelectorAll('.tenant-row'));
+    const searchInput  = document.getElementById('tenant-search');
+    const statusFilter = document.getElementById('tenant-status-filter');
+    const emptyRow     = document.getElementById('tenant-empty-filter');
+
+    function applyFilters() {
+        const q      = (searchInput?.value  || '').toLowerCase().trim();
+        const status = (statusFilter?.value || '').trim().toLowerCase();
+
+        let visible = 0;
+        rows.forEach((row) => {
+            const haystack  = row.dataset.search || '';
+            const rowStatus = (row.dataset.status || '').toLowerCase();
+            const searchMatch = !q || haystack.includes(q);
+            const statusMatch = !status || rowStatus === status;
+            const show = searchMatch && statusMatch;
+            row.style.display = show ? '' : 'none';
+            if (show) visible++;
+        });
+
+        if (emptyRow) {
+            emptyRow.classList.toggle('hidden', !(visible === 0 && rows.length > 0));
+        }
+    }
+
+    let searchTimer;
+    searchInput?.addEventListener('input', () => {
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(applyFilters, 120);
+    });
+
+    statusFilter?.addEventListener('change', applyFilters);
+    applyFilters();
+})();
+</script>
+@endpush

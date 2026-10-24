@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Room;
+use App\Services\AuditLogger;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
@@ -19,8 +20,6 @@ class RoomController extends Controller
             ->orderBy('room_number')
             ->get();
 
-        // Run sync on page load to clean up any legacy "Reserved" rooms
-        // that should actually be "Available" or "Occupied".
         $rooms->each->syncStatus();
 
         $metrics = [
@@ -38,8 +37,15 @@ class RoomController extends Controller
         $data = $this->validated($request);
         $room = Room::create($data);
         
-        // Enforce the strict status rule immediately
         $room->syncStatus();
+
+        AuditLogger::log([
+            'action'       => 'CREATE',
+            'module'       => 'ROOMS',
+            'description'  => 'Created room ' . $room->room_number,
+            'subject_type' => Room::class,
+            'subject_id'   => $room->id,
+        ]);
 
         return response()->json([
             'success' => true,
@@ -60,14 +66,31 @@ class RoomController extends Controller
     public function update(Request $request, Room $room)
     {
         $data = $this->validated($request, $room->id);
-        
-        // Unset status so the request can't override the rule
         unset($data['status']); 
         
+        // ── 1. Determine if data actually changed ─────────────────────
+        $hasChanges = false;
+        foreach ($data as $key => $value) {
+            if ((string) $room->$key !== (string) $value) {
+                $hasChanges = true;
+                break;
+            }
+        }
+
+        // ── 2. Save Data ──────────────────────────────────────────────
         $room->update($data);
-        
-        // Enforce the strict status rule immediately
         $room->syncStatus();
+
+        // ── 3. Log Only if Changes Occurred ───────────────────────────
+        if ($hasChanges) {
+            AuditLogger::log([
+                'action'       => 'UPDATE',
+                'module'       => 'ROOMS',
+                'description'  => 'Updated room ' . $room->room_number,
+                'subject_type' => Room::class,
+                'subject_id'   => $room->id,
+            ]);
+        }
 
         return response()->json([
             'success' => true,
@@ -78,6 +101,15 @@ class RoomController extends Controller
 
     public function destroy(Room $room)
     {
+        AuditLogger::log([
+            'action'       => 'DELETE',
+            'module'       => 'ROOMS',
+            'description'  => 'Deleted room ' . $room->room_number,
+            'status'       => 'warning',
+            'subject_type' => Room::class,
+            'subject_id'   => $room->id,
+        ]);
+
         $room->delete();
 
         return response()->json([

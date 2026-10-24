@@ -1,4 +1,62 @@
-{{-- resources/views/public/tour-viewer.blade.php --}}
+@php
+    // ---------------------------------------------------------------
+    // Resolve the "Back to Rooms" destination.
+    //
+    // Accepts ?from= as either:
+    //   - A path:           "/tenants/reservations"
+    //   - A full same-origin URL: "https://host/tenants/reservations"
+    //   - A relative path:  "tenants/reservations"
+    //
+    // The returned URL is always built against the CURRENT request host
+    // (not config('app.url')), so it works behind any host / port /
+    // subfolder setup.
+    // ---------------------------------------------------------------
+    $host      = request()->getSchemeAndHttpHost();  // e.g. http://localhost:8080
+    $basePath  = rtrim(request()->getBaseUrl(), '/'); // e.g. /jlm-cozy-cabin/public
+    $fallback  = $host . $basePath . '/#rooms';
+    $backUrl   = $fallback;
+
+    // ── 1) Explicit ?from= param ──────────────────────────────
+    $from = request()->query('from');
+
+    if ($from) {
+        $refHost = parse_url($from, PHP_URL_HOST);
+        $refPath = parse_url($from, PHP_URL_PATH) ?? '';
+        $refQuery = parse_url($from, PHP_URL_QUERY);
+
+        // Accept relative paths (no host) OR same-host URLs.
+        // Reject the tour viewer itself (would cause a loop).
+        $isLoop = str_starts_with($refPath, '/tour/') || str_starts_with($refPath, $basePath . '/tour/');
+
+        if (! $isLoop) {
+            if ($refHost === null) {
+                // Relative path — prefix with current host + base path
+                $path    = '/' . ltrim($from, '/');
+                $backUrl = $host . $path;
+            } elseif ($refHost === request()->getHost()) {
+                // Same host — use as-is
+                $backUrl = $from;
+            } else {
+                // Different host — reject (fallback stays)
+                $backUrl = $fallback;
+            }
+        }
+    } else {
+        // ── 2) Fallback to Referer if ?from= isn't present ─────
+        $referer = request()->headers->get('referer');
+        if ($referer) {
+            $refHost = parse_url($referer, PHP_URL_HOST);
+            $refPath = parse_url($referer, PHP_URL_PATH) ?? '';
+            $isLoop  = str_starts_with($refPath, '/tour/');
+            $isHome  = $refPath === '/' || $refPath === '' || $refPath === $basePath
+                    || $refPath === $basePath . '/';
+
+            if ($refHost === request()->getHost() && ! $isLoop) {
+                $backUrl = $isHome ? $fallback : $referer;
+            }
+        }
+    }
+@endphp
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -161,7 +219,8 @@
     {{-- Top Overlay Bar --}}
     <div class="tour-top-bar">
         <div class="tour-top-left">
-            <a href="{{ url('/') }}#rooms" class="back-btn">
+            {{-- FIXED: Resolved $backUrl from ?from= or Referer, sanitized --}}
+            <a href="{{ $backUrl }}" class="back-btn">
                 <i class="fa-solid fa-arrow-left"></i>
                 <span>Back to Rooms</span>
             </a>

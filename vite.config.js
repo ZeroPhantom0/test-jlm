@@ -7,20 +7,12 @@ export default defineConfig({
     plugins: [
         laravel({
             input: ['resources/css/app.css', 'resources/js/app.jsx'],
-            refresh: false,  // ← DISABLE Laravel's blade refresh
+            refresh: true, // Set to true for automatic page reloads on file changes
         }),
-        react({
-            fastRefresh: false,  // ← DISABLE React Fast Refresh
-        }),
+        react(),
         tailwindcss(),
     ],
     resolve: {
         alias: { '@': '/resources/js' },
-    },
-    server: {
-        host: 'localhost',
-        port: 5173,
-        strictPort: true,
-        hmr: false,  // ← DISABLE Hot Module Replacement entirely
     },
 });

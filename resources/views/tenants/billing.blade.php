@@ -241,15 +241,13 @@
                         <div class="text-lg font-bold text-slate-600">
                             ₱{{ number_format($inv->balance, 0) }}
                         </div>
-                        <form method="POST" action="{{ route('tenants.billing.cancel') }}" class="inline">
-                            @csrf
-                            <input type="hidden" name="invoice_ref" value="{{ $inv->transaction_no }}">
-                            <button type="submit"
-                                    class="text-rose-500 hover:text-rose-700 text-[12px] font-semibold px-3 py-1.5 rounded-lg border border-rose-200 hover:bg-rose-50"
-                                    onclick="return confirm('Cancel this payment and resubmit?')">
-                                Cancel
-                            </button>
-                        </form>
+                        
+                        {{-- Replaced the form with a button that React listens to --}}
+                        <button type="button" 
+                                class="cancel-payment-btn text-rose-500 hover:text-rose-700 text-[12px] font-semibold px-3 py-1.5 rounded-lg border border-rose-200 hover:bg-rose-50"
+                                data-invoice-ref="{{ $inv->transaction_no }}">
+                            Cancel
+                        </button>
                     </div>
                 </div>
             @endforeach
@@ -341,10 +339,12 @@
 </div>
 
 {{-- React Payment Modal Mount --}}
-@if($paymentPayload)
+{{-- Always render the mount point so the event listeners work even without a default payload --}}
 <div id="payment-modal-root"
-     data-invoice="{{ json_encode($paymentPayload, JSON_HEX_APOS | JSON_HEX_QUOT) }}"></div>
-@endif
+     @if($paymentPayload)
+     data-invoice="{{ json_encode($paymentPayload, JSON_HEX_APOS | JSON_HEX_QUOT) }}"
+     @endif
+></div>
 @endsection
 
 @push('scripts')

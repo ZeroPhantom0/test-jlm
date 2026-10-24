@@ -42,11 +42,9 @@
     {{-- ============ CONTENT BODY ============ --}}
     <div class="builder-content-body">
 
+        {{-- REDUNDANT BACK BUTTON REMOVED HERE --}}
         <div class="hotspot-header-bar">
             <div class="hotspot-title-left">
-                <a href="{{ route('admin.virtual-tour.index') }}" class="back-arrow-btn" title="Back to Tour Manager">
-                    <i class="fa-solid fa-chevron-left"></i>
-                </a>
                 <div class="hotspot-title-text">
                     <h3 id="hotspot-header-scene-title">Hotspot Configuration</h3>
                     <p>Manage navigation hotspots for this virtual tour.</p>
@@ -309,15 +307,6 @@
     gap: 20px; margin-bottom: 20px;
 }
 .hotspot-title-left { display: flex; align-items: center; gap: 12px; }
-.back-arrow-btn {
-    width: 36px; height: 36px; border-radius: 8px;
-    background: #ffffff; border: 1px solid var(--border-color);
-    display: flex; align-items: center; justify-content: center;
-    cursor: pointer; color: #334155; text-decoration: none;
-    transition: background 0.15s;
-    flex-shrink: 0;
-}
-.back-arrow-btn:hover { background: #f1f5f9; color: #0f172a; }
 .hotspot-title-text h3 {
     font-size: 20px; font-weight: 700; color: #0f172a; margin: 0;
 }

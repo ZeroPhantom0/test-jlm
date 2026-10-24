@@ -11,13 +11,11 @@ use App\Models\Tenant;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 
 class TenantReservationController extends Controller
 {
-    /**
-     * Display the tenant's reservations page + available (toured) rooms.
-     */
     public function index()
     {
         $user   = Auth::user();
@@ -60,32 +58,16 @@ class TenantReservationController extends Controller
             ];
         });
 
-        // ---------- Available Rooms (only rooms WITH a published tour) ----------
-        $rooms = Room::with(['virtualTour' => fn($q) => $q->where('status', 'Published')])
+        // ---------- Available Rooms ----------
+        $rooms = Room::with([
+                'virtualTour' => fn($q) => $q->where('status', 'Published'),
+                'tenants'     => fn($q) => $q->where('status', 'active')->with('approvedReservation'),
+            ])
             ->whereHas('virtualTour', fn($q) => $q->where('status', 'Published'))
             ->orderBy('room_number')
             ->get()
             ->map(function (Room $room) {
-
-                // Build bed slots based on room capacity
-                $bedSlots = [];
-                if ($room->room_type !== 'Solo Room') {
-                    $totalBeds = (int) $room->total_beds;
-                    for ($i = 1; $i <= ceil($totalBeds / 2); $i++) {
-                        $bedSlots[] = ['id' => "B{$i}-U", 'label' => "Bed {$i} - Upper", 'status' => 'Available'];
-                        $bedSlots[] = ['id' => "B{$i}-L", 'label' => "Bed {$i} - Lower", 'status' => 'Available'];
-                    }
-                    $bedSlots = array_slice($bedSlots, 0, $totalBeds);
-
-                    $occupiedCount = $room->occupied_count;
-                    $slotIndex = 0;
-                    foreach ($bedSlots as &$slot) {
-                        if ($slotIndex < $occupiedCount) {
-                            $slot['status'] = 'Occupied';
-                        }
-                        $slotIndex++;
-                    }
-                }
+                $bedSlots = $this->buildBedSlots($room);
 
                 return [
                     'id'          => $room->id,
@@ -136,7 +118,68 @@ class TenantReservationController extends Controller
     }
 
     /**
-     * Store a new reservation (tenant-initiated).
+     * Build the real bed-slot list for a room.
+     * Slots occupied by active tenants OR by Pending/Approved reservations
+     * that haven't ended yet are marked "Occupied".
+     */
+    private function buildBedSlots(Room $room): array
+    {
+        if ($room->room_type === 'Solo Room') {
+            return [];
+        }
+
+        $totalBeds = (int) $room->total_beds;
+        if ($totalBeds <= 0) {
+            return [];
+        }
+
+        // Slots currently held by active tenants
+        $heldByTenants = [];
+        foreach ($room->tenants as $tenant) {
+            $slot = $tenant->approvedReservation?->room_bed_id;
+            if ($slot) {
+                $heldByTenants[$slot] = true;
+            }
+        }
+
+        // Slots held by Pending/Approved reservations not yet checked out
+        $heldByReservations = Reservation::where('room_id', $room->id)
+            ->whereIn('status', ['Pending', 'Approved'])
+            ->whereNotNull('room_bed_id')
+            ->where(function ($q) {
+                $q->whereNull('check_out')
+                  ->orWhereDate('check_out', '>=', now()->toDateString());
+            })
+            ->pluck('room_bed_id')
+            ->all();
+        $heldByReservations = array_flip($heldByReservations);
+
+        // Synthesise the slot IDs (matching Room's bed_configurations format)
+        $slots = [];
+        $slotIndex = 0;
+        for ($i = 1; $i <= ceil($totalBeds / 2); $i++) {
+            foreach (['U' => 'Upper', 'L' => 'Lower'] as $code => $label) {
+                if ($slotIndex >= $totalBeds) {
+                    break 2;
+                }
+                $id = "B{$i}-{$code}";
+                $occupied = isset($heldByTenants[$id]) || isset($heldByReservations[$id]);
+
+                $slots[] = [
+                    'id'     => $id,
+                    'label'  => "Bed {$i} - {$label}",
+                    'status' => $occupied ? 'Occupied' : 'Available',
+                ];
+                $slotIndex++;
+            }
+        }
+
+        return $slots;
+    }
+
+    /**
+     * Store a new reservation — hardened against double-click and
+     * concurrent booking, with proper per-bed capacity checks.
      */
     public function store(Request $request)
     {
@@ -157,100 +200,223 @@ class TenantReservationController extends Controller
             'agreed_to_terms' => ['accepted'],
         ]);
 
-        $room = Room::findOrFail($validated['room_id']);
+        // ── Idempotency window ──
+        $recentDuplicate = Reservation::where('user_id', $user->id)
+            ->where('room_id', $validated['room_id'])
+            ->where('status', 'Pending')
+            ->whereDate('check_in', $validated['check_in_date'])
+            ->whereDate('check_out', $validated['check_out_date'])
+            ->where('payment_option', $validated['payment_option'] === 'half' ? 'Down Payment' : 'Full Payment')
+            ->where('created_at', '>=', now()->subSeconds(30))
+            ->latest()
+            ->first();
 
-        if ($room->status !== 'Available') {
+        if ($recentDuplicate) {
             return response()->json([
-                'message' => 'This room is no longer available.',
-            ], 422);
+                'success'    => true,
+                'idempotent' => true,
+                'message'    => 'This reservation was already submitted.',
+                'data'       => ['reference_no' => $recentDuplicate->reference_no],
+            ], 200);
         }
 
-        // ---------- Compute pricing ----------
-        $in   = Carbon::parse($validated['check_in_date']);
-        $out  = Carbon::parse($validated['check_out_date']);
-        $days = max(1, $in->diffInDays($out));
+        $receiptPath = $request->file('receipt')
+            ->store('reservations/' . $user->id, 'public');
 
-        $roomRate     = (float) $room->daily_rent;
-        $companionFee = ($validated['has_companion'] ?? false) ? 150 : 0;
-        $roomSubtotal = $roomRate * $days;
-        $totalCharges = $roomSubtotal + $companionFee;
+        try {
+            $reservation = DB::transaction(function () use ($validated, $user, $receiptPath) {
 
-        $payNow    = $validated['payment_option'] === 'half'
-            ? $totalCharges / 2
-            : $totalCharges;
-        $remaining = $totalCharges - $payNow;
+                $room = Room::where('id', $validated['room_id'])
+                    ->lockForUpdate()
+                    ->firstOrFail();
 
-        $receiptPath = $request->file('receipt')->store('reservations/' . $user->id, 'public');
+                if ($room->status !== 'Available') {
+                    throw new \RuntimeException('This room is no longer available.');
+                }
 
-        $avatar = Reservation::makeAvatar($user->name);
+                $in  = Carbon::parse($validated['check_in_date']);
+                $out = Carbon::parse($validated['check_out_date']);
 
-        $reservation = Reservation::create([
-            'reference_no'       => Reservation::generateReferenceNo(),
-            'reservation_number' => Reservation::generateReservationNumber(),
-            'user_id'            => $user->id,
-            'room_id'            => $room->id,
-            'tenant_name'        => $user->name,
-            'tenant_initial'     => $avatar['initial'],
-            'avatar_bg'          => $avatar['bg'],
-            'avatar_color'       => $avatar['color'],
-            'email'              => $user->email,
-            'phone'              => $user->phone,
-            'desired_room'       => $room->room_number,
-            'room_bed_id'        => $validated['room_bed_id'] ?? $room->room_bed_id,
-            'check_in'           => $validated['check_in_date'],
-            'check_in_time'      => $validated['check_in_time'] ?? null,
-            'check_out'          => $validated['check_out_date'],
-            'check_out_time'     => $validated['check_out_time'] ?? null,
-            'has_companion'      => (bool) ($validated['has_companion'] ?? false),
-            'total_charges'      => $totalCharges,
-            'reservation_fee'    => $payNow,
-            'payment_option'     => $validated['payment_option'] === 'half' ? 'Down Payment' : 'Full Payment',
-            'payment_method'     => 'GCash',
-            'remaining'          => $remaining,
-            'request_details'    => $validated['notes'] ?? null,
-            'proof_of_payment'   => $receiptPath,
-            'status'             => 'Pending',
-        ]);
+                if ($out->lte($in)) {
+                    throw new \RuntimeException('Check-out must be after check-in.');
+                }
 
-        // ============================================================
-        // Create the Invoice immediately so it shows in Admin Billing
-        // ============================================================
-        $tenant = Tenant::where('user_id', $user->id)->first();
+                // ── Per-bed vs whole-room capacity check ──
+                $isBedspaceType = in_array($room->room_type, ['Bedspace', 'Barkada Room'], true);
 
-        Invoice::create([
-            'transaction_no' => Invoice::generateTransactionNo(),
-            'tenant_id'      => $tenant?->id,
-            'room_id'        => $reservation->room_id,
-            'tenant_name'    => $reservation->tenant_name,
-            'room_number'    => $room->room_number,
-            'description'    => 'Reservation Down Payment — ' . $reservation->reference_no,
-            'check_in'       => $reservation->check_in,
-            'check_out'      => $reservation->check_out,
-            'rate_per_day'   => $roomRate,
-            'days'           => $days,
-            'total_amount'   => $totalCharges,
-            'amount_paid'    => $payNow,
-            'balance'        => $remaining,
-            'due_date'       => now()->addDays(7)->toDateString(),
-            'payment_method' => 'GCash',
-            'status'         => 'Pending',
-            'receipt_no'     => $validated['reference_no'],
-            'receipt_path'   => $receiptPath,
-            'date_paid'      => now()->toDateString(),
-        ]);
+                if ($isBedspaceType && empty($validated['room_bed_id'])) {
+                    throw new \RuntimeException(
+                        'Please select a bed slot for this room type.'
+                    );
+                }
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Reservation submitted. Awaiting admin approval.',
-            'data'    => [
-                'reference_no' => $reservation->reference_no,
-            ],
-        ]);
+                if ($isBedspaceType) {
+                    // Make sure the requested bed belongs to a slot that
+                    // actually exists in this room.
+                    $validIds = array_column($this->buildBedSlots($room), 'id');
+                    if (! in_array($validated['room_bed_id'], $validIds, true)) {
+                        throw new \RuntimeException('Invalid bed slot selected.');
+                    }
+
+                    // Same bed can't overlap
+                    $bedTaken = Reservation::where('room_id', $room->id)
+                        ->where('room_bed_id', $validated['room_bed_id'])
+                        ->whereIn('status', ['Pending', 'Approved'])
+                        ->where(function ($q) use ($in, $out) {
+                            $q->whereDate('check_in', '<', $out->toDateString())
+                              ->where(function ($q2) use ($in) {
+                                  $q2->whereDate('check_out', '>', $in->toDateString())
+                                     ->orWhereNull('check_out');
+                              });
+                        })
+                        ->exists();
+
+                    if ($bedTaken) {
+                        throw new \RuntimeException(
+                            'That bed slot is already booked for the selected dates. Please pick a different bed.'
+                        );
+                    }
+
+                    // Capacity check: how many ACTIVE tenants already live
+                    // in this room right now + how many overlapping
+                    // reservations exist that are NOT for the same bed and
+                    // NOT for the same user.
+                    $activeTenants = Tenant::where('room_id', $room->id)
+                        ->where('status', 'active')
+                        ->count();
+
+                    $overlappingBeds = Reservation::where('room_id', $room->id)
+                        ->whereIn('status', ['Pending', 'Approved'])
+                        ->whereNotNull('room_bed_id')
+                        ->where('room_bed_id', '!=', $validated['room_bed_id'])
+                        ->where(function ($q) use ($in, $out) {
+                            $q->whereDate('check_in', '<', $out->toDateString())
+                              ->where(function ($q2) use ($in) {
+                                  $q2->whereDate('check_out', '>', $in->toDateString())
+                                     ->orWhereNull('check_out');
+                              });
+                        })
+                        ->distinct('room_bed_id')
+                        ->count('room_bed_id');
+
+                    $totalOccupiedSlots = $activeTenants + $overlappingBeds;
+                    if ($totalOccupiedSlots >= (int) $room->total_beds) {
+                        throw new \RuntimeException(
+                            'All beds in this room are already booked for the selected dates. Please pick another room.'
+                        );
+                    }
+                } else {
+                    // Solo Room → whole-room overlap check
+                    $overlap = Reservation::where('room_id', $room->id)
+                        ->whereIn('status', ['Pending', 'Approved'])
+                        ->where(function ($q) use ($in, $out) {
+                            $q->whereDate('check_in', '<', $out->toDateString())
+                              ->where(function ($q2) use ($in) {
+                                  $q2->whereDate('check_out', '>', $in->toDateString())
+                                     ->orWhereNull('check_out');
+                              });
+                        })
+                        ->exists();
+
+                    if ($overlap) {
+                        throw new \RuntimeException(
+                            'This room is already reserved for the selected dates. Please pick another room or dates.'
+                        );
+                    }
+                }
+
+                // ── Pricing ──
+                $days = max(1, $in->diffInDays($out));
+
+                $roomRate     = (float) $room->daily_rent;
+                $companionFee = ($validated['has_companion'] ?? false) ? 150 : 0;
+                $totalCharges = ($roomRate * $days) + $companionFee;
+
+                $payNow    = $validated['payment_option'] === 'half'
+                    ? $totalCharges / 2
+                    : $totalCharges;
+                $remaining = $totalCharges - $payNow;
+
+                $avatar = Reservation::makeAvatar($user->name);
+
+                $reservation = Reservation::create([
+                    'reference_no'       => Reservation::generateReferenceNo(),
+                    'reservation_number' => Reservation::generateReservationNumber(),
+                    'user_id'            => $user->id,
+                    'room_id'            => $room->id,
+                    'tenant_name'        => $user->name,
+                    'tenant_initial'     => $avatar['initial'],
+                    'avatar_bg'          => $avatar['bg'],
+                    'avatar_color'       => $avatar['color'],
+                    'email'              => $user->email,
+                    'phone'              => $user->phone,
+                    'desired_room'       => $room->room_number,
+                    'room_bed_id'        => $validated['room_bed_id'] ?? null,
+                    'check_in'           => $validated['check_in_date'],
+                    'check_in_time'      => $validated['check_in_time'] ?? null,
+                    'check_out'          => $validated['check_out_date'],
+                    'check_out_time'     => $validated['check_out_time'] ?? null,
+                    'has_companion'      => (bool) ($validated['has_companion'] ?? false),
+                    'total_charges'      => $totalCharges,
+                    'reservation_fee'    => $payNow,
+                    'payment_option'     => $validated['payment_option'] === 'half' ? 'Down Payment' : 'Full Payment',
+                    'payment_method'     => 'GCash',
+                    'remaining'          => $remaining,
+                    'request_details'    => $validated['notes'] ?? null,
+                    'proof_of_payment'   => $receiptPath,
+                    'status'             => 'Pending',
+                ]);
+
+                $tenant = Tenant::where('user_id', $user->id)->first();
+
+                Invoice::create([
+                    'transaction_no' => Invoice::generateTransactionNo(),
+                    'tenant_id'      => $tenant?->id,
+                    'room_id'        => $reservation->room_id,
+                    'tenant_name'    => $reservation->tenant_name,
+                    'room_number'    => $room->room_number,
+                    'description'    => 'Reservation Down Payment — ' . $reservation->reference_no,
+                    'check_in'       => $reservation->check_in,
+                    'check_out'      => $reservation->check_out,
+                    'rate_per_day'   => $roomRate,
+                    'days'           => $days,
+                    'total_amount'   => $totalCharges,
+                    'amount_paid'    => $payNow,
+                    'balance'        => $remaining,
+                    'due_date'       => now()->addDays(7)->toDateString(),
+                    'payment_method' => 'GCash',
+                    'status'         => 'Pending',
+                    'receipt_no'     => $validated['reference_no'],
+                    'receipt_path'   => $receiptPath,
+                    'date_paid'      => now()->toDateString(),
+                ]);
+
+                return $reservation;
+            });
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Reservation submitted. Awaiting admin approval.',
+                'data'    => ['reference_no' => $reservation->reference_no],
+            ]);
+
+        } catch (\RuntimeException $e) {
+            if (Storage::disk('public')->exists($receiptPath)) {
+                Storage::disk('public')->delete($receiptPath);
+            }
+            return response()->json(['message' => $e->getMessage()], 422);
+
+        } catch (\Throwable $e) {
+            if (Storage::disk('public')->exists($receiptPath)) {
+                Storage::disk('public')->delete($receiptPath);
+            }
+            report($e);
+            return response()->json([
+                'message' => 'Something went wrong. Please try again.',
+            ], 500);
+        }
     }
 
-    /**
-     * Cancel a pending reservation (tenant can only cancel their own).
-     */
     public function cancel(Reservation $reservation)
     {
         $user = Auth::user();
@@ -265,23 +431,21 @@ class TenantReservationController extends Controller
             ], 422);
         }
 
-        if ($reservation->proof_of_payment) {
-            Storage::disk('public')->delete($reservation->proof_of_payment);
-        }
+        DB::transaction(function () use ($reservation) {
+            if ($reservation->proof_of_payment) {
+                Storage::disk('public')->delete($reservation->proof_of_payment);
+            }
 
-        $reservation->update([
-            'status' => 'Rejected',
-        ]);
+            $reservation->update(['status' => 'Rejected']);
 
-        // Also cancel the associated invoice.
-        // FIX: clear date_paid so a cancelled reservation doesn't show a stale "Date Paid".
-        Invoice::where('tenant_name', $reservation->tenant_name)
-            ->where('description', 'like', '%' . $reservation->reference_no . '%')
-            ->update([
-                'status'       => 'Unpaid',
-                'receipt_path' => null,
-                'date_paid'    => null,
-            ]);
+            Invoice::where('tenant_name', $reservation->tenant_name)
+                ->where('description', 'like', '%' . $reservation->reference_no . '%')
+                ->update([
+                    'status'       => 'Unpaid',
+                    'receipt_path' => null,
+                    'date_paid'    => null,
+                ]);
+        });
 
         return response()->json([
             'success' => true,

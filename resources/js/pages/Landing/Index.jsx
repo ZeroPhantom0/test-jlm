@@ -30,6 +30,18 @@ const NAV_LINKS = [
    MAIN COMPONENT
    ============================================================ */
 export default function Index({ rooms = [] }) {
+    // If the user lands on /#rooms (e.g. from the tour "Back to Rooms"
+    // button), scroll to the Rooms section after mount.
+    useEffect(() => {
+        if (window.location.hash === '#rooms') {
+            const el = document.getElementById('rooms');
+            if (el) {
+                // Defer to allow layout to settle
+                setTimeout(() => el.scrollIntoView({ behavior: 'auto', block: 'start' }), 50);
+            }
+        }
+    }, []);
+
     return (
         <div className="landing-page">
             <Head title="JLM Cozy Cabin" />
@@ -369,9 +381,9 @@ function AmenitiesCarousel() {
    ============================================================ */
 function RoomsSection({ rooms }) {
     // Group rooms by type
-    const soloRooms = rooms.filter(r => r.room_type === 'Solo Room');
+    const soloRooms     = rooms.filter(r => r.room_type === 'Solo Room');
     const bedspaceRooms = rooms.filter(r => r.room_type === 'Bedspace');
-    const barkadaRooms = rooms.filter(r => r.room_type === 'Barkada Room');
+    const barkadaRooms  = rooms.filter(r => r.room_type === 'Barkada Room');
 
     return (
         <section className="rooms-section" id="rooms">
@@ -384,14 +396,6 @@ function RoomsSection({ rooms }) {
                 <div className="status-item"><span className="status-dot available" /> Available</div>
                 <div className="status-item"><span className="status-dot reserved" /> Reserved</div>
                 <div className="status-item"><span className="status-dot occupied" /> Occupied</div>
-            </div>
-
-            <div className="all-units-heading">
-                <div className="all-units-label">
-                    <span><i className="bi bi-grid-fill" /></span>
-                    All Available Rooms
-                </div>
-                <div className="all-units-line" />
             </div>
 
             {/* Render categories only if rooms exist */}
@@ -451,9 +455,17 @@ function RoomCard({ room }) {
     const hasTour = !!room.has_tour && !!room.tour_id;
     const tourUrl = hasTour ? `/tour/${room.tour_id}` : null;
 
+    // Use a plain <a> (same-tab navigation) so the browser sends the
+    // Referer header to /tour/{id}. The tour-viewer uses that Referer
+    // to know it should send the user back to /#rooms.
     const ImageWrapper = hasTour ? 'a' : 'div';
     const imageProps = hasTour
-        ? { href: tourUrl, className: 'room-image clickable' }
+        ? {
+            href: tourUrl,
+            className: 'room-image clickable',
+            'aria-label': `Open 360° tour for ${room.room_type}`,
+            rel: 'noopener',
+          }
         : { className: 'room-image' };
 
     return (
@@ -588,10 +600,10 @@ function LandingFooter() {
                     </div>
                     <p>Premium boarding house offering comfortable, affordable, and secure living in Manila.</p>
                     <div className="footer-socials">
-                        <a 
-                            href="https://www.facebook.com/profile.php?id=100076056182354" 
-                            target="_blank" 
-                            rel="noopener noreferrer" 
+                        <a
+                            href="https://www.facebook.com/profile.php?id=100076056182354"
+                            target="_blank"
+                            rel="noopener noreferrer"
                             aria-label="Facebook"
                         >
                             <i className="bi bi-facebook" />

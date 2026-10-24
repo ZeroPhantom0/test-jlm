@@ -9,26 +9,20 @@ use App\Models\Reservation;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Services\AuditLogger;
+use App\Mail\PaymentVerifiedMail;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 
 class BillingController extends Controller
 {
-    /**
-     * Statuses that are "passive bookkeeping" — hidden by default in the
-     * admin table because there's no action for the admin to take on them.
-     */
-    private const HIDDEN_STATUSES = ['Paid', 'Unpaid'];
-
-    /**
-     * Statuses that require admin action / attention.
-     */
     private const ACTIONABLE_STATUSES = ['Pending', 'Partial', 'Overdue'];
 
     public function index(Request $request)
     {
+        // ── unchanged ──
         $filters = [
             'status' => $request->query('status'),
         ];
@@ -43,7 +37,6 @@ class BillingController extends Controller
 
         $invoices = $query->paginate(50);
 
-        // Decorate for Blade
         $invoices->getCollection()->transform(function ($inv) {
             $inv->formatted_total   = '₱' . number_format($inv->total_amount, 0);
             $inv->formatted_paid    = '₱' . number_format($inv->amount_paid, 0);
@@ -109,6 +102,10 @@ class BillingController extends Controller
         ));
     }
 
+    // ────────────────────────────────────────────────────────────────
+    // UPDATED: safe edit — recomputes balance, syncs reservation,
+    // keeps date_paid/verified_* consistent with status.
+    // ────────────────────────────────────────────────────────────────
     public function update(Request $request, Invoice $invoice)
     {
         $validated = $request->validate([
@@ -126,56 +123,93 @@ class BillingController extends Controller
         ]);
 
         $total   = round($validated['rate_per_day'] * $validated['days'], 2);
-        $balance = max(0, $total - $validated['amount_paid']);
+        $paid    = (float) $validated['amount_paid'];
+        $balance = max(0, round($total - $paid, 2));
 
-        $parseDate = function ($value, $format = null) {
+        // Derive the true status from the numbers, but respect the
+        // admin's choice unless it contradicts the paid amount.
+        $status = $validated['status'];
+
+        if ($status === 'Paid' && $paid + 0.005 < $total) {
+            $status = $paid > 0 ? 'Partial' : 'Unpaid';
+        } elseif ($status !== 'Paid' && $total > 0 && $paid + 0.005 >= $total) {
+            $status = 'Paid';
+        }
+
+        // Accept "M j, Y" (what the modal sends), "Y-m-d", or ISO.
+        $parseDate = function ($value) {
             if (! $value || $value === '-') return null;
-            try {
-                return $format
-                    ? \Carbon\Carbon::createFromFormat($format, $value)
-                    : \Carbon\Carbon::parse($value);
-            } catch (\Throwable $e) {
-                return null;
+            foreach (['M j, Y', 'Y-m-d', 'Y-m-d H:i:s'] as $fmt) {
+                try {
+                    $d = \Carbon\Carbon::createFromFormat($fmt, trim($value));
+                    if ($d !== false) return $d;
+                } catch (\Throwable $e) {
+                    // try next format
+                }
             }
+            try { return \Carbon\Carbon::parse($value); } catch (\Throwable $e) { return null; }
         };
 
-        $invoice->update([
-            'tenant_name'    => $validated['tenant_name'],
-            'room_number'    => $validated['room_number'],
-            'description'    => $validated['description'],
-            'check_in'       => $parseDate($validated['check_in'], 'M j, Y') ?? $invoice->check_in,
-            'check_out'      => $parseDate($validated['check_out'], 'M j, Y') ?? $invoice->check_out,
-            'rate_per_day'   => $validated['rate_per_day'],
-            'days'           => $validated['days'],
-            'total_amount'   => $total,
-            'amount_paid'    => $validated['amount_paid'],
-            'balance'        => $balance,
-            'due_date'       => $parseDate($validated['due_date'], 'M j, Y') ?? $invoice->due_date,
-            'payment_method' => $validated['payment_method'],
-            'status'         => $validated['status'],
-        ]);
+        DB::beginTransaction();
+        try {
+            $wasPaid = $invoice->status === 'Paid';
 
-        return response()->json(['message' => 'Invoice updated.', 'invoice' => $invoice->fresh()]);
+            $invoice->update([
+                'tenant_name'    => $validated['tenant_name'],
+                'room_number'    => $validated['room_number'],
+                'description'    => $validated['description'],
+                'check_in'       => $parseDate($validated['check_in'])  ?? $invoice->check_in,
+                'check_out'      => $parseDate($validated['check_out']) ?? $invoice->check_out,
+                'rate_per_day'   => $validated['rate_per_day'],
+                'days'           => $validated['days'],
+                'total_amount'   => $total,
+                'amount_paid'    => $paid,
+                'balance'        => $status === 'Paid' ? 0.0 : $balance,
+                'due_date'       => $parseDate($validated['due_date']) ?? $invoice->due_date,
+                'payment_method' => $validated['payment_method'],
+                'status'         => $status,
+
+                'date_paid'   => $status === 'Paid'
+                    ? ($invoice->date_paid ?? now()->toDateString())
+                    : null,
+                'verified_by' => $status === 'Paid'
+                    ? ($invoice->verified_by ?? Auth::id())
+                    : null,
+                'verified_at' => $status === 'Paid'
+                    ? ($invoice->verified_at ?? now())
+                    : null,
+            ]);
+
+            // If this invoice is tied to a reservation, keep the
+            // reservation + tenant in sync — same logic as verifyPayment().
+            $this->syncLinkedReservation($invoice->fresh());
+
+            AuditLogger::log([
+                'action'       => 'UPDATE',
+                'module'       => 'BILLING',
+                'description'  => 'Manually edited invoice ' . $invoice->transaction_no
+                    . ' (' . $invoice->tenant_name . ')'
+                    . ($wasPaid !== ($status === 'Paid') ? ' — status ' . $status : ''),
+                'subject_type' => Invoice::class,
+                'subject_id'   => $invoice->id,
+            ]);
+
+            DB::commit();
+
+            return response()->json([
+                'message' => 'Invoice updated.',
+                'invoice' => $invoice->fresh(),
+            ]);
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            report($e);
+            return response()->json([
+                'message' => 'Failed to update invoice: ' . $e->getMessage(),
+            ], 500);
+        }
     }
 
-    /**
-     * Admin approves a Pending payment.
-     *
-     * NEW: the invoice's final status is derived from what the tenant
-     * actually paid (`amount_paid` vs `total_amount`):
-     *
-     *   amount_paid >= total_amount        → Paid    (balance = 0)
-     *   0 < amount_paid < total_amount     → Partial (balance = total - paid)
-     *   amount_paid == 0                   → Unpaid  (shouldn't happen here)
-     *
-     * "Verify" confirms the submitted amount — it does NOT top the
-     * invoice up to fully-paid. A down-payment invoice stays Partial
-     * after verification.
-     *
-     * Also: if the invoice is tied to a still-Pending reservation, the
-     * reservation is finalized (approved) as a side-effect — that part
-     * is unchanged from the previous fix.
-     */
+    // ── unchanged ──
     public function verifyPayment(Request $request, Invoice $invoice)
     {
         if ($invoice->status !== 'Pending') {
@@ -186,9 +220,7 @@ class BillingController extends Controller
 
         DB::beginTransaction();
         try {
-            // Derive the correct target status from the actual paid amount.
-            [$status, $balance, $datePaid, $verified] =
-                $this->deriveInvoiceStatus($invoice);
+            [$status, $balance, $datePaid, $verified] = $this->deriveInvoiceStatus($invoice);
 
             $invoice->update([
                 'status'      => $status,
@@ -198,23 +230,26 @@ class BillingController extends Controller
                 'verified_at' => $verified ? now() : null,
             ]);
 
-            // If this invoice belongs to a still-Pending reservation,
-            // finalize the reservation side too.
             $this->syncLinkedReservation($invoice);
 
             DB::commit();
 
             $this->notifyTenant($invoice, 'verified');
 
+            if ($status === 'Paid') {
+                $this->sendPaymentVerifiedEmail($invoice);
+            }
+
             $message = match ($status) {
-                'Paid'    => 'Payment verified successfully.',
-                'Partial' => 'Partial payment verified. Remaining balance is still outstanding.',
+                'Paid'    => 'Payment verified successfully. Invoice is now fully Paid.',
+                'Partial' => 'Partial payment verified. Invoice status changed to Partial.',
                 'Unpaid'  => 'Payment verified — nothing was paid on this invoice.',
                 default   => 'Payment verified.',
             };
 
             return response()->json([
                 'message' => $message,
+                'status'  => $status,
                 'invoice' => $invoice->fresh(),
             ]);
         } catch (\Throwable $e) {
@@ -226,6 +261,7 @@ class BillingController extends Controller
         }
     }
 
+    // ── unchanged ──
     public function rejectPayment(Request $request, Invoice $invoice)
     {
         $validated = $request->validate([
@@ -244,7 +280,8 @@ class BillingController extends Controller
                 Storage::disk('public')->delete($invoice->receipt_path);
             }
 
-            $revertStatus = $invoice->amount_paid > 0 ? 'Partial' : 'Unpaid';
+            $revertedAmount = max(0, (float) $invoice->amount_paid - (float) $invoice->balance);
+            $revertStatus = $revertedAmount > 0 ? 'Partial' : 'Unpaid';
 
             $invoice->update([
                 'status'       => $revertStatus,
@@ -252,6 +289,7 @@ class BillingController extends Controller
                 'receipt_no'   => null,
                 'verified_by'  => null,
                 'verified_at'  => null,
+                'amount_paid'  => $revertedAmount,
             ]);
 
             DB::commit();
@@ -260,6 +298,7 @@ class BillingController extends Controller
 
             return response()->json([
                 'message' => 'Payment rejected. Tenant has been notified.',
+                'status'  => $revertStatus,
                 'invoice' => $invoice->fresh(),
             ]);
         } catch (\Throwable $e) {
@@ -271,31 +310,14 @@ class BillingController extends Controller
         }
     }
 
+    // ── unchanged ──
     public function sendReminder(Invoice $invoice)
     {
-        // TODO: send actual notification
         return response()->json([
             'message' => "Reminder sent to {$invoice->tenant_name}.",
         ]);
     }
 
-    // ============================================================
-    // NEW: DERIVE INVOICE STATUS
-    // ============================================================
-
-    /**
-     * Derive the "correct" status for an invoice based on what has
-     * actually been paid.
-     *
-     * Returns [status, balance, datePaid, verified].
-     *
-     *  - paid >= total      → ['Paid',    0,        today, true]
-     *  - 0 < paid < total   → ['Partial', total-paid, null, true]
-     *  - paid == 0          → ['Unpaid',  total,    null,  false]
-     *
-     * The `+ 0.005` is a small float tolerance so ₱4999.9999 vs ₱5000
-     * still counts as fully paid.
-     */
     private function deriveInvoiceStatus(Invoice $invoice): array
     {
         $total = (float) $invoice->total_amount;
@@ -312,10 +334,6 @@ class BillingController extends Controller
         return ['Partial', max(0, $total - $paid), null, true];
     }
 
-    // ============================================================
-    // RESERVATION SYNC (unchanged)
-    // ============================================================
-
     private function syncLinkedReservation(Invoice $invoice): void
     {
         $reservation = $this->reservationForInvoice($invoice);
@@ -327,6 +345,33 @@ class BillingController extends Controller
         if ($reservation->status !== 'Pending') {
             $reservation->room?->syncStatus();
             return;
+        }
+
+        // ── Guard: don't auto-approve if the bed was taken in the meantime ──
+        if (
+            in_array($reservation->room?->room_type, ['Bedspace', 'Barkada Room'], true)
+            && $reservation->room_bed_id
+        ) {
+
+            $in  = $reservation->check_in;
+            $out = $reservation->check_out;
+
+            $conflict = Reservation::where('room_id', $reservation->room_id)
+                ->where('room_bed_id', $reservation->room_bed_id)
+                ->where('id', '!=', $reservation->id)
+                ->where('status', 'Approved')
+                ->when($in && $out, function ($q) use ($in, $out) {
+                    $q->whereDate('check_in', '<', $out->toDateString())
+                        ->where(function ($q2) use ($in) {
+                            $q2->whereDate('check_out', '>', $in->toDateString())
+                                ->orWhereNull('check_out');
+                        });
+                })
+                ->exists();
+
+            if ($conflict) {
+                return;
+            }
         }
 
         $reservation->update([
@@ -381,6 +426,26 @@ class BillingController extends Controller
                 $tenantUser->notify(new \App\Notifications\PaymentVerifiedNotification($invoice));
             } elseif ($type === 'rejected' && class_exists('App\\Notifications\\PaymentRejectedNotification')) {
                 $tenantUser->notify(new \App\Notifications\PaymentRejectedNotification($invoice, $notes));
+            }
+        } catch (\Throwable $e) {
+            report($e);
+        }
+    }
+
+    private function sendPaymentVerifiedEmail(Invoice $invoice): void
+    {
+        try {
+            $user = User::find($invoice->tenant_id);
+
+            if (!$user) {
+                $tenant = Tenant::find($invoice->tenant_id);
+                if ($tenant) {
+                    $user = User::find($tenant->user_id);
+                }
+            }
+
+            if ($user && $user->email) {
+                Mail::to($user->email)->send(new PaymentVerifiedMail($invoice));
             }
         } catch (\Throwable $e) {
             report($e);

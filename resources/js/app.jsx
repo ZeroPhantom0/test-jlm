@@ -25,7 +25,8 @@ import VirtualTourModals from './pages/Admin/VirtualTourModals';
 import SettingsArchive from './pages/Admin/SettingsArchive';
 import RoomChangeModals from './pages/Admin/RoomChangeModals';
 import StayExtensionModals from './pages/Admin/StayExtensionModals';
-import ScenesModals from './pages/Admin/ScenesModals'; // <-- NEW
+import ScenesModals from './pages/Admin/ScenesModals';
+import MessagesModals from './pages/Admin/MessagesModals';
 
 // Tenant service modals
 import TenantMaintenanceModals   from './pages/Services/TenantMaintenanceModals';
@@ -44,7 +45,7 @@ import TenantAnnouncementsModals from './pages/Announcements/AnnouncementsModals
 // Tenant history modal
 import TenantHistoryModals from './pages/History/HistoryModals';
 
-// ✅ Tenant settings accordion (behavior only, not a modal)
+// Tenant settings accordion
 import TenantSettingsAccordions from './pages/Settings/SettingsAccordions';
 
 // ============================================================
@@ -54,11 +55,40 @@ const inertiaRoot     = document.getElementById('app');
 const inertiaPageData = document.querySelector('script[data-page="app"]');
 
 if (inertiaRoot && inertiaPageData) {
+    // Eagerly glob every page, once.
+    const pages = import.meta.glob('./pages/**/*.jsx', { eager: true });
+
+    // Normalise the lookup: try several key shapes so
+    // "Auth/VerifyCode", "Auth/VerifyCode.jsx" and "./pages/Auth/VerifyCode.jsx"
+    // all resolve to the same module.
+    const resolvePage = (name) => {
+        const clean = name.replace(/^\.?\//, '').replace(/\.jsx$/, '');
+        const candidates = [
+            `./pages/${clean}.jsx`,
+            `./pages/${clean}`,
+            `./pages/${clean}/index.jsx`,
+        ];
+        for (const key of candidates) {
+            if (pages[key]) return pages[key];
+        }
+        // Case-insensitive fallback for filesystems / Vite quirks
+        const lower = clean.toLowerCase();
+        const foundKey = Object.keys(pages).find(
+            (k) => k.toLowerCase() === `./pages/${lower}.jsx`
+        );
+        if (foundKey) return pages[foundKey];
+
+        // Helpful diagnostic — shows in the browser console
+        console.error(
+            `[Inertia] Page component not found for "${name}".\n` +
+            `Tried: ${candidates.join(', ')}\n` +
+            `Available pages:\n${Object.keys(pages).join('\n')}`
+        );
+        return null;
+    };
+
     createInertiaApp({
-        resolve: (name) => {
-            const pages = import.meta.glob('./pages/**/*.jsx', { eager: true });
-            return pages[`./pages/${name}.jsx`];
-        },
+        resolve: resolvePage,
         setup({ el, App, props }) {
             createRoot(el).render(<App {...props} />);
         },
@@ -116,7 +146,8 @@ function mountReact() {
     mountIfExists('admin-settings-archive',       SettingsArchive);
     mountIfExists('admin-room-change-modals',     RoomChangeModals);
     mountIfExists('admin-stay-extension-modals',  StayExtensionModals);
-    mountIfExists('admin-scenes-modals',          ScenesModals); // <-- NEW
+    mountIfExists('admin-scenes-modals',          ScenesModals);
+    mountIfExists('admin-messages-root',          MessagesModals);
 
     // ---------- TENANT SERVICE MODALS ----------
     mountIfExists('tenant-maintenance-modals',    TenantMaintenanceModals);
@@ -135,18 +166,17 @@ function mountReact() {
     // ---------- TENANT HISTORY MODAL ----------
     mountIfExists('tenant-history-modals',        TenantHistoryModals);
 
-    // ---------- TENANT SETTINGS ACCORDIONS ---------- 
+    // ---------- TENANT SETTINGS ACCORDIONS ----------
     mountIfExists('tenant-settings-accordions',   TenantSettingsAccordions);
 
     // ---------- GLOBAL LOGOUT MODAL ----------
-    // Automatically creates the div and mounts it to the body so it works everywhere
     let logoutModalRoot = document.getElementById('global-logout-modal-root');
     if (!logoutModalRoot) {
         logoutModalRoot = document.createElement('div');
         logoutModalRoot.id = 'global-logout-modal-root';
         document.body.appendChild(logoutModalRoot);
     }
-    
+
     if (!logoutModalRoot.dataset.mounted) {
         createRoot(logoutModalRoot).render(<LogoutModal />);
         logoutModalRoot.dataset.mounted = 'true';
