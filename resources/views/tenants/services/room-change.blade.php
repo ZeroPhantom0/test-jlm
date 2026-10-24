@@ -111,5 +111,6 @@
 {{-- React Modal Mount Point with data --}}
 <div id="services-room-change-root"
      data-current-room="{{ $currentRoom }}"
+     data-available-rooms='@json($availableRooms)'
      data-requests='@json($requestsForReact)'></div>
 @endsection

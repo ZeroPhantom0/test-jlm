@@ -55,31 +55,59 @@ class AuthController extends Controller
 
         $user = User::where('email', $credentials['email'])->firstOrFail();
 
-        // Go to email code step
         return $this->beginVerification($user, $remember, 'password');
     }
 
     // ============ GOOGLE OAUTH ============
     public function redirectToGoogle(Request $request)
     {
+        // Persist "remember" through the OAuth round-trip
         $request->session()->put('google_remember', $request->boolean('remember'));
 
-        return Socialite::driver('google')->redirect();
+        try {
+            return Socialite::driver('google')->redirect();
+        } catch (\Laravel\Socialite\Exceptions\DriverMissingConfigurationException $e) {
+            report($e);
+            return redirect()->route('login')->with(
+                'error',
+                'Google login is not configured. Please contact the administrator.'
+            );
+        } catch (\Throwable $e) {
+            report($e);
+            return redirect()->route('login')->with(
+                'error',
+                'Could not start Google sign-in. Please try again.'
+            );
+        }
     }
 
     public function handleGoogleCallback(Request $request)
     {
+        // If Google returned an error (e.g., user denied access)
+        if ($request->has('error')) {
+            return redirect()->route('login')->with(
+                'error',
+                'Google sign-in was cancelled.'
+            );
+        }
+
         try {
             $googleUser = Socialite::driver('google')->user();
         } catch (\Throwable $e) {
             report($e);
-            return redirect()->route('login')->with('error', 'Google sign-in failed. Please try again.');
+            return redirect()->route('login')->with(
+                'error',
+                'Google sign-in failed. Please try again.'
+            );
         }
 
         $email = $googleUser->getEmail();
 
         if (! $email) {
-            return redirect()->route('login')->with('error', 'Google did not return an email address.');
+            return redirect()->route('login')->with(
+                'error',
+                'Google did not return an email address.'
+            );
         }
 
         $user = User::where('email', $email)->first();
@@ -125,8 +153,6 @@ class AuthController extends Controller
             Mail::to($user->email)->send(new LoginVerificationCodeMail($verification));
         } catch (\Throwable $e) {
             report($e);
-            // If email fails, we log the error but STILL redirect to the verify page
-            // so the user can request a resend.
         }
 
         return redirect()->route('login.verify');

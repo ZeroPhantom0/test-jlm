@@ -59,22 +59,18 @@ Route::get('/tour-scene-data/{scene}', function (TourScene $scene) {
 
 
 // ============================================================
-// AUTHENTICATION (UPDATED)
+// AUTHENTICATION
 // ============================================================
 Route::middleware('guest')->group(function () {
-    // Standard Login (Step 1: Credentials)
     Route::get('/login',  [AuthController::class, 'showLogin'])->name('login');
     Route::post('/login', [AuthController::class, 'login']);
 
-    // Standard Signup
     Route::get('/signup',  [AuthController::class, 'showSignup'])->name('signup');
     Route::post('/signup', [AuthController::class, 'signup']);
 
-    // Google OAuth
     Route::get('/auth/google',          [AuthController::class, 'redirectToGoogle'])->name('auth.google');
     Route::get('/auth/google/callback', [AuthController::class, 'handleGoogleCallback'])->name('auth.google.callback');
 
-    // Email Verification Code (Step 2: After Password or Google Login)
     Route::get('/login/verify',   [AuthController::class, 'showVerify'])->name('login.verify');
     Route::post('/login/verify',  [AuthController::class, 'verify'])->name('login.verify.submit');
     Route::post('/login/resend',  [AuthController::class, 'resendCode'])->name('login.resend');
@@ -88,8 +84,6 @@ Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 // ONBOARDING (auth only)
 // ============================================================
 Route::middleware('auth')->group(function () {
-
-    // ---------- Step 1: Personal Information ----------
     Route::get('/personal-information', [AuthController::class, 'showPersonalInformation'])
         ->middleware('onboarding.step:personal')
         ->name('personal-information');
@@ -97,7 +91,6 @@ Route::middleware('auth')->group(function () {
     Route::post('/personal-information', [AuthController::class, 'storePersonalInformation'])
         ->middleware('onboarding.step:personal');
 
-    // ---------- Step 2: Identity Verification ----------
     Route::get('/identity-verification', [AuthController::class, 'showIdentityVerification'])
         ->middleware('onboarding.step:identity')
         ->name('identity-verification');
@@ -115,24 +108,19 @@ Route::middleware(['auth', 'onboarding.complete'])
     ->name('tenants.')
     ->group(function () {
 
-    // ---------- Dashboard ----------
     Route::get('/', [TenantDashboardController::class, 'index'])->name('dashboard');
 
-    // ---------- Notifications (bell) ----------
     Route::get('/notifications/feed', [TenantNotificationController::class, 'index'])
         ->name('notifications.feed');
 
-    // ---------- Billing ----------
     Route::get('/billing',         [TenantBillingController::class, 'index'])->name('billing');
     Route::post('/billing/pay',    [TenantBillingController::class, 'pay'])->name('billing.pay');
     Route::post('/billing/cancel', [TenantBillingController::class, 'cancelPayment'])->name('billing.cancel');
 
-    // ---------- Reservations ----------
     Route::get('/reservations',                       [TenantReservationController::class, 'index'])->name('reservations');
     Route::post('/reservations',                      [TenantReservationController::class, 'store'])->name('reservations.store');
     Route::post('/reservations/{reservation}/cancel', [TenantReservationController::class, 'cancel'])->name('reservations.cancel');
 
-    // ---------- Messages ----------
     Route::get('/messages',                       [TenantMessageController::class, 'index'])->name('messages');
     Route::post('/messages',                      [TenantMessageController::class, 'store'])->name('messages.store');
     Route::get('/messages/{conversation}',        [TenantMessageController::class, 'show'])->name('messages.show');
@@ -142,14 +130,11 @@ Route::middleware(['auth', 'onboarding.complete'])
     Route::post('/messages/{message}/react',       [TenantMessageController::class, 'reactToMessage'])->name('messages.react');
     Route::delete('/messages/conversation/{conversation}', [TenantMessageController::class, 'deleteConversation'])->name('messages.conversation.delete');
 
-    // ---------- Announcements / History / Settings ----------
     Route::get('/announcements', [TenantAnnouncementController::class, 'index'])->name('announcements');
     Route::get('/history',       [TenantHistoryController::class, 'index'])->name('history');
     Route::view('/settings',     'tenants.settings')->name('settings');
 
-    // ---------- Services ----------
     Route::prefix('services')->name('services.')->group(function () {
-
         Route::get('/maintenance',                               [TenantMaintenanceController::class, 'index'])->name('maintenance');
         Route::post('/maintenance',                              [TenantMaintenanceController::class, 'store'])->name('maintenance.store');
         Route::post('/maintenance/{maintenanceRequest}/cancel',  [TenantMaintenanceController::class, 'cancel'])->name('maintenance.cancel');
@@ -158,8 +143,8 @@ Route::middleware(['auth', 'onboarding.complete'])
         Route::post('/room-change',                              [TenantRoomChangeController::class, 'store'])->name('room-change.store');
         Route::post('/room-change/{roomChangeRequest}/cancel',   [TenantRoomChangeController::class, 'cancel'])->name('room-change.cancel');
 
-        Route::get('/stay-extension',                               [TenantStayExtensionController::class, 'index'])->name('stay-extension');
-        Route::post('/stay-extension',                              [TenantStayExtensionController::class, 'store'])->name('stay-extension.store');
+        Route::get('/stay-extension',                                [TenantStayExtensionController::class, 'index'])->name('stay-extension');
+        Route::post('/stay-extension',                               [TenantStayExtensionController::class, 'store'])->name('stay-extension.store');
         Route::post('/stay-extension/{stayExtensionRequest}/cancel', [TenantStayExtensionController::class, 'cancel'])->name('stay-extension.cancel');
     });
 });
@@ -170,17 +155,15 @@ Route::middleware(['auth', 'onboarding.complete'])
 // ============================================================
 Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(function () {
 
-    // ---------- Dashboard ----------
     Route::get('/', [DashboardController::class, 'index'])->name('dashboard');
 
-    // ---------- Notifications (bell) ----------
     Route::get('/notifications/feed', [AdminNotificationController::class, 'index'])
         ->name('notifications.feed');
 
     Route::post('/notifications/message-read', [AdminNotificationController::class, 'markMessageRead'])
         ->name('notifications.message-read');
 
-    // ---------- Rooms CRUD ----------
+    // ---------- Rooms ----------
     Route::get('/rooms',           [RoomController::class, 'index'])->name('rooms');
     Route::post('/rooms',          [RoomController::class, 'store'])->name('rooms.store');
     Route::get('/rooms/{room}',    [RoomController::class, 'show'])->name('rooms.show');
@@ -231,21 +214,19 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
     // ---------- History / Reports ----------
     Route::get('/history', [HistoryController::class, 'index'])->name('history');
     Route::get('/reports', [ReportsController::class, 'index'])->name('reports');
+    Route::get('/reports/export', [ReportsController::class, 'export'])->name('reports.export');
 
     // ---------- Audit Logs ----------
     Route::get('/audit-logs',        [AuditLogController::class, 'index'])->name('audit-logs');
     Route::get('/audit-logs/data',   [AuditLogController::class, 'data'])->name('audit-logs.data');
     Route::get('/audit-logs/export', [AuditLogController::class, 'export'])->name('audit-logs.export');
 
-    // ---------- Settings ----------
     Route::view('/settings', 'admin.settings')->name('settings');
 
     // ============================================================
     // SERVICES
     // ============================================================
     Route::prefix('services')->name('services.')->group(function () {
-
-        // Landing redirect: /admin/services → /admin/services/maintenance
         Route::get('/', function () {
             return redirect()->route('admin.services.maintenance');
         })->name('index');
@@ -277,7 +258,6 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
     // VIRTUAL TOUR
     // ============================================================
     Route::prefix('virtual-tour')->name('virtual-tour.')->group(function () {
-
         Route::get('/',                       [VirtualTourController::class, 'index'])->name('index');
         Route::post('/',                      [VirtualTourController::class, 'store'])->name('store');
         Route::put('/{virtualTour}',          [VirtualTourController::class, 'update'])->name('update');

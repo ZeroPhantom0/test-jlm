@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Room;
 use App\Models\RoomChangeRequest;
 use App\Models\Tenant;
+use App\Models\Reservation; // <-- ADDED IMPORT to fix the Intelephense error
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rule;
@@ -22,11 +23,9 @@ class TenantRoomChangeController extends Controller
         $user = Auth::user();
 
         // Tenant record for the logged-in user
-        $tenant = Tenant::with('room')
-            ->where('user_id', $user->id)
-            ->first();
+        $tenant = Tenant::with('room')->where('user_id', $user->id)->first();
 
-        // Current room identifier (e.g. "R101-B1-U" or "101")
+        // Current room identifier
         $currentRoom = $tenant?->room?->room_bed_id
             ?? $tenant?->room?->room_number
             ?? '—';
@@ -36,6 +35,74 @@ class TenantRoomChangeController extends Controller
             ->where('tenant_id', $tenant?->id)
             ->latest()
             ->get();
+
+        // ── FETCH AVAILABLE ROOMS WITH BED SLOTS ──
+        $allRooms = Room::withCount([
+                'tenants as occupied_count' => fn ($q) => $q->where('status', 'active')
+            ])
+            ->where('id', '!=', $tenant?->room_id)
+            ->orderBy('room_number')
+            ->get();
+
+        $availableRooms = $allRooms->filter(function ($room) {
+            $emptyBeds = $room->total_beds - $room->occupied_count;
+            return $emptyBeds > 0;
+        })->map(function ($room) use ($tenant) {
+            $emptyBeds = $room->total_beds - $room->occupied_count;
+            
+            // Calculate bed slots for Bedspace/Barkada rooms
+            $bedSlots = [];
+            if (in_array($room->room_type, ['Bedspace', 'Barkada Room'])) {
+                // 1. Beds held by currently active tenants in this room
+                $heldByTenants = Tenant::where('room_id', $room->id)
+                    ->where('status', 'active')
+                    ->with('approvedReservation')
+                    ->get()
+                    ->pluck('approvedReservation.room_bed_id')
+                    ->filter()
+                    ->all();
+                
+                $heldByTenants = array_flip($heldByTenants);
+
+                // 2. Beds held by approved/pending reservations for this room
+                $heldByReservations = Reservation::where('room_id', $room->id)
+                    ->whereIn('status', ['Pending', 'Approved'])
+                    ->whereNotNull('room_bed_id')
+                    ->where(function ($q) {
+                        $q->whereNull('check_out')
+                          ->orWhereDate('check_out', '>=', now()->toDateString());
+                    })
+                    ->pluck('room_bed_id')
+                    ->all();
+                $heldByReservations = array_flip($heldByReservations);
+
+                // 3. Build the slot array
+                $slotIndex = 0;
+                for ($i = 1; $i <= ceil($room->total_beds / 2); $i++) {
+                    foreach (['U' => 'Upper', 'L' => 'Lower'] as $code => $label) {
+                        if ($slotIndex >= $room->total_beds) break 2;
+                        
+                        $id = "B{$i}-{$code}";
+                        $isOccupied = isset($heldByTenants[$id]) || isset($heldByReservations[$id]);
+
+                        $bedSlots[] = [
+                            'id'     => $id,
+                            'label'  => "Bed {$i} - {$label}",
+                            'status' => $isOccupied ? 'Occupied' : 'Available',
+                        ];
+                        $slotIndex++;
+                    }
+                }
+            }
+
+            return [
+                'id' => $room->id,
+                'room_number' => $room->room_number,
+                'room_type' => $room->room_type,
+                'label' => 'Room ' . $room->room_number . ' (' . $room->room_type . ' - ' . $emptyBeds . ' slot' . ($emptyBeds > 1 ? 's' : '') . ' left)',
+                'bed_slots' => $bedSlots, // <-- Pass the slots
+            ];
+        })->values();
 
         // Pass a normalised map to the React modals
         $requestsForReact = $requests->mapWithKeys(function ($r) {
@@ -57,7 +124,8 @@ class TenantRoomChangeController extends Controller
             'tenant',
             'currentRoom',
             'requests',
-            'requestsForReact'
+            'requestsForReact',
+            'availableRooms'
         ));
     }
 
@@ -81,17 +149,16 @@ class TenantRoomChangeController extends Controller
 
         $validated = $request->validate([
             'requested_room' => ['required', 'string', 'max:50'],
+            'room_bed_id'    => ['nullable', 'string', 'max:50'], // <-- ADDED
             'reason'         => ['required', 'string'],
         ]);
 
-        // Try to resolve the requested room to compute availability
+        // Resolve the requested room using the ID we passed from the frontend
         $requestedRoomId = null;
         $availability    = 'AVAILABLE';
 
-        // Match by room_number OR room_bed_id
-        $matched = Room::where('room_number', $validated['requested_room'])
-            ->orWhere('room_bed_id', $validated['requested_room'])
-            ->first();
+        // Since we changed the dropdown to pass the ID, we find by ID
+        $matched = Room::find($validated['requested_room']);
 
         if ($matched) {
             $requestedRoomId = $matched->id;
@@ -103,6 +170,12 @@ class TenantRoomChangeController extends Controller
         }
 
         $currentRoomLabel = $tenant->room->room_bed_id ?? $tenant->room->room_number ?? '—';
+        
+        // Build the requested room label so the Admin sees the bed choice
+        $requestedRoomLabel = $matched ? 'Room ' . $matched->room_number : $validated['requested_room'];
+        if (!empty($validated['room_bed_id'])) {
+            $requestedRoomLabel .= ' (' . $validated['room_bed_id'] . ')';
+        }
 
         $roomChange = RoomChangeRequest::create([
             'reference_no'      => RoomChangeRequest::generateReferenceNo(),
@@ -110,7 +183,7 @@ class TenantRoomChangeController extends Controller
             'current_room_id'   => $tenant->room->id,
             'requested_room_id' => $requestedRoomId,
             'current_room'      => $currentRoomLabel,
-            'requested_room'    => $validated['requested_room'],
+            'requested_room'    => $requestedRoomLabel, // Save with bed info
             'availability'      => $availability,
             'reason'            => $validated['reason'],
             'status'            => 'Pending',
@@ -143,7 +216,7 @@ class TenantRoomChangeController extends Controller
         }
 
         $roomChangeRequest->update([
-            'status' => 'Rejected', // or a dedicated 'Cancelled' if your enum supports it
+            'status' => 'Rejected',
         ]);
 
         return response()->json([

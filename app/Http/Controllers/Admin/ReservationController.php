@@ -9,6 +9,7 @@ use App\Models\Reservation;
 use App\Models\Room;
 use App\Models\Tenant;
 use App\Services\AuditLogger;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -17,13 +18,6 @@ use Illuminate\Validation\Rule;
 
 class ReservationController extends Controller
 {
-    /**
-     * Display the reservations list.
-     *
-     * Only Pending and Rejected are shown in this list — Approved and
-     * Expired reservations live in the History page. Both are still
-     * counted in the metrics so admins see the full picture.
-     */
     public function index(Request $request)
     {
         $filters = $request->only(['search', 'status']);
@@ -53,9 +47,6 @@ class ReservationController extends Controller
         ));
     }
 
-    /**
-     * Store a newly created reservation.
-     */
     public function store(Request $request)
     {
         $validated = $request->validate([
@@ -109,9 +100,6 @@ class ReservationController extends Controller
         ]);
     }
 
-    /**
-     * Display the specified reservation.
-     */
     public function show(Reservation $reservation)
     {
         return response()->json([
@@ -120,9 +108,6 @@ class ReservationController extends Controller
         ]);
     }
 
-    /**
-     * Update the specified reservation (admin notes, status).
-     */
     public function update(Request $request, Reservation $reservation)
     {
         $validated = $request->validate([
@@ -153,33 +138,16 @@ class ReservationController extends Controller
         ]);
     }
 
-    /**
-     * Approve a reservation.
-     *
-     * Behaviour:
-     *   • Reservation  → Approved  (always — regardless of invoice state)
-     *   • Tenant       → created / refreshed
-     *   • Room         → re-synced
-     *   • Invoice tied to this reservation:
-     *       - If already Paid → do nothing (money side settled elsewhere).
-     *       - Otherwise, derive the correct state from what the tenant
-     *         actually paid (reservation_fee vs total_charges):
-     *           reservation_fee >= total_charges        → Paid
-     *           0 < reservation_fee < total_charges     → Partial
-     *           reservation_fee == 0                    → Unpaid
-     */
     public function approve(Request $request, Reservation $reservation)
     {
         $validated = $request->validate([
             'admin_notes' => ['nullable', 'string'],
         ]);
 
-        // ── Re-validate bed availability at approval time ──
         if (
             in_array($reservation->room?->room_type, ['Bedspace', 'Barkada Room'], true)
             && $reservation->room_bed_id
         ) {
-
             $in  = $reservation->check_in;
             $out = $reservation->check_out;
 
@@ -203,10 +171,7 @@ class ReservationController extends Controller
             }
         }
 
-
         DB::transaction(function () use ($request, $reservation, $validated) {
-            // 1. Approve the reservation — this always happens, independent
-            //    of how much the tenant has paid.
             $reservation->update([
                 'status'       => 'Approved',
                 'admin_notes'  => $validated['admin_notes'] ?? $reservation->admin_notes,
@@ -214,7 +179,6 @@ class ReservationController extends Controller
                 'processed_at' => now(),
             ]);
 
-            // 2. Create / refresh the tenant.
             $tenant = null;
             if ($reservation->user_id) {
                 $tenant = Tenant::updateOrCreate(
@@ -228,12 +192,10 @@ class ReservationController extends Controller
                 );
             }
 
-            // 3. Re-sync the room.
             if ($reservation->room) {
                 $reservation->room->syncStatus();
             }
 
-            // 4. Reconcile the invoice against what was actually paid.
             $this->settleReservationInvoice($reservation, $tenant);
         });
 
@@ -254,12 +216,6 @@ class ReservationController extends Controller
         ]);
     }
 
-    /**
-     * Reject a reservation.
-     *
-     * Deletes any Unpaid / Partial / Pending invoice tied to this
-     * reservation (and its receipt file). Paid invoices are kept.
-     */
     public function reject(Request $request, Reservation $reservation)
     {
         $validated = $request->validate([
@@ -299,9 +255,6 @@ class ReservationController extends Controller
         ]);
     }
 
-    /**
-     * Remove the specified reservation.
-     */
     public function destroy(Reservation $reservation)
     {
         AuditLogger::log([
@@ -327,30 +280,48 @@ class ReservationController extends Controller
     // ============================================================
 
     /**
-     * Reconcile the invoice tied to a reservation against what the
-     * tenant actually paid.
+     * Compute the due date for an invoice based on the stay length.
      *
-     * The invoice status is derived purely from `reservation_fee` vs
-     * `total_charges`:
-     *
-     *   paid >= total  → Paid    (balance = 0)
-     *   paid >  0      → Partial (balance = total - paid)
-     *   paid == 0      → Unpaid  (balance = total)
-     *
-     * The reservation itself is always Approved — that decision is
-     * made in `approve()` and is independent of the invoice state.
-     *
-     * Exits early (does nothing) if an invoice for this reservation is
-     * already Paid — the money side has already been settled from the
-     * Billing page, and we must not create a duplicate.
+     *   ≤ 1 day         → check_out (same day)
+     *   2 – 6 days      → check_in + 3 days
+     *   7 – 31 days     → check_in + 7 days
+     *   32 – 100 days   → check_in + 1 month
+     *   101 – 364 days  → check_in + 2 months
+     *   ≥ 365 days      → check_in + 3 months
      */
+    private function computeDueDate(?Carbon $checkIn, ?Carbon $checkOut): Carbon
+    {
+        if (! $checkIn) {
+            return now()->addDays(7);
+        }
+
+        $out  = $checkOut ?: $checkIn->copy()->addDay();
+        $days = max(1, $checkIn->diffInDays($out));
+
+        if ($days <= 1) {
+            return $out->copy();
+        }
+        if ($days <= 6) {
+            return $checkIn->copy()->addDays(3);
+        }
+        if ($days <= 31) {
+            return $checkIn->copy()->addDays(7);
+        }
+        if ($days <= 100) {
+            return $checkIn->copy()->addMonths(1);
+        }
+        if ($days <= 364) {
+            return $checkIn->copy()->addMonths(2);
+        }
+        return $checkIn->copy()->addMonths(3);
+    }
+
     private function settleReservationInvoice(Reservation $reservation, ?Tenant $tenant): void
     {
         $totalCharges = (float) $reservation->total_charges;
         $paidAmount   = (float) $reservation->reservation_fee;
         $remaining    = max(0, $totalCharges - $paidAmount);
 
-        // Derive the correct invoice status from what was paid.
         [$status, $balance] = match (true) {
             $paidAmount <= 0            => ['Unpaid',  $totalCharges],
             $paidAmount + 0.005 >= $totalCharges
@@ -358,9 +329,6 @@ class ReservationController extends Controller
             default                     => ['Partial', $remaining],
         };
 
-        // ── Guard: if any invoice for this reservation is already Paid,
-        //    the money side was handled elsewhere (Billing page). Do
-        //    nothing on the invoice side.
         $alreadyPaid = Invoice::query()
             ->where('description', 'like', '%' . $reservation->reference_no . '%')
             ->where('status', 'Paid')
@@ -370,13 +338,16 @@ class ReservationController extends Controller
             return;
         }
 
-        // ── Find the existing invoice (if any) for this reservation.
         $invoice = Invoice::query()
             ->where('description', 'like', '%' . $reservation->reference_no . '%')
             ->latest()
             ->first();
 
-        // ── Case A: no invoice yet — create one at the correct state.
+        $dueDate = $this->computeDueDate(
+            $reservation->check_in,
+            $reservation->check_out
+        );
+
         if (! $invoice) {
             Invoice::create([
                 'transaction_no' => Invoice::generateTransactionNo(),
@@ -395,9 +366,7 @@ class ReservationController extends Controller
                 'total_amount'   => $totalCharges,
                 'amount_paid'    => $paidAmount,
                 'balance'        => $balance,
-                'due_date'       => $status === 'Unpaid'
-                    ? now()->addDays(7)->toDateString()
-                    : $reservation->check_in,
+                'due_date'       => $dueDate->toDateString(),
                 'payment_method' => $reservation->payment_method ?? 'Not Set',
                 'status'         => $status,
                 'date_paid'      => $status !== 'Unpaid' ? now()->toDateString() : null,
@@ -407,12 +376,12 @@ class ReservationController extends Controller
             return;
         }
 
-        // ── Case B: invoice exists — update it to match the paid amount.
         $invoice->update([
             'total_amount' => $totalCharges,
             'amount_paid'  => $paidAmount,
             'balance'      => $balance,
             'status'       => $status,
+            'due_date'     => $dueDate->toDateString(),
             'date_paid'    => $status !== 'Unpaid'
                 ? ($invoice->date_paid ?? now()->toDateString())
                 : null,
@@ -425,9 +394,6 @@ class ReservationController extends Controller
         ]);
     }
 
-    /**
-     * Delete any non-paid invoice tied to this reservation (used on reject).
-     */
     private function deleteInvoicesOnRejection(Reservation $reservation): void
     {
         $invoices = Invoice::query()

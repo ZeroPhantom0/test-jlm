@@ -57,7 +57,7 @@ class TenantBillingController extends Controller
 
         if ($approvedReservation) {
             $billedRemaining = (float) Invoice::where('tenant_id', $tenant->id)
-                ->whereIn('status', ['Unpaid', 'Partial', 'Overdue', 'Pending'])
+                ->whereIn('status', ['Unpaid', 'Partial', 'Overdue', 'Pending', 'Paid'])
                 ->where(function ($q) {
                     $q->where('description', 'like', '%remaining%')
                       ->orWhere('description', 'like', '%reservation%');

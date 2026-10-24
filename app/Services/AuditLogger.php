@@ -1,4 +1,5 @@
 <?php
+// app/Services/AuditLogger.php
 
 namespace App\Services;
 
@@ -9,18 +10,6 @@ class AuditLogger
 {
     /**
      * Record an audit log entry.
-     *
-     * @param  array{
-     *     action: string,
-     *     module: string,
-     *     description: string,
-     *     status?: string,
-     *     action_icon?: string,
-     *     module_color?: string,
-     *     subject_type?: string|null,
-     *     subject_id?: int|null,
-     *     properties?: array|null
-     * }  $data
      */
     public static function log(array $data): AuditLog
     {
@@ -58,6 +47,7 @@ class AuditLogger
             'VERIFY'         => 'fa-solid fa-check-double',
             'SUBMIT'         => 'fa-solid fa-plus',
             'PUBLISH'        => 'fa-solid fa-bullhorn',
+            'EXPORT'         => 'fa-solid fa-file-export', // Added EXPORT icon
             default          => 'fa-solid fa-circle-info',
         };
     }
@@ -74,6 +64,7 @@ class AuditLogger
             'VIRTUAL TOUR'   => 'pink',
             'ANNOUNCEMENTS'  => 'purple',
             'SERVICES'       => 'amber',
+            'REPORTS'        => 'sky', // Added REPORTS color (requires updating the blade file)
             default          => 'slate',
         };
     }

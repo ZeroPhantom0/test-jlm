@@ -48,7 +48,7 @@ class AdminNotificationController extends Controller
             ];
         }
 
-        // 2) Pending reservations (awaiting admin action)
+        // 2) Pending reservations
         $pendingReservations = DB::table('reservations')
             ->where('status', 'Pending')
             ->orderByDesc('created_at')
@@ -69,9 +69,7 @@ class AdminNotificationController extends Controller
             ];
         }
 
-        // 2a) Tenant-cancelled reservations (status='Rejected' AND processed_by IS NULL)
-        //     Admin-rejected ones are hidden — the admin already knows since they
-        //     performed the action themselves.
+        // 2a) Tenant-cancelled reservations
         $cancelledReservations = DB::table('reservations')
             ->where('status', 'Rejected')
             ->whereNull('processed_by')
@@ -90,6 +88,29 @@ class AdminNotificationController extends Controller
                 'time'        => $r->processed_at ?? $r->updated_at ?? $r->created_at,
                 'unread'      => true,
                 'link'        => '/admin/reservations',
+            ];
+        }
+
+        // 2b) Payments submitted by tenants (awaiting verification)
+        $pendingPayments = DB::table('invoices')
+            ->where('status', 'Pending')
+            ->whereNotNull('receipt_path')
+            ->orderByDesc('updated_at')
+            ->limit(10)
+            ->get();
+
+        foreach ($pendingPayments as $inv) {
+            $notifications[] = [
+                'id'          => 'pay-' . $inv->id,
+                'type'        => 'payment',
+                'icon'        => 'fa-solid fa-money-bill-transfer',
+                'color'       => 'text-emerald-600 bg-emerald-50',
+                'title'       => 'Payment submitted — ₱' . number_format((float) $inv->balance, 2),
+                'description' => $inv->tenant_name . ' · ' . $inv->transaction_no
+                    . ' · ' . ($inv->description ?? 'Invoice'),
+                'time'        => $inv->updated_at ?? $inv->created_at,
+                'unread'      => true,
+                'link'        => '/admin/billing',
             ];
         }
 
@@ -202,6 +223,28 @@ class AdminNotificationController extends Controller
             ];
         }
 
+        // 6) Recent report exports
+        $exports = DB::table('audit_logs')
+            ->where('module', 'REPORTS')
+            ->where('action', 'EXPORT')
+            ->orderByDesc('created_at')
+            ->limit(5)
+            ->get();
+
+        foreach ($exports as $log) {
+            $notifications[] = [
+                'id'          => 'exp-' . $log->id,
+                'type'        => 'export',
+                'icon'        => 'fa-solid fa-file-export',
+                'color'       => 'text-sky-600 bg-sky-50',
+                'title'       => 'Report exported',
+                'description' => $log->description,
+                'time'        => $log->created_at,
+                'unread'      => false,
+                'link'        => '/admin/reports',
+            ];
+        }
+
         // Sort newest first
         usort($notifications, fn ($x, $y) => strtotime($y['time']) <=> strtotime($x['time']));
 
@@ -213,9 +256,6 @@ class AdminNotificationController extends Controller
         ]);
     }
 
-    /**
-     * Mark a tenant message as read.
-     */
     public function markMessageRead(Request $request)
     {
         $validated = $request->validate([

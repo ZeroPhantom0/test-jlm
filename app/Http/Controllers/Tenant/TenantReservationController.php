@@ -21,7 +21,6 @@ class TenantReservationController extends Controller
         $user   = Auth::user();
         $tenant = Tenant::where('user_id', $user->id)->first();
 
-        // ---------- My Reservations ----------
         $myReservations = Reservation::where(function ($q) use ($user, $tenant) {
             $q->where('user_id', $user->id)
                 ->orWhere('tenant_name', $user->name);
@@ -58,16 +57,23 @@ class TenantReservationController extends Controller
             ];
         });
 
-        // ---------- Available Rooms ----------
         $rooms = Room::with([
-                'virtualTour' => fn($q) => $q->where('status', 'Published'),
-                'tenants'     => fn($q) => $q->where('status', 'active')->with('approvedReservation'),
-            ])
+            'virtualTour' => fn($q) => $q->where('status', 'Published'),
+            'tenants'     => fn($q) => $q->where('status', 'active')->with('approvedReservation'),
+        ])
             ->whereHas('virtualTour', fn($q) => $q->where('status', 'Published'))
             ->orderBy('room_number')
             ->get()
             ->map(function (Room $room) {
                 $bedSlots = $this->buildBedSlots($room);
+                
+                // Calculate actual empty beds
+                $occupiedSlots = collect($bedSlots)->where('status', 'Occupied')->count();
+                $totalBeds = (int) $room->total_beds;
+                $emptyBeds = max(0, $totalBeds - $occupiedSlots);
+
+                // A room is bookable if it has empty beds OR if its status is strictly Available
+                $isBookable = $emptyBeds > 0 || $room->status === 'Available';
 
                 return [
                     'id'          => $room->id,
@@ -75,6 +81,8 @@ class TenantReservationController extends Controller
                     'name'        => $room->room_type,
                     'price'       => (float) $room->daily_rent,
                     'status'      => $room->status,
+                    'is_bookable' => $isBookable,
+                    'empty_beds'  => $emptyBeds,
                     'img'         => $room->virtualTour?->thumbnail_url
                         ?? 'https://images.unsplash.com/photo-1598928506311-c55ded91a20c?auto=format&fit=crop&w=600&q=80',
                     'pax'         => match (true) {
@@ -117,11 +125,6 @@ class TenantReservationController extends Controller
         ]);
     }
 
-    /**
-     * Build the real bed-slot list for a room.
-     * Slots occupied by active tenants OR by Pending/Approved reservations
-     * that haven't ended yet are marked "Occupied".
-     */
     private function buildBedSlots(Room $room): array
     {
         if ($room->room_type === 'Solo Room') {
@@ -133,7 +136,6 @@ class TenantReservationController extends Controller
             return [];
         }
 
-        // Slots currently held by active tenants
         $heldByTenants = [];
         foreach ($room->tenants as $tenant) {
             $slot = $tenant->approvedReservation?->room_bed_id;
@@ -142,19 +144,17 @@ class TenantReservationController extends Controller
             }
         }
 
-        // Slots held by Pending/Approved reservations not yet checked out
         $heldByReservations = Reservation::where('room_id', $room->id)
             ->whereIn('status', ['Pending', 'Approved'])
             ->whereNotNull('room_bed_id')
             ->where(function ($q) {
                 $q->whereNull('check_out')
-                  ->orWhereDate('check_out', '>=', now()->toDateString());
+                    ->orWhereDate('check_out', '>=', now()->toDateString());
             })
             ->pluck('room_bed_id')
             ->all();
         $heldByReservations = array_flip($heldByReservations);
 
-        // Synthesise the slot IDs (matching Room's bed_configurations format)
         $slots = [];
         $slotIndex = 0;
         for ($i = 1; $i <= ceil($totalBeds / 2); $i++) {
@@ -177,10 +177,28 @@ class TenantReservationController extends Controller
         return $slots;
     }
 
-    /**
-     * Store a new reservation — hardened against double-click and
-     * concurrent booking, with proper per-bed capacity checks.
-     */
+    private function computeDueDate(Carbon $checkIn, Carbon $checkOut): Carbon
+    {
+        $days = max(1, $checkIn->diffInDays($checkOut));
+
+        if ($days <= 1) {
+            return $checkOut->copy();
+        }
+        if ($days <= 6) {
+            return $checkIn->copy()->addDays(3);
+        }
+        if ($days <= 31) {
+            return $checkIn->copy()->addDays(7);
+        }
+        if ($days <= 100) {
+            return $checkIn->copy()->addMonths(1);
+        }
+        if ($days <= 364) {
+            return $checkIn->copy()->addMonths(2);
+        }
+        return $checkIn->copy()->addMonths(3);
+    }
+
     public function store(Request $request)
     {
         $user = Auth::user();
@@ -200,7 +218,15 @@ class TenantReservationController extends Controller
             'agreed_to_terms' => ['accepted'],
         ]);
 
-        // ── Idempotency window ──
+        $inDate  = Carbon::parse($validated['check_in_date']  . ' ' . ($validated['check_in_time']  ?? '00:00'));
+        $outDate = Carbon::parse($validated['check_out_date'] . ' ' . ($validated['check_out_time'] ?? '00:00'));
+
+        if ($inDate->diffInHours($outDate) < 24) {
+            return response()->json([
+                'message' => 'The minimum stay is 24 hours (1 full day). Please extend your check-out date.',
+            ], 422);
+        }
+
         $recentDuplicate = Reservation::where('user_id', $user->id)
             ->where('room_id', $validated['room_id'])
             ->where('status', 'Pending')
@@ -230,10 +256,6 @@ class TenantReservationController extends Controller
                     ->lockForUpdate()
                     ->firstOrFail();
 
-                if ($room->status !== 'Available') {
-                    throw new \RuntimeException('This room is no longer available.');
-                }
-
                 $in  = Carbon::parse($validated['check_in_date']);
                 $out = Carbon::parse($validated['check_out_date']);
 
@@ -241,7 +263,6 @@ class TenantReservationController extends Controller
                     throw new \RuntimeException('Check-out must be after check-in.');
                 }
 
-                // ── Per-bed vs whole-room capacity check ──
                 $isBedspaceType = in_array($room->room_type, ['Bedspace', 'Barkada Room'], true);
 
                 if ($isBedspaceType && empty($validated['room_bed_id'])) {
@@ -251,23 +272,20 @@ class TenantReservationController extends Controller
                 }
 
                 if ($isBedspaceType) {
-                    // Make sure the requested bed belongs to a slot that
-                    // actually exists in this room.
                     $validIds = array_column($this->buildBedSlots($room), 'id');
                     if (! in_array($validated['room_bed_id'], $validIds, true)) {
                         throw new \RuntimeException('Invalid bed slot selected.');
                     }
 
-                    // Same bed can't overlap
                     $bedTaken = Reservation::where('room_id', $room->id)
                         ->where('room_bed_id', $validated['room_bed_id'])
                         ->whereIn('status', ['Pending', 'Approved'])
                         ->where(function ($q) use ($in, $out) {
                             $q->whereDate('check_in', '<', $out->toDateString())
-                              ->where(function ($q2) use ($in) {
-                                  $q2->whereDate('check_out', '>', $in->toDateString())
-                                     ->orWhereNull('check_out');
-                              });
+                                ->where(function ($q2) use ($in) {
+                                    $q2->whereDate('check_out', '>', $in->toDateString())
+                                        ->orWhereNull('check_out');
+                                });
                         })
                         ->exists();
 
@@ -276,45 +294,15 @@ class TenantReservationController extends Controller
                             'That bed slot is already booked for the selected dates. Please pick a different bed.'
                         );
                     }
-
-                    // Capacity check: how many ACTIVE tenants already live
-                    // in this room right now + how many overlapping
-                    // reservations exist that are NOT for the same bed and
-                    // NOT for the same user.
-                    $activeTenants = Tenant::where('room_id', $room->id)
-                        ->where('status', 'active')
-                        ->count();
-
-                    $overlappingBeds = Reservation::where('room_id', $room->id)
-                        ->whereIn('status', ['Pending', 'Approved'])
-                        ->whereNotNull('room_bed_id')
-                        ->where('room_bed_id', '!=', $validated['room_bed_id'])
-                        ->where(function ($q) use ($in, $out) {
-                            $q->whereDate('check_in', '<', $out->toDateString())
-                              ->where(function ($q2) use ($in) {
-                                  $q2->whereDate('check_out', '>', $in->toDateString())
-                                     ->orWhereNull('check_out');
-                              });
-                        })
-                        ->distinct('room_bed_id')
-                        ->count('room_bed_id');
-
-                    $totalOccupiedSlots = $activeTenants + $overlappingBeds;
-                    if ($totalOccupiedSlots >= (int) $room->total_beds) {
-                        throw new \RuntimeException(
-                            'All beds in this room are already booked for the selected dates. Please pick another room.'
-                        );
-                    }
                 } else {
-                    // Solo Room → whole-room overlap check
                     $overlap = Reservation::where('room_id', $room->id)
                         ->whereIn('status', ['Pending', 'Approved'])
                         ->where(function ($q) use ($in, $out) {
                             $q->whereDate('check_in', '<', $out->toDateString())
-                              ->where(function ($q2) use ($in) {
-                                  $q2->whereDate('check_out', '>', $in->toDateString())
-                                     ->orWhereNull('check_out');
-                              });
+                                ->where(function ($q2) use ($in) {
+                                    $q2->whereDate('check_out', '>', $in->toDateString())
+                                        ->orWhereNull('check_out');
+                                });
                         })
                         ->exists();
 
@@ -325,7 +313,6 @@ class TenantReservationController extends Controller
                     }
                 }
 
-                // ── Pricing ──
                 $days = max(1, $in->diffInDays($out));
 
                 $roomRate     = (float) $room->daily_rent;
@@ -336,6 +323,8 @@ class TenantReservationController extends Controller
                     ? $totalCharges / 2
                     : $totalCharges;
                 $remaining = $totalCharges - $payNow;
+
+                $dueDate = $this->computeDueDate($in, $out);
 
                 $avatar = Reservation::makeAvatar($user->name);
 
@@ -383,7 +372,7 @@ class TenantReservationController extends Controller
                     'total_amount'   => $totalCharges,
                     'amount_paid'    => $payNow,
                     'balance'        => $remaining,
-                    'due_date'       => now()->addDays(7)->toDateString(),
+                    'due_date'       => $dueDate->toDateString(),
                     'payment_method' => 'GCash',
                     'status'         => 'Pending',
                     'receipt_no'     => $validated['reference_no'],
@@ -399,13 +388,11 @@ class TenantReservationController extends Controller
                 'message' => 'Reservation submitted. Awaiting admin approval.',
                 'data'    => ['reference_no' => $reservation->reference_no],
             ]);
-
         } catch (\RuntimeException $e) {
             if (Storage::disk('public')->exists($receiptPath)) {
                 Storage::disk('public')->delete($receiptPath);
             }
             return response()->json(['message' => $e->getMessage()], 422);
-
         } catch (\Throwable $e) {
             if (Storage::disk('public')->exists($receiptPath)) {
                 Storage::disk('public')->delete($receiptPath);

@@ -102,6 +102,8 @@
                         'roomNumber'     => 'ROOM ' . $room['num'],
                         'floor'          => $room['floor'],
                         'status'         => $room['status'],
+                        'is_bookable'    => $room['is_bookable'],
+                        'empty_beds'     => $room['empty_beds'],
                         'price'          => $room['price'],
                         'img'            => $room['img'],
                         'pax'            => $room['pax'],
@@ -121,10 +123,16 @@
                         'virtualTour' => $room['tourId'],
                         'from'        => $fromPath,
                     ]);
+
+                    // Visual Badge Fix: If it's bookable and marked Occupied, show Available
+                    $displayStatus = $room['status'];
+                    if ($room['is_bookable'] && $room['status'] === 'Occupied') {
+                        $displayStatus = 'Available';
+                    }
                 @endphp
 
                 <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden flex flex-col shadow-sm">
-                    {{-- ===== IMAGE (click → opens 360° tour in the SAME tab) ===== --}}
+                    {{-- ===== IMAGE ===== --}}
                     <a href="{{ $tourUrl }}"
                        aria-label="Open 360° tour for {{ $room['name'] }}"
                        class="relative h-52 block group cursor-pointer">
@@ -133,10 +141,10 @@
 
                         {{-- status badge (top-left) --}}
                         <span class="absolute top-3 left-3 text-[11px] font-bold px-3 py-1 rounded-full
-                            {{ $room['status'] === 'Occupied' ? 'bg-rose-200 text-rose-700' : '' }}
-                            {{ $room['status'] === 'Available' ? 'bg-green-100 text-green-700' : '' }}
-                            {{ $room['status'] === 'Reserved' ? 'bg-amber-100 text-amber-700' : '' }}">
-                            {{ $room['status'] }}
+                            {{ $displayStatus === 'Occupied' ? 'bg-rose-200 text-rose-700' : '' }}
+                            {{ $displayStatus === 'Available' ? 'bg-green-100 text-green-700' : '' }}
+                            {{ $displayStatus === 'Reserved' ? 'bg-amber-100 text-amber-700' : '' }}">
+                            {{ $displayStatus }}
                         </span>
 
                         {{-- hover hint --}}
@@ -172,7 +180,7 @@
                                 <i class="fa-regular fa-eye"></i> Details
                             </button>
 
-                            @if($room['status'] === 'Available')
+                            @if($room['is_bookable'])
                                 <button
                                     type="button"
                                     class="open-reserve-modal-btn bg-[#02122c] hover:bg-[#0d2347] text-white rounded-lg py-2 text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition"

@@ -458,38 +458,35 @@
         });
     });
 
-    /* -------------------- Export CSV -------------------- */
+            /* -------------------- Export CSV -------------------- */
     document.getElementById('export-csv').addEventListener('click', () => {
+        const range = document.getElementById('range-input').value || 'monthly';
+
+        // Which section checkboxes are ticked?
+        const checked = Array.from(document.querySelectorAll('.export-section:checked'))
+            .map(el => el.value);
+
+        // "All Sections" wins → export everything in one file
+        // If nothing is ticked → fall back to the active tab
         const activeTab = document.querySelector('.reports-tab-btn.active')?.dataset.tab || 'occupancy';
-        let csvContent = "data:text/csv;charset=utf-8,";
-        
-        if (activeTab === 'revenue') {
-            csvContent += "Period,Rent,Utilities,Other,Total\n";
-            document.querySelectorAll('#panel-revenue tbody tr').forEach(row => {
-                const cols = row.querySelectorAll('td');
-                if (cols.length >= 5) {
-                    const rowData = Array.from(cols).map(c => `"${c.innerText.replace(/,/g, '')}"`).join(",");
-                    csvContent += rowData + "\n";
-                }
-            });
-        } else if (activeTab === 'occupancy') {
-            csvContent += "Room Type,Occupied,Reserved,Vacant,Total\n";
-            document.querySelectorAll('#panel-occupancy tbody tr').forEach(row => {
-                const cols = row.querySelectorAll('td');
-                if (cols.length >= 5) {
-                    const rowData = Array.from(cols).map(c => `"${c.innerText.trim()}"`).join(",");
-                    csvContent += rowData + "\n";
-                }
-            });
+
+        let section;
+        if (checked.includes('all')) {
+            section = 'all';
+        } else if (checked.length === 1) {
+            section = checked[0];
+        } else if (checked.length > 1) {
+            // Multiple sections ticked but not "all" → still export everything
+            // (your controller only understands single values or 'all')
+            section = 'all';
+        } else {
+            section = ['occupancy', 'revenue', 'service', 'payments'].includes(activeTab)
+                ? activeTab
+                : 'occupancy';
         }
 
-        const encodedUri = encodeURI(csvContent);
-        const link = document.createElement("a");
-        link.setAttribute("href", encodedUri);
-        link.setAttribute("download", `report_${activeTab}.csv`);
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+        window.location.href =
+            `{{ route('admin.reports.export') }}?range=${encodeURIComponent(range)}&section=${encodeURIComponent(section)}`;
     });
 
     /* -------------------- Export PDF (Placeholder) -------------------- */

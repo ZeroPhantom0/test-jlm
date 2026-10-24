@@ -128,6 +128,7 @@ class AuditLogController extends Controller
             'pink'   => 'bg-pink-100 text-pink-700',
             'amber'  => 'bg-amber-100 text-amber-700',
             'purple' => 'bg-violet-100 text-violet-700',
+            'sky'    => 'bg-sky-100 text-sky-700',
         ];
 
         $avatarColors = [

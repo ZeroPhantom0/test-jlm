@@ -15,10 +15,15 @@ export default function RoomChangeModals() {
     const [saving, setSaving]             = useState(false);
     const [requestsData, setRequestsData] = useState({});
     const [currentRoom, setCurrentRoom]   = useState('');
+    const [availableRooms, setAvailableRooms] = useState([]);
+    
+    // State for tracking the selected room's bed slots
+    const [selectedRoomData, setSelectedRoomData] = useState(null);
 
     // Form state for submit
     const [form, setForm] = useState({
         requested_room: '',
+        room_bed_id:    '', 
         reason:         '',
     });
 
@@ -30,6 +35,14 @@ export default function RoomChangeModals() {
         if (!el) return;
 
         setCurrentRoom(el.dataset.currentRoom || '');
+
+        if (el.dataset.availableRooms) {
+            try {
+                setAvailableRooms(JSON.parse(el.dataset.availableRooms));
+            } catch (e) {
+                console.error('Invalid available rooms JSON', e);
+            }
+        }
 
         if (el.dataset.requests) {
             try {
@@ -45,14 +58,13 @@ export default function RoomChangeModals() {
     // ============================================================
     useEffect(() => {
         const handler = (e) => {
-            // Open submit modal
             if (e.target.closest('#open-new-room-change')) {
-                setForm({ requested_room: '', reason: '' });
+                setForm({ requested_room: '', room_bed_id: '', reason: '' });
+                setSelectedRoomData(null);
                 setShowSubmit(true);
                 return;
             }
 
-            // Open details modal
             const viewBtn = e.target.closest('.view-room-change-details-btn');
             if (viewBtn) {
                 const id = viewBtn.dataset.requestId;
@@ -64,7 +76,6 @@ export default function RoomChangeModals() {
                 return;
             }
 
-            // Open Delete Modal (from row)
             const cancelBtn = e.target.closest('.cancel-room-change-btn');
             if (cancelBtn) {
                 const id = cancelBtn.dataset.requestId;
@@ -84,12 +95,39 @@ export default function RoomChangeModals() {
     const updateField = (key, value) => setForm((f) => ({ ...f, [key]: value }));
 
     // ============================================================
+    // Handle room selection (to show bed slots)
+    // ============================================================
+    const handleRoomSelect = (e) => {
+        const roomId = e.target.value;
+        updateField('requested_room', roomId);
+        
+        // Reset bed selection
+        updateField('room_bed_id', '');
+
+        // Find the room data to get bed slots
+        const room = availableRooms.find(r => r.id.toString() === roomId.toString());
+        setSelectedRoomData(room || null);
+    };
+
+    // ============================================================
     // Submit new room change request
     // ============================================================
     const handleSubmit = async (e) => {
         e.preventDefault();
-        if (!form.requested_room.trim() || !form.reason.trim()) {
-            alert('Please fill in both Requested Room and Reason.');
+        
+        if (!form.requested_room) {
+            alert('Please select an available room.');
+            return;
+        }
+
+        // Check if bed selection is required
+        if (selectedRoomData?.bed_slots?.length > 0 && !form.room_bed_id) {
+            alert('Please select a bed slot for this room.');
+            return;
+        }
+
+        if (!form.reason.trim()) {
+            alert('Please provide a reason.');
             return;
         }
 
@@ -104,6 +142,7 @@ export default function RoomChangeModals() {
                 },
                 body: JSON.stringify({
                     requested_room: form.requested_room,
+                    room_bed_id:    form.room_bed_id,
                     reason:         form.reason,
                 }),
             });
@@ -119,7 +158,7 @@ export default function RoomChangeModals() {
     };
 
     // ============================================================
-    // Open Delete Modal (from Details footer)
+    // Delete Modal Handlers
     // ============================================================
     const openDeleteModal = () => {
         if (!request) return;
@@ -133,9 +172,6 @@ export default function RoomChangeModals() {
         setDeleteTarget(null);
     };
 
-    // ============================================================
-    // Confirm Cancel (Delete)
-    // ============================================================
     const confirmCancel = async () => {
         if (!deleteTarget) return;
         setSaving(true);
@@ -168,7 +204,8 @@ export default function RoomChangeModals() {
             {/* ============================================================ */}
             {showSubmit && (
                 <Modal onClose={() => setShowSubmit(false)} maxWidth="max-w-[480px]">
-                    <div className="p-5 pb-4 flex items-center justify-between border-b border-slate-100">
+                    {/* FIXED HEADER */}
+                    <div className="p-5 pb-4 flex items-center justify-between border-b border-slate-100 shrink-0">
                         <h3 className="text-lg font-bold text-slate-900">Submit Room Change Request</h3>
                         <button
                             onClick={() => setShowSubmit(false)}
@@ -178,12 +215,13 @@ export default function RoomChangeModals() {
                         </button>
                     </div>
 
-                    <form onSubmit={handleSubmit}>
-                        <div className="p-6 overflow-y-auto flex flex-col gap-4">
-
+                    <form onSubmit={handleSubmit} className="flex flex-col min-h-0">
+                        {/* SCROLLABLE BODY */}
+                        <div className="p-6 overflow-y-auto max-h-[65vh] flex flex-col gap-4">
+                            
                             <div className="bg-blue-50 rounded-lg p-3 flex gap-2.5 text-[13px] text-blue-600 leading-snug">
                                 <i className="fa-regular fa-circle-info mt-0.5"></i>
-                                <span>Request a room change by providing your desired unit and reason.</span>
+                                <span>Request a room change by selecting from the currently available units.</span>
                             </div>
 
                             <div>
@@ -202,14 +240,65 @@ export default function RoomChangeModals() {
                                 <label className="block text-[12.5px] font-semibold text-slate-700 mb-1.5">
                                     Requested Room <span className="text-rose-500">*</span>
                                 </label>
-                                <input
-                                    type="text"
+                                <select
                                     value={form.requested_room}
-                                    onChange={(e) => updateField('requested_room', e.target.value)}
-                                    placeholder="e.g. 301"
-                                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5 text-[13px] outline-none focus:border-slate-400"
-                                />
+                                    onChange={handleRoomSelect}
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5 text-[13px] outline-none focus:border-slate-400 cursor-pointer"
+                                >
+                                    <option value="" disabled>-- Select an available room --</option>
+                                    {availableRooms.map((room) => (
+                                        <option key={room.id} value={room.id}>
+                                            {room.label}
+                                        </option>
+                                    ))}
+                                </select>
+                                {availableRooms.length === 0 && (
+                                    <p className="text-[11px] text-rose-500 mt-1">No other rooms are currently available.</p>
+                                )}
                             </div>
+
+                            {/* BED SLOT SELECTION */}
+                            {selectedRoomData?.bed_slots?.length > 0 && (
+                                <div className="bg-teal-50 border border-teal-100 rounded-xl p-4 mt-1">
+                                    <div className="flex items-center gap-2 text-[13px] font-bold text-teal-800 mb-3">
+                                        <i className="fa-solid fa-bed"></i>
+                                        Select Your Bed Slot <span className="text-rose-500">*</span>
+                                    </div>
+                                    
+                                    <div className="grid grid-cols-2 gap-2">
+                                        {selectedRoomData.bed_slots.map((slot) => {
+                                            const isSelected = form.room_bed_id === slot.id;
+                                            const isOccupied = slot.status === 'Occupied';
+
+                                            return (
+                                                <button
+                                                    key={slot.id}
+                                                    type="button"
+                                                    disabled={isOccupied}
+                                                    onClick={() => updateField('room_bed_id', slot.id)}
+                                                    className={`
+                                                        flex flex-col items-start p-2.5 rounded-lg border text-left transition
+                                                        ${
+                                                            isOccupied
+                                                                ? "bg-slate-100 border-slate-200 opacity-60 cursor-not-allowed"
+                                                                : isSelected
+                                                                ? "bg-teal-600 border-teal-600 text-white shadow-sm"
+                                                                : "bg-white border-slate-200 hover:border-teal-400"
+                                                        }
+                                                    `}
+                                                >
+                                                    <span className={`text-[12px] font-bold ${isSelected ? "text-white" : "text-slate-800"}`}>
+                                                        {slot.label}
+                                                    </span>
+                                                    <span className={`text-[10px] font-semibold mt-0.5 ${isSelected ? "text-teal-100" : isOccupied ? "text-rose-500" : "text-emerald-500"}`}>
+                                                        {slot.status}
+                                                    </span>
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
 
                             <div>
                                 <label className="block text-[12.5px] font-semibold text-slate-700 mb-1.5">
@@ -224,7 +313,8 @@ export default function RoomChangeModals() {
                             </div>
                         </div>
 
-                        <div className="p-5 border-t border-slate-100 flex justify-end items-center gap-3">
+                        {/* FIXED FOOTER */}
+                        <div className="p-5 border-t border-slate-100 flex justify-end items-center gap-3 shrink-0">
                             <button
                                 type="button"
                                 onClick={() => setShowSubmit(false)}
@@ -234,7 +324,7 @@ export default function RoomChangeModals() {
                             </button>
                             <button
                                 type="submit"
-                                disabled={saving}
+                                disabled={saving || availableRooms.length === 0}
                                 className="bg-[#001838] hover:bg-[#0d2347] disabled:opacity-50 text-white px-4 py-2.5 rounded-lg text-[13px] font-medium"
                             >
                                 {saving ? 'Submitting…' : 'Submit Request'}
@@ -249,7 +339,8 @@ export default function RoomChangeModals() {
             {/* ============================================================ */}
             {showDetails && request && (
                 <Modal onClose={() => setShowDetails(false)} maxWidth="max-w-[480px]">
-                    <div className="p-5 pb-4 flex items-center justify-between border-b border-slate-100">
+                    {/* FIXED HEADER */}
+                    <div className="p-5 pb-4 flex items-center justify-between border-b border-slate-100 shrink-0">
                         <div className="flex items-center gap-3">
                             <h3 className="text-lg font-bold text-slate-900">Room Change Request</h3>
                             <span className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-full inline-flex items-center gap-1 ${
@@ -270,8 +361,8 @@ export default function RoomChangeModals() {
                         </button>
                     </div>
 
-                    <div className="p-6 overflow-y-auto flex flex-col gap-4">
-
+                    {/* SCROLLABLE BODY */}
+                    <div className="p-6 overflow-y-auto max-h-[65vh] flex flex-col gap-4">
                         <div className="text-xs text-slate-400 -mt-1">{request.ref}</div>
 
                         <div className="grid grid-cols-2 gap-3">
@@ -299,7 +390,8 @@ export default function RoomChangeModals() {
                         </div>
                     </div>
 
-                    <div className="p-5 border-t border-slate-100 flex justify-between items-center">
+                    {/* FIXED FOOTER */}
+                    <div className="p-5 border-t border-slate-100 flex justify-between items-center shrink-0">
                         {request.status === 'Pending' && (
                             <button
                                 onClick={openDeleteModal}
@@ -325,7 +417,7 @@ export default function RoomChangeModals() {
             {/* ============================================================ */}
             {showDelete && deleteTarget && (
                 <Modal onClose={closeDeleteModal} maxWidth="max-w-[460px]">
-                    <div className="p-5 pb-4 flex items-center justify-between border-b border-slate-100">
+                    <div className="p-5 pb-4 flex items-center justify-between border-b border-slate-100 shrink-0">
                         <h3 className="text-lg font-bold text-slate-900">Cancel Room Change</h3>
                         <button
                             onClick={closeDeleteModal}
@@ -336,7 +428,7 @@ export default function RoomChangeModals() {
                         </button>
                     </div>
 
-                    <div className="p-6 text-center">
+                    <div className="p-6 text-center overflow-y-auto max-h-[65vh]">
                         <div className="w-16 h-16 mx-auto rounded-full bg-rose-50 flex items-center justify-center mb-4">
                             <i className="fa-solid fa-trash-can text-rose-500 text-2xl"></i>
                         </div>
@@ -359,7 +451,7 @@ export default function RoomChangeModals() {
                         </div>
                     </div>
 
-                    <div className="p-5 border-t border-slate-100 flex justify-end gap-3">
+                    <div className="p-5 border-t border-slate-100 flex justify-end gap-3 shrink-0">
                         <button
                             onClick={closeDeleteModal}
                             disabled={saving}

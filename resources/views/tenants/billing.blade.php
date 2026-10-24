@@ -135,7 +135,7 @@
                                 'due_date'     => $reservationDue['due_date']?->format('M j, Y') ?? '—',
                                 'gcash_number' => '0917-123-4567',
                             ], JSON_HEX_APOS | JSON_HEX_QUOT) }}"
-                            class="bg-[#00a86b] hover:bg-emerald-700 text-white px-5 py-2.5 rounded-lg font-bold text-[13px] inline-flex items-center gap-2">
+                            style="background-color: #00a86b; color: #ffffff; border: 2px solid #10b981; padding: 10px 20px; border-radius: 8px; font-weight: 700; font-size: 13px; display: inline-flex; align-items: center; gap: 8px; cursor: pointer; transition: all 0.2s;">
                         <i class="fa-regular fa-credit-card"></i> Pay Now
                     </button>
                 </div>
@@ -195,7 +195,7 @@
                                     'due_date'     => $inv->due_date?->format('M j, Y') ?? '—',
                                     'gcash_number' => '0917-123-4567',
                                 ], JSON_HEX_APOS | JSON_HEX_QUOT) }}"
-                                class="bg-[#00a86b] hover:bg-emerald-700 text-white px-5 py-2.5 rounded-lg font-bold text-[13px] inline-flex items-center gap-2">
+                                style="background-color: #00a86b; color: #ffffff; border: 2px solid #10b981; padding: 10px 20px; border-radius: 8px; font-weight: 700; font-size: 13px; display: inline-flex; align-items: center; gap: 8px; cursor: pointer; transition: all 0.2s;">
                             <i class="fa-regular fa-credit-card"></i> Pay Now
                         </button>
                     </div>

@@ -10,6 +10,7 @@ use App\Models\Tenant;
 use App\Models\User;
 use App\Services\AuditLogger;
 use App\Mail\PaymentVerifiedMail;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -22,7 +23,6 @@ class BillingController extends Controller
 
     public function index(Request $request)
     {
-        // ── unchanged ──
         $filters = [
             'status' => $request->query('status'),
         ];
@@ -102,10 +102,6 @@ class BillingController extends Controller
         ));
     }
 
-    // ────────────────────────────────────────────────────────────────
-    // UPDATED: safe edit — recomputes balance, syncs reservation,
-    // keeps date_paid/verified_* consistent with status.
-    // ────────────────────────────────────────────────────────────────
     public function update(Request $request, Invoice $invoice)
     {
         $validated = $request->validate([
@@ -126,8 +122,6 @@ class BillingController extends Controller
         $paid    = (float) $validated['amount_paid'];
         $balance = max(0, round($total - $paid, 2));
 
-        // Derive the true status from the numbers, but respect the
-        // admin's choice unless it contradicts the paid amount.
         $status = $validated['status'];
 
         if ($status === 'Paid' && $paid + 0.005 < $total) {
@@ -136,7 +130,6 @@ class BillingController extends Controller
             $status = 'Paid';
         }
 
-        // Accept "M j, Y" (what the modal sends), "Y-m-d", or ISO.
         $parseDate = function ($value) {
             if (! $value || $value === '-') return null;
             foreach (['M j, Y', 'Y-m-d', 'Y-m-d H:i:s'] as $fmt) {
@@ -147,25 +140,37 @@ class BillingController extends Controller
                     // try next format
                 }
             }
-            try { return \Carbon\Carbon::parse($value); } catch (\Throwable $e) { return null; }
+            try {
+                return \Carbon\Carbon::parse($value);
+            } catch (\Throwable $e) {
+                return null;
+            }
         };
+
+        // ── Recompute the due date from the (possibly edited) check-in/out ──
+        $parsedCheckIn  = $parseDate($validated['check_in'])  ?? $invoice->check_in;
+        $parsedCheckOut = $parseDate($validated['check_out']) ?? $invoice->check_out;
+
+        $computedDueDate = $parseDate($validated['due_date'])
+            ?? $this->computeDueDate($parsedCheckIn, $parsedCheckOut);
 
         DB::beginTransaction();
         try {
             $wasPaid = $invoice->status === 'Paid';
+            $wasPending = $invoice->status === 'Pending';
 
             $invoice->update([
                 'tenant_name'    => $validated['tenant_name'],
                 'room_number'    => $validated['room_number'],
                 'description'    => $validated['description'],
-                'check_in'       => $parseDate($validated['check_in'])  ?? $invoice->check_in,
-                'check_out'      => $parseDate($validated['check_out']) ?? $invoice->check_out,
+                'check_in'       => $parsedCheckIn,
+                'check_out'      => $parsedCheckOut,
                 'rate_per_day'   => $validated['rate_per_day'],
                 'days'           => $validated['days'],
                 'total_amount'   => $total,
                 'amount_paid'    => $paid,
                 'balance'        => $status === 'Paid' ? 0.0 : $balance,
-                'due_date'       => $parseDate($validated['due_date']) ?? $invoice->due_date,
+                'due_date'       => $computedDueDate,
                 'payment_method' => $validated['payment_method'],
                 'status'         => $status,
 
@@ -180,8 +185,12 @@ class BillingController extends Controller
                     : null,
             ]);
 
-            // If this invoice is tied to a reservation, keep the
-            // reservation + tenant in sync — same logic as verifyPayment().
+            // If the admin manually changed the status to Paid (and it wasn't before),
+            // we need to deduct the balance from the reservation.
+            if (!$wasPaid && $status === 'Paid') {
+                $this->deductFromReservation($invoice->fresh());
+            }
+
             $this->syncLinkedReservation($invoice->fresh());
 
             AuditLogger::log([
@@ -209,7 +218,6 @@ class BillingController extends Controller
         }
     }
 
-    // ── unchanged ──
     public function verifyPayment(Request $request, Invoice $invoice)
     {
         if ($invoice->status !== 'Pending') {
@@ -229,6 +237,9 @@ class BillingController extends Controller
                 'verified_by' => $verified ? Auth::id() : null,
                 'verified_at' => $verified ? now() : null,
             ]);
+
+            // NEW: Deduct the payment from the reservation's remaining balance
+            $this->deductFromReservation($invoice);
 
             $this->syncLinkedReservation($invoice);
 
@@ -261,7 +272,6 @@ class BillingController extends Controller
         }
     }
 
-    // ── unchanged ──
     public function rejectPayment(Request $request, Invoice $invoice)
     {
         $validated = $request->validate([
@@ -274,14 +284,78 @@ class BillingController extends Controller
             ], 422);
         }
 
+        // Look up the tenant email once so both branches can use it in the audit log
+        $tenantUser  = User::find($invoice->tenant_id);
+        if (! $tenantUser) {
+            $tenantUser = User::find(Tenant::find($invoice->tenant_id)?->user_id);
+        }
+        $tenantEmail = $tenantUser?->email ?? $invoice->tenant_name;
+
         DB::beginTransaction();
         try {
+            // ── 1. Is this invoice tied to a still-Pending reservation? ──
+            $reservation = $this->reservationForInvoice($invoice);
+
+            if ($reservation && $reservation->status === 'Pending') {
+                if (
+                    $reservation->proof_of_payment
+                    && Storage::disk('public')->exists($reservation->proof_of_payment)
+                ) {
+                    Storage::disk('public')->delete($reservation->proof_of_payment);
+                }
+
+                $reservation->update([
+                    'status'           => 'Rejected',
+                    'admin_notes'      => $validated['admin_notes'] ?: $reservation->admin_notes,
+                    'processed_by'     => Auth::id(),
+                    'processed_at'     => now(),
+                    'proof_of_payment' => null,
+                ]);
+
+                $reservation->room?->syncStatus();
+
+                $invoices = Invoice::query()
+                    ->where('description', 'like', '%' . $reservation->reference_no . '%')
+                    ->whereIn('status', ['Unpaid', 'Partial', 'Pending'])
+                    ->get();
+
+                foreach ($invoices as $inv) {
+                    if ($inv->receipt_path && Storage::disk('public')->exists($inv->receipt_path)) {
+                        Storage::disk('public')->delete($inv->receipt_path);
+                    }
+                    $inv->delete();
+                }
+
+                AuditLogger::log([
+                    'action'       => 'REJECT',
+                    'module'       => 'BILLING',
+                    'description'  => 'Payment rejected for ' . $tenantEmail
+                        . ' — ' . $invoice->transaction_no
+                        . ' (₱' . number_format((float) $invoice->balance, 2) . ')'
+                        . ' — ' . $validated['admin_notes'],
+                    'status'       => 'warning',
+                    'subject_type' => Invoice::class,
+                    'subject_id'   => $invoice->id,
+                ]);
+
+                DB::commit();
+
+                $this->notifyTenant($invoice, 'rejected', $validated['admin_notes']);
+
+                return response()->json([
+                    'message' => 'Payment rejected. Reservation cancelled. Tenant has been notified.',
+                    'status'  => 'Rejected',
+                    'invoice' => null,
+                ]);
+            }
+
+            // ── 2. Not reservation-linked ──
             if ($invoice->receipt_path && Storage::disk('public')->exists($invoice->receipt_path)) {
                 Storage::disk('public')->delete($invoice->receipt_path);
             }
 
             $revertedAmount = max(0, (float) $invoice->amount_paid - (float) $invoice->balance);
-            $revertStatus = $revertedAmount > 0 ? 'Partial' : 'Unpaid';
+            $revertStatus   = $revertedAmount > 0 ? 'Partial' : 'Unpaid';
 
             $invoice->update([
                 'status'       => $revertStatus,
@@ -290,6 +364,18 @@ class BillingController extends Controller
                 'verified_by'  => null,
                 'verified_at'  => null,
                 'amount_paid'  => $revertedAmount,
+            ]);
+
+            AuditLogger::log([
+                'action'       => 'REJECT',
+                'module'       => 'BILLING',
+                'description'  => 'Payment rejected for ' . $tenantEmail
+                    . ' — ' . $invoice->transaction_no
+                    . ' (₱' . number_format((float) $invoice->balance, 2) . ')'
+                    . ' — ' . $validated['admin_notes'],
+                'status'       => 'warning',
+                'subject_type' => Invoice::class,
+                'subject_id'   => $invoice->id,
             ]);
 
             DB::commit();
@@ -310,12 +396,70 @@ class BillingController extends Controller
         }
     }
 
-    // ── unchanged ──
     public function sendReminder(Invoice $invoice)
     {
         return response()->json([
             'message' => "Reminder sent to {$invoice->tenant_name}.",
         ]);
+    }
+
+    // ============================================================
+    // HELPERS
+    // ============================================================
+
+    /**
+     * Deducts the verified payment amount from the linked Reservation's remaining balance.
+     * This prevents the "Pay Now" loop from happening again.
+     */
+    private function deductFromReservation(Invoice $invoice): void
+    {
+        $reservation = $this->reservationForInvoice($invoice);
+
+        if ($reservation) {
+            // Use the amount_paid on the invoice. Since we verified it, this is the amount the tenant paid.
+            $paidAmount = (float) $invoice->amount_paid;
+            
+            $newRemaining = max(0, (float) $reservation->remaining - $paidAmount);
+            
+            $reservation->update(['remaining' => $newRemaining]);
+        }
+    }
+
+    /**
+     * Compute the due date for an invoice based on the stay length.
+     *
+     *   ≤ 1 day         → check_out (same day)
+     *   2 – 6 days      → check_in + 3 days
+     *   7 – 31 days     → check_in + 7 days
+     *   32 – 100 days   → check_in + 1 month
+     *   101 – 364 days  → check_in + 2 months
+     *   ≥ 365 days      → check_in + 3 months
+     */
+    private function computeDueDate(?Carbon $checkIn, ?Carbon $checkOut): Carbon
+    {
+        if (! $checkIn) {
+            return now()->addDays(7);
+        }
+
+        $out  = $checkOut ?: $checkIn->copy()->addDay();
+        $days = max(1, $checkIn->diffInDays($out));
+
+        if ($days <= 1) {
+            return $out->copy();
+        }
+        if ($days <= 6) {
+            return $checkIn->copy()->addDays(3);
+        }
+        if ($days <= 31) {
+            return $checkIn->copy()->addDays(7);
+        }
+        if ($days <= 100) {
+            return $checkIn->copy()->addMonths(1);
+        }
+        if ($days <= 364) {
+            return $checkIn->copy()->addMonths(2);
+        }
+        return $checkIn->copy()->addMonths(3);
     }
 
     private function deriveInvoiceStatus(Invoice $invoice): array
@@ -347,12 +491,10 @@ class BillingController extends Controller
             return;
         }
 
-        // ── Guard: don't auto-approve if the bed was taken in the meantime ──
         if (
             in_array($reservation->room?->room_type, ['Bedspace', 'Barkada Room'], true)
             && $reservation->room_bed_id
         ) {
-
             $in  = $reservation->check_in;
             $out = $reservation->check_out;
 
@@ -424,7 +566,7 @@ class BillingController extends Controller
 
             if ($type === 'verified' && class_exists('App\\Notifications\\PaymentVerifiedNotification')) {
                 $tenantUser->notify(new \App\Notifications\PaymentVerifiedNotification($invoice));
-            } elseif ($type === 'rejected' && class_exists('App\\Notifications\\PaymentRejectedNotification')) {
+            } elseif ($type === 'rejected' && class_exists('App\Notifications\\PaymentRejectedNotification')) {
                 $tenantUser->notify(new \App\Notifications\PaymentRejectedNotification($invoice, $notes));
             }
         } catch (\Throwable $e) {

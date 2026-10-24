@@ -91,11 +91,64 @@ class TenantNotificationController extends Controller
             ];
         }
 
-        // 3) Reservation status updates (admin-processed only)
-        //    - Approved / Expired → always show
-        //    - Rejected → only when an admin did it (processed_by IS NOT NULL).
-        //      Tenant self-cancels also write status='Rejected' but leave
-        //      processed_by NULL, so those are intentionally hidden.
+        // 2a) Recently verified invoices (Paid / Partial after admin verify)
+        $resolvedInvoices = DB::table('invoices')
+            ->where('tenant_id', $tenant->id)
+            ->whereIn('status', ['Paid', 'Partial'])
+            ->whereNotNull('verified_at')
+            ->where('verified_at', '>=', now()->subDays(14))
+            ->orderByDesc('verified_at')
+            ->limit(10)
+            ->get();
+
+        foreach ($resolvedInvoices as $inv) {
+            $isPaid = $inv->status === 'Paid';
+
+            $notifications[] = [
+                'id'          => 'invok-' . $inv->id,
+                'type'        => 'invoice',
+                'icon'        => $isPaid
+                    ? 'fa-solid fa-circle-check'
+                    : 'fa-solid fa-circle-exclamation',
+                'color'       => $isPaid
+                    ? 'text-emerald-600 bg-emerald-50'
+                    : 'text-amber-600 bg-amber-50',
+                'title'       => $isPaid ? 'Payment verified' : 'Partial payment verified',
+                'description' => $inv->transaction_no . ' · ₱'
+                    . number_format((float) $inv->amount_paid, 2)
+                    . ($isPaid ? ' fully paid' : ' — remaining ₱'
+                        . number_format((float) $inv->balance, 2)),
+                'time'        => $inv->verified_at,
+                'unread'      => true,
+                'link'        => '/tenants/billing',
+            ];
+        }
+
+        // 2b) Recently rejected payments (from audit log)
+        $rejectedLogs = DB::table('audit_logs')
+            ->where('module', 'BILLING')
+            ->where('action', 'REJECT')
+            ->where('description', 'like', '%' . ($user->email ?? '__no_match__') . '%')
+            ->where('created_at', '>=', now()->subDays(14))
+            ->orderByDesc('created_at')
+            ->limit(10)
+            ->get();
+
+        foreach ($rejectedLogs as $log) {
+            $notifications[] = [
+                'id'          => 'invrej-' . $log->id,
+                'type'        => 'invoice',
+                'icon'        => 'fa-solid fa-circle-xmark',
+                'color'       => 'text-rose-600 bg-rose-50',
+                'title'       => 'Payment rejected',
+                'description' => $log->description,
+                'time'        => $log->created_at,
+                'unread'      => true,
+                'link'        => '/tenants/billing',
+            ];
+        }
+
+        // 3) Reservation status updates
         $reservations = DB::table('reservations')
             ->where('user_id', $user->id)
             ->where(function ($q) {
@@ -136,7 +189,7 @@ class TenantNotificationController extends Controller
             ];
         }
 
-        // 4) Maintenance requests — updates on status
+        // 4) Maintenance requests
         $maintenance = DB::table('maintenance_requests')
             ->where('tenant_id', $tenant->id)
             ->whereIn('status', ['In Progress', 'Completed', 'Cancelled'])
@@ -165,7 +218,7 @@ class TenantNotificationController extends Controller
             ];
         }
 
-        // 5) Room change requests — approved / rejected
+        // 5) Room change requests
         $roomChanges = DB::table('room_change_requests')
             ->where('tenant_id', $tenant->id)
             ->whereIn('status', ['Approved', 'Rejected'])
@@ -194,7 +247,7 @@ class TenantNotificationController extends Controller
             ];
         }
 
-        // 6) Stay extension requests — approved / rejected
+        // 6) Stay extension requests
         $stayExtensions = DB::table('stay_extension_requests')
             ->where('tenant_id', $tenant->id)
             ->whereIn('status', ['Approved', 'Rejected'])
@@ -256,9 +309,6 @@ class TenantNotificationController extends Controller
         ]);
     }
 
-    /**
-     * Mark an admin message as read.
-     */
     public function markMessageRead(Request $request)
     {
         $validated = $request->validate([
@@ -272,7 +322,6 @@ class TenantNotificationController extends Controller
             return response()->json(['success' => false], 403);
         }
 
-        // Only allow messages belonging to this tenant's conversations
         $belongs = DB::table('messages as m')
             ->join('conversations as c', 'c.id', '=', 'm.conversation_id')
             ->where('m.id', $validated['message_id'])

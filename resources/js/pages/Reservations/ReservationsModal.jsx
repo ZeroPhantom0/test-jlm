@@ -1,5 +1,5 @@
 // resources/js/pages/Reservations/ReservationsModal.jsx
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import Modal from "../../components/Modal";
 
 const csrf = () =>
@@ -13,6 +13,8 @@ const FALLBACK_ROOM = {
     roomNumber: "ROOM 101",
     floor: 1,
     status: "Available",
+    is_bookable: true,  // <-- Added
+    empty_beds: 1,      // <-- Added
     price: 600,
     img: "https://images.unsplash.com/photo-1598928506311-c55ded91a20c?auto=format&fit=crop&w=600&q=80",
     pax: "1-2 pax",
@@ -29,8 +31,60 @@ const FALLBACK_ROOM = {
     is_male_only: false,
 };
 
+// ── Due-date tiers (mirrors computeDueDate() on the server) ──
+const TIER_1_MAX_DAYS = 1;    // ≤ 1 day       → check_out (same day)
+const TIER_2_MAX_DAYS = 6;    // 2 – 6 days    → check_in + 3 days
+const TIER_3_MAX_DAYS = 31;   // 7 – 31 days   → check_in + 7 days
+const TIER_4_MAX_DAYS = 100;  // 32 – 100 days → check_in + 1 month
+const TIER_5_MAX_DAYS = 364;  // 101 – 364 days → check_in + 2 months
+                              // ≥ 365 days    → check_in + 3 months
+
+function computeDueDatePreview(checkInDate, checkInTime, checkOutDate, checkOutTime) {
+    if (!checkInDate || !checkOutDate) return null;
+
+    const inD  = new Date(checkInDate  + "T" + (checkInTime  || "00:00"));
+    const outD = new Date(checkOutDate + "T" + (checkOutTime || "00:00"));
+    if (isNaN(inD) || isNaN(outD) || outD <= inD) return null;
+
+    const msPerDay = 1000 * 60 * 60 * 24;
+    const days = Math.max(1, Math.ceil((outD - inD) / msPerDay));
+
+    if (days <= TIER_1_MAX_DAYS) {
+        return new Date(outD);
+    }
+
+    const due = new Date(inD);
+    if (days <= TIER_2_MAX_DAYS) {
+        due.setDate(due.getDate() + 3);
+    } else if (days <= TIER_3_MAX_DAYS) {
+        due.setDate(due.getDate() + 7);
+    } else if (days <= TIER_4_MAX_DAYS) {
+        due.setMonth(due.getMonth() + 1);
+    } else if (days <= TIER_5_MAX_DAYS) {
+        due.setMonth(due.getMonth() + 2);
+    } else {
+        due.setMonth(due.getMonth() + 3);
+    }
+    return due;
+}
+
+function formatDateLong(d) {
+    if (!d) return "";
+    return d.toLocaleDateString("en-US", {
+        year: "numeric", month: "short", day: "numeric",
+    });
+}
+
+function describeDueRule(days) {
+    if (days <= TIER_1_MAX_DAYS) return "on your check-out date";
+    if (days <= TIER_2_MAX_DAYS) return "3 days after check-in";
+    if (days <= TIER_3_MAX_DAYS) return "7 days after check-in";
+    if (days <= TIER_4_MAX_DAYS) return "1 month after check-in";
+    if (days <= TIER_5_MAX_DAYS) return "2 months after check-in";
+    return "3 months after check-in";
+}
+
 export default function ReservationsModal() {
-    // ---------- Modal state ----------
     const [showDetails, setShowDetails] = useState(false);
     const [showReserve, setShowReserve] = useState(false);
     const [showCancel, setShowCancel] = useState(false);
@@ -39,16 +93,11 @@ export default function ReservationsModal() {
     const [room, setRoom] = useState(FALLBACK_ROOM);
     const [saving, setSaving] = useState(false);
 
-    // ---------- Synchronous in-flight guard ----------
-    // A ref updates immediately, so the *second* click sees `true`
-    // even before React re-renders with the disabled button.
     const inFlightRef = useRef(false);
     const cancelInFlightRef = useRef(false);
 
-    // ---------- Reservations data passed from Blade ----------
     const [reservationsData, setReservationsData] = useState({});
 
-    // ---------- Reserve form state ----------
     const [form, setForm] = useState({
         check_in_date: "",
         check_in_time: "",
@@ -63,9 +112,6 @@ export default function ReservationsModal() {
         agreed_to_terms: false,
     });
 
-    // ============================================================
-    // Read reservations map from the Blade mount element
-    // ============================================================
     useEffect(() => {
         const el = document.getElementById("tenant-reservations-modals");
         if (!el) return;
@@ -79,12 +125,8 @@ export default function ReservationsModal() {
         }
     }, []);
 
-    // ============================================================
-    // Event delegation: open Details / Reserve / Cancel modals
-    // ============================================================
     useEffect(() => {
         const handler = (e) => {
-            // ---- Details ----
             const detailsBtn = e.target.closest(".open-room-details-btn");
             if (detailsBtn) {
                 const data = JSON.parse(detailsBtn.dataset.room || "{}");
@@ -93,10 +135,8 @@ export default function ReservationsModal() {
                 return;
             }
 
-            // ---- Reserve ----
             const reserveBtn = e.target.closest(".open-reserve-modal-btn");
             if (reserveBtn) {
-                // Reset the guard when opening a fresh modal.
                 inFlightRef.current = false;
                 setSaving(false);
 
@@ -119,7 +159,6 @@ export default function ReservationsModal() {
                 return;
             }
 
-            // ---- Cancel ----
             const cancelBtn = e.target.closest(".cancel-reservation-btn");
             if (cancelBtn) {
                 const key = cancelBtn.dataset.resKey;
@@ -139,7 +178,7 @@ export default function ReservationsModal() {
 
     const closeDetails = () => setShowDetails(false);
     const closeReserve = () => {
-        if (inFlightRef.current) return; // don't close while the request is in flight
+        if (inFlightRef.current) return;
         setShowReserve(false);
     };
 
@@ -174,19 +213,57 @@ export default function ReservationsModal() {
     const remaining = totalCharges - payNow;
 
     // ============================================================
+    // 24-hour minimum enforcement (client side)
+    // ============================================================
+    const minCheckOutDate = useMemo(() => {
+        if (!form.check_in_date) return "";
+        const inD = new Date(form.check_in_date + "T00:00:00");
+        if (isNaN(inD)) return "";
+        inD.setDate(inD.getDate() + 1);
+        const yyyy = inD.getFullYear();
+        const mm = String(inD.getMonth() + 1).padStart(2, "0");
+        const dd = String(inD.getDate()).padStart(2, "0");
+        return `${yyyy}-${mm}-${dd}`;
+    }, [form.check_in_date]);
+
+    const meets24hMinimum = useMemo(() => {
+        if (!form.check_in_date || !form.check_out_date) return true;
+        const inStr = form.check_in_date + "T" + (form.check_in_time || "00:00");
+        const outStr = form.check_out_date + "T" + (form.check_out_time || "00:00");
+        const inD = new Date(inStr);
+        const outD = new Date(outStr);
+        if (isNaN(inD) || isNaN(outD)) return false;
+        return (outD - inD) >= 24 * 60 * 60 * 1000;
+    }, [form.check_in_date, form.check_in_time, form.check_out_date, form.check_out_time]);
+
+    // ============================================================
+    // Due-date preview (uses the same tiers as the server)
+    // ============================================================
+    const dueDatePreview = useMemo(
+        () => computeDueDatePreview(
+            form.check_in_date,
+            form.check_in_time,
+            form.check_out_date,
+            form.check_out_time,
+        ),
+        [form.check_in_date, form.check_in_time, form.check_out_date, form.check_out_time],
+    );
+
+    // ============================================================
     // Submit reservation
-    //
-    // The `inFlightRef` guard is synchronous, so the second click
-    // of a double-click never reaches fetch() at all. The `saving`
-    // state is kept only for the "Submitting…" label + disabled
-    // button styling.
     // ============================================================
     const handleSubmit = async () => {
-        // ── Double-click guard (synchronous) ──
         if (inFlightRef.current) return;
 
         if (!form.check_in_date || !form.check_out_date) {
             alert("Please select both check-in and check-out dates.");
+            return;
+        }
+
+        if (!meets24hMinimum) {
+            alert(
+                "The minimum stay is 24 hours (1 full day). Please extend your check-out date or time."
+            );
             return;
         }
 
@@ -253,8 +330,6 @@ export default function ReservationsModal() {
                     data.message || "Failed to submit reservation.",
                 );
 
-            // data.idempotent === true means the server saw a duplicate
-            // and returned the first reservation — still a success.
             setShowReserve(false);
             window.location.reload();
         } catch (err) {
@@ -262,21 +337,13 @@ export default function ReservationsModal() {
             inFlightRef.current = false;
             setSaving(false);
         }
-        // Note: on success we deliberately don't clear the ref/state —
-        // the page reloads and the component unmounts.
     };
 
-    // ============================================================
-    // Copy GCash number
-    // ============================================================
     const handleCopyGCash = () => {
         navigator.clipboard?.writeText("0917-123-4567");
         alert("GCash number copied!");
     };
 
-    // ============================================================
-    // Confirm Cancel Reservation
-    // ============================================================
     const confirmCancelReservation = async () => {
         if (!cancelTarget) return;
         if (cancelInFlightRef.current) return;
@@ -310,9 +377,7 @@ export default function ReservationsModal() {
 
     return (
         <>
-            {/* ============================================================ */}
             {/* DETAILS MODAL */}
-            {/* ============================================================ */}
             {showDetails && (
                 <Modal onClose={closeDetails} maxWidth="max-w-[540px]">
                     <div className="p-5 pb-4 flex items-center justify-between border-b border-slate-100">
@@ -390,8 +455,7 @@ export default function ReservationsModal() {
                                 { label: "BEDS", value: room.beds },
                                 {
                                     label: "AVAILABLE SLOTS",
-                                    value:
-                                        room.status === "Available" ? "1" : "0",
+                                    value: room.is_bookable ? (room.empty_beds || "1") : "0", // <-- Changed logic
                                 },
                                 {
                                     label: "DAILY RENT",
@@ -420,7 +484,8 @@ export default function ReservationsModal() {
                             >
                                 Close
                             </button>
-                            {room.status === "Available" ? (
+                            {/* <-- Changed condition to room.is_bookable --> */}
+                            {room.is_bookable ? (
                                 <button
                                     onClick={() => {
                                         closeDetails();
@@ -446,9 +511,7 @@ export default function ReservationsModal() {
                 </Modal>
             )}
 
-            {/* ============================================================ */}
             {/* RESERVE MODAL */}
-            {/* ============================================================ */}
             {showReserve && (
                 <Modal onClose={closeReserve} maxWidth="max-w-[580px]">
                     <button
@@ -497,12 +560,25 @@ export default function ReservationsModal() {
                                     <input
                                         type="date"
                                         value={form.check_in_date}
-                                        onChange={(e) =>
-                                            updateField(
-                                                "check_in_date",
-                                                e.target.value,
-                                            )
-                                        }
+                                        min={new Date().toISOString().split("T")[0]}
+                                        onChange={(e) => {
+                                            const value = e.target.value;
+                                            updateField("check_in_date", value);
+                                            if (value) {
+                                                const inD = new Date(value + "T00:00:00");
+                                                inD.setDate(inD.getDate() + 1);
+                                                const yyyy = inD.getFullYear();
+                                                const mm = String(inD.getMonth() + 1).padStart(2, "0");
+                                                const dd = String(inD.getDate()).padStart(2, "0");
+                                                const minOut = `${yyyy}-${mm}-${dd}`;
+                                                if (
+                                                    form.check_out_date &&
+                                                    form.check_out_date < minOut
+                                                ) {
+                                                    updateField("check_out_date", minOut);
+                                                }
+                                            }
+                                        }}
                                         className="w-full border border-slate-200 rounded-lg px-3.5 py-2.5 text-[13px] outline-none focus:border-blue-400"
                                     />
                                 </div>
@@ -534,6 +610,7 @@ export default function ReservationsModal() {
                                     <input
                                         type="date"
                                         value={form.check_out_date}
+                                        min={minCheckOutDate || undefined}
                                         onChange={(e) =>
                                             updateField(
                                                 "check_out_date",
@@ -566,6 +643,44 @@ export default function ReservationsModal() {
                                 Total Stay Duration: {days} night
                                 {days > 1 ? "s" : ""}
                             </p>
+
+                            {form.check_in_date && minCheckOutDate && (
+                                <p className="text-[11px] text-slate-400 mt-1 pl-1">
+                                    <i className="fa-solid fa-circle-info mr-1"></i>
+                                    Minimum stay is 24 hours. Earliest check-out:{" "}
+                                    <strong className="text-slate-600">
+                                        {minCheckOutDate}
+                                    </strong>
+                                </p>
+                            )}
+
+                            {!meets24hMinimum && (
+                                <div className="bg-rose-50 border border-rose-200 rounded-lg p-2.5 mt-2 flex items-start gap-2">
+                                    <i className="fa-solid fa-circle-exclamation text-rose-500 mt-0.5"></i>
+                                    <p className="text-[12px] text-rose-700 leading-snug">
+                                        Your selected duration is under 24 hours.
+                                        Please extend your check-out date or
+                                        time — the minimum stay is 1 full day.
+                                    </p>
+                                </div>
+                            )}
+
+                            {dueDatePreview && (
+                                <div className="bg-indigo-50 border border-indigo-100 rounded-lg p-2.5 mt-2 flex items-start gap-2">
+                                    <i className="fa-regular fa-calendar-check text-indigo-500 mt-0.5"></i>
+                                    <p className="text-[12px] text-indigo-800 leading-snug">
+                                        <strong>Payment due date:</strong>{" "}
+                                        <span className="font-bold">
+                                            {formatDateLong(dueDatePreview)}
+                                        </span>
+                                        <br />
+                                        <span className="text-indigo-600">
+                                            For a {days}-day stay, the balance
+                                            is due {describeDueRule(days)}.
+                                        </span>
+                                    </p>
+                                </div>
+                            )}
                         </div>
 
                         {room.bed_slots && room.bed_slots.length > 0 && (
@@ -958,7 +1073,7 @@ export default function ReservationsModal() {
                             </button>
                             <button
                                 onClick={handleSubmit}
-                                disabled={saving}
+                                disabled={saving || !meets24hMinimum}
                                 className="bg-[#02122c] hover:bg-[#0d2347] disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-2.5 rounded-lg text-[13px] font-bold"
                             >
                                 {saving ? (
@@ -975,9 +1090,7 @@ export default function ReservationsModal() {
                 </Modal>
             )}
 
-            {/* ============================================================ */}
-            {/* CANCEL RESERVATION CONFIRMATION MODAL */}
-            {/* ============================================================ */}
+            {/* CANCEL CONFIRMATION MODAL */}
             {showCancel && cancelTarget && (
                 <Modal onClose={closeCancelModal} maxWidth="max-w-[460px]">
                     <div className="p-5 pb-4 flex items-center justify-between border-b border-slate-100 shrink-0">
