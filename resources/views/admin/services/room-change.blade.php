@@ -2,6 +2,13 @@
 @section('title', 'Room Change Requests')
 
 @section('content')
+@php
+    // Hide finalized statuses (Approved & Rejected)
+    $activeRequests = $requests->filter(function ($req) {
+        return $req->status === 'Pending';
+    })->values();
+@endphp
+
 <div class="p-4 md:p-8 max-w-[1400px] mx-auto space-y-6">
 
     {{-- Page Title --}}
@@ -11,7 +18,7 @@
         </div>
         <div>
             <h2 class="text-[22px] font-extrabold text-slate-900">Room Change Requests</h2>
-            <p class="text-[13px] text-slate-500 mt-0.5">Review and manage tenant room transfer requests</p>
+            <p class="text-[13px] text-slate-500 mt-0.5">Review and manage pending tenant room transfer requests</p>
         </div>
     </div>
 
@@ -60,7 +67,7 @@
                     </tr>
                 </thead>
                 <tbody>
-                    @forelse($requests as $req)
+                    @forelse($activeRequests as $req)
                     <tr class="border-b border-slate-50 last:border-0">
                         {{-- Tenant --}}
                         <td class="py-4 px-4">
@@ -109,18 +116,17 @@
                         {{-- Actions (icon-only) --}}
                         <td class="py-4 px-4">
                             <div class="flex items-center justify-end gap-3">
-                                @if($req->status === 'Pending')
-                                    <i
-                                        class="fa-regular fa-circle-check text-emerald-500 text-[15px] cursor-pointer hover:text-emerald-600 transition icon-approve"
-                                        title="Approve"
-                                        data-request-id="{{ $req->id }}"
-                                    ></i>
-                                    <i
-                                        class="fa-regular fa-circle-xmark text-rose-500 text-[15px] cursor-pointer hover:text-rose-600 transition icon-reject"
-                                        title="Reject"
-                                        data-request-id="{{ $req->id }}"
-                                    ></i>
-                                @endif
+                                {{-- Approve & Reject are always visible since only Pending is shown --}}
+                                <i
+                                    class="fa-regular fa-circle-check text-emerald-500 text-[15px] cursor-pointer hover:text-emerald-600 transition icon-approve"
+                                    title="Approve"
+                                    data-request-id="{{ $req->id }}"
+                                ></i>
+                                <i
+                                    class="fa-regular fa-circle-xmark text-rose-500 text-[15px] cursor-pointer hover:text-rose-600 transition icon-reject"
+                                    title="Reject"
+                                    data-request-id="{{ $req->id }}"
+                                ></i>
                                 <i
                                     class="fa-regular fa-eye text-slate-700 text-[15px] cursor-pointer hover:text-orange-500 transition open-details-btn"
                                     title="View Details"
@@ -133,7 +139,7 @@
                     <tr>
                         <td colspan="8" class="text-center py-12 text-slate-400">
                             <i class="fa-solid fa-inbox text-4xl mb-3"></i>
-                            <p class="text-sm">No room change requests found.</p>
+                            <p class="text-sm">No pending room change requests found.</p>
                         </td>
                     </tr>
                     @endforelse

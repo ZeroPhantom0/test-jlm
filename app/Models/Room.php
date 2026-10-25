@@ -49,48 +49,165 @@ class Room extends Model
     }
 
     // ============================================================
-    // OCCUPANCY
+    // HELPERS
     // ============================================================
+
+    /**
+     * Check if a bed ID is a valid slot format (e.g., B1-U, B2-L).
+     */
+    private function isValidBedId(?string $bedId): bool
+    {
+        return $bedId && preg_match('/^B\d+-[UL]$/', $bedId);
+    }
+
+    // ============================================================
+    // OCCUPANCY & BED SLOTS (UNIFIED LOGIC)
+    // ============================================================
+
+    /**
+     * Get the bed slots and their statuses.
+     */
+    public function getBedSlotsAttribute(): array
+    {
+        if ($this->room_type === 'Solo Room') {
+            $isOccupied = $this->tenants()->where('status', 'active')->exists();
+            return [[
+                'id' => 'SOLO',
+                'label' => 'Whole Room',
+                'status' => $isOccupied ? 'Occupied' : 'Available'
+            ]];
+        }
+
+        $totalBeds = (int) $this->total_beds;
+        if ($totalBeds <= 0) {
+            return [];
+        }
+
+        // 1. Get bed slots held by active tenants
+        $activeTenants = Tenant::where('room_id', $this->id)
+            ->where('status', 'active')
+            ->with('approvedReservation')
+            ->get();
+
+        $heldByTenants = [];
+        foreach ($activeTenants as $tenant) {
+            $bedId = $tenant->approvedReservation?->room_bed_id;
+            if ($this->isValidBedId($bedId)) {
+                $heldByTenants[$bedId] = true;
+            }
+        }
+
+        // 2. Get bed slots held by APPROVED reservations
+        $heldByReservations = \App\Models\Reservation::where('room_id', $this->id)
+            ->where('status', 'Approved')
+            ->whereNotNull('room_bed_id')
+            ->where(function ($q) {
+                $q->whereNull('check_out')
+                    ->orWhereDate('check_out', '>=', now()->toDateString());
+            })
+            ->pluck('room_bed_id')
+            ->filter(fn($id) => $this->isValidBedId($id))
+            ->all();
+        
+        $heldByReservations = array_flip($heldByReservations);
+
+        // 3. Build the slots
+        $slots = [];
+        $slotIndex = 0;
+        for ($i = 1; $i <= ceil($totalBeds / 2); $i++) {
+            foreach (['U' => 'Upper', 'L' => 'Lower'] as $code => $label) {
+                if ($slotIndex >= $totalBeds) break 2;
+
+                $id = "B{$i}-{$code}";
+                $isOccupied = isset($heldByTenants[$id]) || isset($heldByReservations[$id]);
+
+                $slots[] = [
+                    'id'     => $id,
+                    'label'  => "Bed {$i} - {$label}",
+                    'status' => $isOccupied ? 'Occupied' : 'Available',
+                ];
+                $slotIndex++;
+            }
+        }
+
+        return $slots;
+    }
 
     public function getOccupiedCountAttribute(): int
     {
-        if (array_key_exists('tenants_count', $this->attributes)) {
-            return (int) $this->attributes['tenants_count'];
+        if ($this->room_type === 'Solo Room') {
+            return $this->tenants()->where('status', 'active')->exists() ? 1 : 0;
         }
 
-        return (int) $this->tenants()->where('status', 'active')->count();
+        return collect($this->bed_slots)->where('status', 'Occupied')->count();
     }
 
     public function getAvailableSlotsAttribute(): int
     {
+        if ($this->room_type === 'Solo Room') {
+            return 1 - $this->occupied_count;
+        }
         return max(0, (int) $this->total_beds - $this->occupied_count);
     }
 
     public function getOccupancyLabelAttribute(): string
     {
-        return $this->occupied_count . '/' . $this->total_beds;
+        $total = $this->room_type === 'Solo Room' ? 1 : $this->total_beds;
+        return $this->occupied_count . '/' . $total;
     }
 
     public function getOccupancyPercentAttribute(): int
     {
-        if ($this->total_beds <= 0) {
-            return 0;
-        }
-
-        return (int) round(($this->occupied_count / $this->total_beds) * 100);
+        $total = $this->room_type === 'Solo Room' ? 1 : $this->total_beds;
+        if ($total <= 0) return 0;
+        return (int) round(($this->occupied_count / $total) * 100);
     }
 
     // ============================================================
-    // TENANT NAME FORMATTING
+    // TENANT NAMES FOR DISPLAY
     // ============================================================
+
+    /**
+     * Get occupants by checking BOTH Active Tenants and Approved Reservations.
+     */
+    private function getValidOccupants()
+    {
+        // 1. Get active tenants with valid bed IDs
+        $tenantOccupants = $this->tenants()
+            ->where('status', 'active')
+            ->with('user', 'approvedReservation')
+            ->get()
+            ->filter(fn($t) => $this->isValidBedId($t->approvedReservation?->room_bed_id))
+            ->map(fn($t) => [
+                'name' => $t->user->name ?? 'Unknown',
+                'bed_id' => $t->approvedReservation->room_bed_id
+            ]);
+
+        // 2. Get approved reservations with valid bed IDs
+        $reservationOccupants = \App\Models\Reservation::where('room_id', $this->id)
+            ->where('status', 'Approved')
+            ->whereNotNull('room_bed_id')
+            ->where(function ($q) {
+                $q->whereNull('check_out')
+                    ->orWhereDate('check_out', '>=', now()->toDateString());
+            })
+            ->get()
+            ->filter(fn($r) => $this->isValidBedId($r->room_bed_id))
+            ->map(fn($r) => [
+                'name' => $r->tenant_name,
+                'bed_id' => $r->room_bed_id
+            ]);
+
+        // Merge them and remove duplicates (by bed_id)
+        return $tenantOccupants->concat($reservationOccupants)
+            ->unique('bed_id')
+            ->values();
+    }
 
     public function getActiveTenantNamesAttribute(): array
     {
-        return $this->tenants()
-            ->where('status', 'active')
-            ->with('user')
-            ->get()
-            ->pluck('user.name')
+        return $this->getValidOccupants()
+            ->pluck('name')
             ->filter()
             ->values()
             ->toArray();
@@ -99,7 +216,7 @@ class Room extends Model
     public function getTenantDisplayAttribute(): ?string
     {
         $names = $this->active_tenant_names;
-        
+
         if (empty($names)) {
             return null;
         }
@@ -108,7 +225,8 @@ class Room extends Model
             return $names[0];
         }
 
-        return $names[0] . ', ' . substr($names[1], 0, 7) . '...';
+        $extraCount = count($names) - 1;
+        return $names[0] . ' +' . $extraCount . ' more';
     }
 
     public function getTenantTooltipAttribute(): string
@@ -116,35 +234,26 @@ class Room extends Model
         return implode(', ', $this->active_tenant_names);
     }
 
-    /**
-     * Parse bed slots for active tenants.
-     * Maps "B1-U" to "Bed 1 - Upper Deck"
-     */
     public function getBedConfigurationsAttribute(): array
     {
         if ($this->room_type === 'Solo Room') {
             return [];
         }
 
-        return $this->tenants()
-            ->where('status', 'active')
-            ->with('user', 'approvedReservation')
-            ->get()
-            ->map(function ($tenant) {
-                $slot = $tenant->approvedReservation?->room_bed_id ?? 'Unassigned';
+        return $this->getValidOccupants()
+            ->map(function ($occupant) {
+                $slot = $occupant['bed_id'];
                 $label = 'Unassigned';
 
-                if ($slot !== 'Unassigned' && preg_match('/^B(\d+)-([UL])$/', $slot, $matches)) {
+                if (preg_match('/^B(\d+)-([UL])$/', $slot, $matches)) {
                     $bedNum = $matches[1];
                     $deck = $matches[2] === 'U' ? 'Upper Deck' : 'Lower Deck';
                     $label = "Bed {$bedNum} ({$deck})";
-                } elseif ($slot !== 'Unassigned') {
-                    $label = $slot; // Fallback for custom IDs
                 }
 
                 return [
-                    'name'   => $tenant->user->name ?? 'Unknown',
-                    'initial'=> strtoupper(substr($tenant->user->name ?? '?', 0, 1)),
+                    'name'   => $occupant['name'],
+                    'initial' => strtoupper(substr($occupant['name'] ?? '?', 0, 1)),
                     'slot'   => $slot,
                     'label'  => $label,
                 ];
@@ -158,15 +267,14 @@ class Room extends Model
 
     public function syncStatus(): void
     {
-        $names    = $this->active_tenant_names;
-        $occupied = count($names);
+        $occupied = $this->occupied_count;
+        $total = $this->room_type === 'Solo Room' ? 1 : $this->total_beds;
 
-        // If the room is completely full (or over capacity), it is Occupied.
-        // Otherwise, it is Available.
-        $isFull = ($this->total_beds > 0 && $occupied >= $this->total_beds);
+        $isFull = ($total > 0 && $occupied >= $total);
         
         $newStatus = $isFull ? 'Occupied' : 'Available';
 
+        $names = $this->active_tenant_names;
         $newTenantName = empty($names) ? null : implode(', ', $names);
 
         if ($this->status !== $newStatus || $this->tenant_name !== $newTenantName) {
@@ -231,8 +339,8 @@ class Room extends Model
             'occupied_count'   => $this->occupied_count,
             'available_slots'  => $this->available_slots,
             'occupancy_label'  => $this->occupancy_label,
-            'occupancy_percent'=> $this->occupancy_percent,
-            'bed_configurations' => $this->bed_configurations, // <-- Added
+            'occupancy_percent' => $this->occupancy_percent,
+            'bed_configurations' => $this->bed_configurations,
         ];
     }
 }

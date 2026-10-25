@@ -35,12 +35,35 @@ function csrfToken() {
         ?.getAttribute("content") || "";
 }
 
+/* Reusable avatar block */
+function UserAvatar({ src, name = "User", size = 36 }) {
+    if (src && typeof src === 'string' && src.trim() !== "" && src !== "null") {
+        return (
+            <img
+                src={src}
+                alt={name}
+                className="rounded-full object-cover border border-slate-200"
+                style={{ width: `${size}px`, height: `${size}px` }}
+            />
+        );
+    }
+    return (
+        <div
+            className="rounded-full bg-slate-100 text-slate-400 flex items-center justify-center border border-slate-200"
+            style={{ width: `${size}px`, height: `${size}px` }}
+            aria-label={name}
+        >
+            <i className="fa-solid fa-user" style={{ fontSize: size * 0.45 }} />
+        </div>
+    );
+}
+
 export default function AdminTopHeader({
     title         = "Dashboard",
     userName      = "Administrator",
     userRole      = "Admin",
     userEmail     = "",
-    avatar        = "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&q=80&w=120",
+    avatar        = null, // Changed default to null
     showHamburger = false,
 }) {
     const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -135,8 +158,6 @@ export default function AdminTopHeader({
                 body: JSON.stringify({ message_id: messageId }),
             }).catch(console.error);
         }
-
-        // 3. Let the anchor navigate normally
     };
 
     return (
@@ -256,11 +277,7 @@ export default function AdminTopHeader({
                             </h4>
                             <p className="text-[11px] text-slate-500">{userRole}</p>
                         </div>
-                        <img
-                            src={avatar}
-                            alt={userName}
-                            className="w-9 h-9 rounded-full object-cover border border-slate-200"
-                        />
+                        <UserAvatar src={avatar} name={userName} size={36} />
                         <i
                             className={`fa-solid fa-chevron-down text-[11px] text-slate-500 transition-transform ${dropdownOpen ? "rotate-180" : ""}`}
                         ></i>
@@ -269,7 +286,7 @@ export default function AdminTopHeader({
                     {dropdownOpen && (
                         <div className="absolute right-0 mt-3 w-[270px] bg-white rounded-2xl border border-slate-200 shadow-xl z-[2000] overflow-hidden">
                             <div className="p-4 bg-slate-50 border-b border-slate-100 flex items-center gap-3">
-                                <img src={avatar} alt={userName} className="w-[42px] h-[42px] rounded-full object-cover" />
+                                <UserAvatar src={avatar} name={userName} size={42} />
                                 <div className="overflow-hidden">
                                     <h4 className="text-[13.5px] font-bold text-slate-900 leading-tight">{userName}</h4>
                                     <p className="text-[11px] text-slate-500 mt-0.5 truncate">

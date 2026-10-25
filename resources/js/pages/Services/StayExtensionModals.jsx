@@ -16,6 +16,7 @@ export default function StayExtensionModals() {
     const [requestsData, setRequestsData] = useState({});
     const [roomNumber, setRoomNumber]     = useState('');
     const [currentLeaseEnd, setCurrentLeaseEnd] = useState('');
+    const [minRequestedDate, setMinRequestedDate] = useState('');
 
     // Form state
     const [form, setForm] = useState({
@@ -33,6 +34,7 @@ export default function StayExtensionModals() {
 
         setRoomNumber(el.dataset.roomNumber || '');
         setCurrentLeaseEnd(el.dataset.currentLeaseEnd || '');
+        setMinRequestedDate(el.dataset.minRequestedDate || '');
 
         if (el.dataset.requests) {
             try {
@@ -96,10 +98,14 @@ export default function StayExtensionModals() {
     const handleSubmit = async (e) => {
         e.preventDefault();
 
-        if (!form.current_lease_end.trim() ||
-            !form.requested_lease_end.trim() ||
-            !form.reason.trim()) {
+        if (!form.requested_lease_end.trim() || !form.reason.trim()) {
             alert('Please fill in all required fields.');
+            return;
+        }
+
+        // Client-side check against minRequestedDate
+        if (minRequestedDate && form.requested_lease_end < minRequestedDate) {
+            alert('The requested lease end must be after your current check-out date.');
             return;
         }
 
@@ -160,7 +166,7 @@ export default function StayExtensionModals() {
             });
             const data = await res.json().catch(() => ({}));
             if (!res.ok) throw new Error(data.message || 'Failed to cancel request.');
-            
+
             setShowDelete(false);
             setDeleteTarget(null);
             setShowDetails(false);
@@ -215,33 +221,31 @@ export default function StayExtensionModals() {
                             <div className="grid grid-cols-2 gap-3">
                                 <div>
                                     <label className="block text-[12.5px] font-semibold text-slate-700 mb-1.5">
-                                        Current Lease End <span className="text-rose-500">*</span>
+                                        Current Lease End
                                     </label>
-                                    <div className="relative">
-                                        <input
-                                            type="text"
-                                            value={form.current_lease_end}
-                                            onChange={(e) => updateField('current_lease_end', e.target.value)}
-                                            placeholder="mm/dd/yyyy"
-                                            className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5 pr-8 text-[13px] outline-none focus:border-slate-400"
-                                        />
-                                        <i className="fa-regular fa-calendar absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 text-[13px] pointer-events-none"></i>
-                                    </div>
+                                    <input
+                                        type="text"
+                                        value={currentLeaseEnd}
+                                        readOnly
+                                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5 text-[13px] text-slate-600 cursor-not-allowed"
+                                    />
                                 </div>
                                 <div>
                                     <label className="block text-[12.5px] font-semibold text-slate-700 mb-1.5">
                                         Requested Lease End <span className="text-rose-500">*</span>
                                     </label>
-                                    <div className="relative">
-                                        <input
-                                            type="text"
-                                            value={form.requested_lease_end}
-                                            onChange={(e) => updateField('requested_lease_end', e.target.value)}
-                                            placeholder="mm/dd/yyyy"
-                                            className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5 pr-8 text-[13px] outline-none focus:border-slate-400"
-                                        />
-                                        <i className="fa-regular fa-calendar absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 text-[13px] pointer-events-none"></i>
-                                    </div>
+                                    <input
+                                        type="date"
+                                        value={form.requested_lease_end}
+                                        min={minRequestedDate}
+                                        onChange={(e) => updateField('requested_lease_end', e.target.value)}
+                                        className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2.5 text-[13px] outline-none focus:border-slate-400"
+                                    />
+                                    {minRequestedDate && (
+                                        <p className="text-[11px] text-slate-400 mt-1">
+                                            Must be after {currentLeaseEnd || 'your current check-out'}.
+                                        </p>
+                                    )}
                                 </div>
                             </div>
 

@@ -10,7 +10,6 @@
         'past_reservations' => 0, 'service_requests' => 0,
     ];
 
-    // If controller passed a keyed map, convert back to array for iteration
     if (!array_is_list($historyItems) && !empty($historyItems)) {
         $historyItems = array_values($historyItems);
     }
@@ -22,7 +21,6 @@
         'cancelled' => ['bg-slate-100 text-slate-600 border border-slate-200', 'fa-regular fa-circle-xmark'],
         'rejected'  => ['bg-red-100 text-red-600',       'fa-regular fa-circle-xmark'],
         'expired'   => ['bg-amber-100 text-amber-600',   'fa-regular fa-clock'],
-        'pending'   => ['bg-amber-100 text-amber-700',   'fa-regular fa-clock'],
     ];
 
     $colorClasses = [
@@ -40,12 +38,23 @@
 
 <div class="p-4 md:p-8 max-w-6xl mx-auto">
 
-    {{-- Page header --}}
-    <div class="flex items-center gap-2.5 text-xl font-extrabold text-slate-900 mb-1">
-        <i class="fa-solid fa-bolt-lightning text-emerald-500 text-lg"></i>
-        <span>Activity History</span>
+    {{-- Page header with Back button --}}
+    <div class="flex items-center justify-between gap-3 mb-6">
+        <div>
+            <div class="flex items-center gap-2.5 text-xl font-extrabold text-slate-900 mb-1">
+                <i class="fa-solid fa-bolt-lightning text-emerald-500 text-lg"></i>
+                <span>Activity History</span>
+            </div>
+            <p class="text-[13px] text-slate-500">Your complete transaction and service history</p>
+        </div>
+
+        {{-- Back to Dashboard --}}
+        <a href="{{ route('tenants.dashboard') }}"
+           class="inline-flex items-center gap-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 px-4 py-2 rounded-lg text-[13px] font-semibold transition shrink-0">
+            <i class="fa-solid fa-arrow-left text-[11px]"></i>
+            Back to Dashboard
+        </a>
     </div>
-    <p class="text-[13px] text-slate-500 mb-6">Your complete transaction and service history</p>
 
     {{-- Summary cards --}}
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">

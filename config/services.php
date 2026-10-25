@@ -39,4 +39,11 @@ return [
         'redirect'      => env('GOOGLE_REDIRECT_URI'),
     ],
 
+    // ────────────────────────────────────────────────────────────
+    // IPROG SMS Service
+    // ────────────────────────────────────────────────────────────
+    'iprog_sms' => [
+        'token' => env('IPROG_SMS_API_TOKEN'),
+    ],
+
 ];

@@ -2,6 +2,13 @@
 @section('title', 'Maintenance Requests')
 
 @section('content')
+@php
+    // Hide finalized statuses (Completed & Cancelled)
+    $activeRequests = $requests->filter(function ($r) {
+        return !in_array($r->status, ['Completed', 'Cancelled']);
+    })->values();
+@endphp
+
 <div class="p-4 md:p-8 max-w-6xl">
 
     {{-- Page Title --}}
@@ -11,7 +18,7 @@
         </div>
         <div>
             <h2 class="text-xl font-bold text-slate-900">Maintenance Requests</h2>
-            <p class="text-[13px] text-slate-500 mt-0.5">Submit and track maintenance issues</p>
+            <p class="text-[13px] text-slate-500 mt-0.5">Track active and in-progress maintenance issues</p>
         </div>
     </div>
 
@@ -36,7 +43,7 @@
     <div class="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
         <div class="flex justify-between items-center mb-5">
             <span class="text-[13px] text-slate-500">
-                {{ $requests->count() }} request{{ $requests->count() === 1 ? '' : 's' }}
+                {{ $activeRequests->count() }} active request{{ $activeRequests->count() === 1 ? '' : 's' }}
             </span>
             <button
                 id="open-new-request"
@@ -47,38 +54,33 @@
             </button>
         </div>
 
-        @if ($requests->isEmpty())
+        @if ($activeRequests->isEmpty())
             <div class="text-center py-12 text-slate-400 text-sm">
                 <i class="fa-solid fa-inbox text-3xl mb-3"></i>
-                <p>No maintenance requests yet.</p>
+                <p>No active maintenance requests.</p>
             </div>
         @else
         <div class="overflow-x-auto">
             <table class="w-full text-left">
                 <thead>
                     <tr class="text-xs font-semibold text-slate-600 border-b border-slate-100">
-                        <th class="py-3 px-2 w-[35%]">Request</th>
-                        <th class="py-3 px-2 w-[20%]">Assigned Staff</th>
-                        <th class="py-3 px-2 w-[15%]">Status</th>
-                        <th class="py-3 px-2 w-[18%]">Date</th>
-                        <th class="py-3 px-2 w-[12%] text-right">Actions</th>
+                        <th class="py-3 px-2 w-[45%]">Request</th>
+                        <th class="py-3 px-2 w-[25%]">Assigned Staff</th>
+                        <th class="py-3 px-2 w-[20%]">Status</th>
+                        <th class="py-3 px-2 w-[10%] text-right">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
-                    @foreach ($requests as $r)
+                    @foreach ($activeRequests as $r)
                         @php
                             $statusClasses = match ($r->status) {
                                 'Pending'     => 'bg-amber-100 text-amber-700',
                                 'In Progress' => 'bg-blue-100 text-blue-600',
-                                'Completed'   => 'bg-emerald-100 text-emerald-600',
-                                'Cancelled'   => 'bg-slate-100 text-slate-500',
                                 default       => 'bg-slate-100 text-slate-500',
                             };
                             $statusIcon = match ($r->status) {
                                 'Pending'     => 'fa-regular fa-clock',
                                 'In Progress' => 'fa-solid fa-spinner',
-                                'Completed'   => 'fa-regular fa-circle-check',
-                                'Cancelled'   => 'fa-regular fa-circle-xmark',
                                 default       => 'fa-regular fa-circle',
                             };
                         @endphp
@@ -86,7 +88,7 @@
                             {{-- Request title + description --}}
                             <td class="py-4 px-2">
                                 <div class="font-semibold text-slate-800 text-[13px]">{{ $r->title }}</div>
-                                <div class="text-xs text-slate-400 mt-0.5">{{ $r->description }}</div>
+                                <div class="text-xs text-slate-400 mt-0.5 line-clamp-1">{{ $r->description }}</div>
                             </td>
 
                             {{-- Assigned staff --}}
@@ -99,11 +101,6 @@
                                 <span class="{{ $statusClasses }} text-[11px] font-semibold px-2.5 py-1 rounded-full inline-flex items-center gap-1">
                                     <i class="{{ $statusIcon }}"></i> {{ $r->status }}
                                 </span>
-                            </td>
-
-                            {{-- Date --}}
-                            <td class="py-4 px-2 text-slate-600 text-[13px] whitespace-nowrap">
-                                {{ $r->created_at?->format('M d, Y') }}
                             </td>
 
                             {{-- Actions --}}

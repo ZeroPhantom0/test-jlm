@@ -3,7 +3,13 @@
 
 @section('content')
 
-{{-- React mount for accordion toggle behavior --}}
+@php
+    // Which tab should open on load?
+    // 1. If the controller redirected back with session('settings_tab'), use that
+    // 2. Otherwise default to 'profile'
+    $activeTab = session('settings_tab', 'profile');
+@endphp
+
 <div id="tenant-settings-accordions"></div>
 
 <div class="p-4 md:p-8 max-w-6xl mx-auto">
@@ -19,193 +25,228 @@
         </div>
     </div>
 
+    {{-- Success/Error Messages --}}
+    @if(session('success'))
+        <div class="bg-emerald-50 border border-emerald-200 text-emerald-800 text-[13px] rounded-lg px-4 py-3 mb-6 flex items-center gap-2">
+            <i class="fa-solid fa-circle-check"></i>
+            {{ session('success') }}
+        </div>
+    @endif
+    @if($errors->any())
+        <div class="bg-rose-50 border border-rose-200 text-rose-800 text-[13px] rounded-lg px-4 py-3 mb-6 flex items-start gap-2">
+            <i class="fa-solid fa-circle-exclamation mt-0.5"></i>
+            <ul class="list-disc list-inside">
+                @foreach($errors->all() as $error)
+                    <li>{{ $error }}</li>
+                @endforeach
+            </ul>
+        </div>
+    @endif
+
     <div class="grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-6 items-start" id="settings-root">
 
         {{-- ==================== TABS ==================== --}}
         <div class="bg-white rounded-xl border border-slate-100 p-3 flex flex-col gap-1 shadow-sm">
-            <button type="button"
-                    class="settings-tab active flex items-center justify-between px-3.5 py-3 rounded-lg text-[13.5px] font-semibold transition-all bg-[#02122c] text-white"
-                    data-tab="profile">
-                <div class="flex items-center gap-3">
-                    <i class="fa-regular fa-user"></i>
-                    <span>Profile</span>
-                </div>
-                <i class="fa-solid fa-chevron-right text-[11px] chevron"></i>
-            </button>
-
-            <button type="button"
-                    class="settings-tab flex items-center justify-between px-3.5 py-3 rounded-lg text-[13.5px] font-semibold text-slate-600 hover:bg-slate-50 transition-all"
-                    data-tab="security">
-                <div class="flex items-center gap-3">
-                    <i class="fa-solid fa-lock"></i>
-                    <span>Security</span>
-                </div>
-                <i class="fa-solid fa-chevron-right text-[11px] chevron hidden"></i>
-            </button>
-
-            <button type="button"
-                    class="settings-tab flex items-center justify-between px-3.5 py-3 rounded-lg text-[13.5px] font-semibold text-slate-600 hover:bg-slate-50 transition-all"
-                    data-tab="preferences">
-                <div class="flex items-center gap-3">
-                    <i class="fa-solid fa-palette"></i>
-                    <span>Preferences</span>
-                </div>
-                <i class="fa-solid fa-chevron-right text-[11px] chevron hidden"></i>
-            </button>
-
-            <button type="button"
-                    class="settings-tab flex items-center justify-between px-3.5 py-3 rounded-lg text-[13.5px] font-semibold text-slate-600 hover:bg-slate-50 transition-all"
-                    data-tab="terms">
-                <div class="flex items-center gap-3">
-                    <i class="fa-regular fa-file-lines"></i>
-                    <span>Terms &amp; Conditions</span>
-                </div>
-                <i class="fa-solid fa-chevron-right text-[11px] chevron hidden"></i>
-            </button>
-
-            <button type="button"
-                    class="settings-tab flex items-center justify-between px-3.5 py-3 rounded-lg text-[13.5px] font-semibold text-slate-600 hover:bg-slate-50 transition-all"
-                    data-tab="privacy">
-                <div class="flex items-center gap-3">
-                    <i class="fa-solid fa-shield-halved"></i>
-                    <span>Privacy Policy</span>
-                </div>
-                <i class="fa-solid fa-chevron-right text-[11px] chevron hidden"></i>
-            </button>
-
-            <button type="button"
-                    class="settings-tab flex items-center justify-between px-3.5 py-3 rounded-lg text-[13.5px] font-semibold text-slate-600 hover:bg-slate-50 transition-all"
-                    data-tab="contact">
-                <div class="flex items-center gap-3">
-                    <i class="fa-solid fa-headset"></i>
-                    <span>Contact &amp; Help</span>
-                </div>
-                <i class="fa-solid fa-chevron-right text-[11px] chevron hidden"></i>
-            </button>
+            @foreach([
+                ['key' => 'profile',     'icon' => 'fa-regular fa-user',        'label' => 'Profile'],
+                ['key' => 'security',    'icon' => 'fa-solid fa-lock',          'label' => 'Security'],
+                ['key' => 'preferences', 'icon' => 'fa-solid fa-palette',       'label' => 'Preferences'],
+                ['key' => 'terms',       'icon' => 'fa-regular fa-file-lines',  'label' => 'Terms & Conditions'],
+                ['key' => 'privacy',     'icon' => 'fa-solid fa-shield-halved', 'label' => 'Privacy Policy'],
+                ['key' => 'contact',     'icon' => 'fa-solid fa-headset',       'label' => 'Contact & Help'],
+            ] as $tab)
+                @php $isActive = $activeTab === $tab['key']; @endphp
+                <button type="button"
+                        class="settings-tab flex items-center justify-between px-3.5 py-3 rounded-lg text-[13.5px] font-semibold transition-all
+                        {{ $isActive ? 'bg-[#02122c] text-white' : 'text-slate-600 hover:bg-slate-50' }}"
+                        data-tab="{{ $tab['key'] }}">
+                    <div class="flex items-center gap-3">
+                        <i class="{{ $tab['icon'] }}"></i>
+                        <span>{{ $tab['label'] }}</span>
+                    </div>
+                    <i class="fa-solid fa-chevron-right text-[11px] chevron {{ $isActive ? '' : 'hidden' }}"></i>
+                </button>
+            @endforeach
         </div>
 
         {{-- ==================== PANELS ==================== --}}
         <div class="min-w-0">
 
             {{-- ---------- PROFILE ---------- --}}
-            <div class="settings-panel bg-white rounded-xl border border-slate-100 p-7 shadow-sm" id="panel-profile">
+            <div class="settings-panel {{ $activeTab === 'profile' ? '' : 'hidden' }} bg-white rounded-xl border border-slate-100 p-7 shadow-sm" id="panel-profile">
                 <h3 class="text-[17px] font-bold text-slate-900 mb-1">Personal Information</h3>
                 <p class="text-[13px] text-slate-500 mb-6">Update your profile details</p>
 
-                <div class="flex items-center gap-4 mb-6">
-                    <img src="https://i.pravatar.cc/100?img=47" class="w-16 h-16 rounded-full object-cover" alt="Elle">
-                    <div>
-                        <h4 class="text-[15px] font-bold text-slate-900">Elle Dela Cruz</h4>
-                        <div class="text-[12.5px] text-slate-500 mb-1">Tenant</div>
-                        <label for="profile-photo-input" class="text-emerald-500 text-[12.5px] font-semibold cursor-pointer hover:underline">
-                            Change photo
-                        </label>
-                        <input type="file" id="profile-photo-input" accept="image/*" class="hidden">
-                    </div>
-                </div>
+                <form action="{{ route('tenants.settings.update') }}" method="POST" enctype="multipart/form-data">
+                    @csrf
+                    @method('PUT')
 
-                <div class="mb-5">
-                    <label class="block text-[13px] font-semibold text-slate-700 mb-2">Full Name</label>
-                    <input class="w-full border border-slate-100 bg-slate-50 rounded-lg px-3.5 py-2.5 text-[13.5px] outline-none focus:border-slate-300 focus:bg-white" value="Elle Dela Cruz">
-                </div>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
-                    <div>
-                        <label class="block text-[13px] font-semibold text-slate-700 mb-2">Email Address</label>
-                        <input class="w-full border border-slate-100 bg-slate-50 rounded-lg px-3.5 py-2.5 text-[13.5px] outline-none focus:border-slate-300 focus:bg-white" value="elledelacruz01@gmail.com">
+                    @php
+                        $avatarSrc = $personalInfo?->profile_picture
+                            ? (str_starts_with($personalInfo->profile_picture, 'http')
+                                ? $personalInfo->profile_picture
+                                : asset('storage/' . $personalInfo->profile_picture))
+                            : null;
+                    @endphp
+
+                    <div class="flex items-center gap-4 mb-6">
+                        @if($avatarSrc)
+                            <img id="profile-preview" src="{{ $avatarSrc }}" class="w-16 h-16 rounded-full object-cover border border-slate-200" alt="{{ $user->name }}">
+                        @else
+                            <div id="profile-preview-fallback" class="w-16 h-16 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center border border-slate-200 text-2xl">
+                                <i class="fa-solid fa-user"></i>
+                            </div>
+                            <img id="profile-preview" src="" class="w-16 h-16 rounded-full object-cover border border-slate-200 hidden" alt="{{ $user->name }}">
+                        @endif
+
+                        <div>
+                            <h4 class="text-[15px] font-bold text-slate-900">{{ $user->name }}</h4>
+                            <div class="text-[12.5px] text-slate-500 mb-1">Tenant</div>
+                            <label for="profile-photo-input" class="text-emerald-500 text-[12.5px] font-semibold cursor-pointer hover:underline">
+                                Change photo
+                            </label>
+                            <input type="file" id="profile-photo-input" name="profile_picture" accept="image/*" class="hidden">
+                        </div>
                     </div>
-                    <div>
-                        <label class="block text-[13px] font-semibold text-slate-700 mb-2">Phone Number</label>
-                        <input class="w-full border border-slate-100 bg-slate-50 rounded-lg px-3.5 py-2.5 text-[13.5px] outline-none focus:border-slate-300 focus:bg-white" value="09121409895">
+
+                    <div class="mb-5">
+                        <label class="block text-[13px] font-semibold text-slate-700 mb-2">Full Name</label>
+                        <input name="name" class="w-full border border-slate-100 bg-slate-50 rounded-lg px-3.5 py-2.5 text-[13.5px] outline-none focus:border-slate-300 focus:bg-white" value="{{ old('name', $user->name) }}">
                     </div>
-                </div>
-                <div class="mb-5">
-                    <label class="block text-[13px] font-semibold text-slate-700 mb-2">Role</label>
-                    <input readonly class="w-full border border-slate-100 bg-slate-50 rounded-lg px-3.5 py-2.5 text-[13.5px] text-slate-500 cursor-not-allowed" value="Tenant">
-                </div>
-                <div class="flex justify-end">
-                    <button class="bg-[#02122c] hover:bg-[#091e42] text-white px-5 py-2.5 rounded-lg text-[13px] font-semibold inline-flex items-center gap-2 transition">
-                        <i class="fa-regular fa-floppy-disk"></i> Save Profile
-                    </button>
-                </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
+                        <div>
+                            <label class="block text-[13px] font-semibold text-slate-700 mb-2">Email Address</label>
+                            <input type="email" name="email" class="w-full border border-slate-100 bg-slate-50 rounded-lg px-3.5 py-2.5 text-[13.5px] outline-none focus:border-slate-300 focus:bg-white" value="{{ old('email', $user->email) }}">
+                        </div>
+                        <div>
+                            <label class="block text-[13px] font-semibold text-slate-700 mb-2">Phone Number</label>
+                            <input type="text" name="phone" class="w-full border border-slate-100 bg-slate-50 rounded-lg px-3.5 py-2.5 text-[13.5px] outline-none focus:border-slate-300 focus:bg-white" value="{{ old('phone', $personalInfo->contact_number ?? $user->phone) }}">
+                        </div>
+                    </div>
+
+                    <div class="mb-5">
+                        <label class="block text-[13px] font-semibold text-slate-700 mb-2">Role</label>
+                        <input readonly class="w-full border border-slate-100 bg-slate-50 rounded-lg px-3.5 py-2.5 text-[13.5px] text-slate-500 cursor-not-allowed" value="Tenant">
+                    </div>
+
+                    <div class="flex justify-end">
+                        <button type="submit" class="bg-[#02122c] hover:bg-[#091e42] text-white px-5 py-2.5 rounded-lg text-[13px] font-semibold inline-flex items-center gap-2 transition">
+                            <i class="fa-regular fa-floppy-disk"></i> Save Profile
+                        </button>
+                    </div>
+                </form>
             </div>
 
             {{-- ---------- SECURITY ---------- --}}
-            <div class="settings-panel hidden bg-white rounded-xl border border-slate-100 p-7 shadow-sm" id="panel-security">
+            <div class="settings-panel {{ $activeTab === 'security' ? '' : 'hidden' }} bg-white rounded-xl border border-slate-100 p-7 shadow-sm" id="panel-security">
                 <h3 class="text-[17px] font-bold text-slate-900 mb-1">Change Password</h3>
                 <p class="text-[13px] text-slate-500 mb-6">Update your account password</p>
 
-                <div class="mb-5">
-                    <label class="block text-[13px] font-semibold text-slate-700 mb-2">Current Password</label>
-                    <div class="relative">
-                        <input type="password" value="123456789012"
-                               class="w-full border border-slate-100 bg-slate-50 rounded-lg px-3.5 py-2.5 pr-10 text-[13.5px] outline-none focus:border-slate-300 focus:bg-white password-input">
-                        <span class="absolute inset-y-0 right-3.5 flex items-center cursor-pointer">
-                            <i class="fa-regular fa-eye text-slate-400 password-toggle"></i>
-                        </span>
+                <form action="{{ route('tenants.settings.password') }}" method="POST">
+                    @csrf
+                    @method('PUT')
+
+                    {{-- Current Password --}}
+                    <div class="mb-5">
+                        <label class="block text-[13px] font-semibold text-slate-700 mb-2">Current Password</label>
+                        <div class="relative">
+                            <input type="password" name="current_password" placeholder="Enter current password"
+                                class="password-input w-full border rounded-lg px-3.5 py-2.5 pr-10 text-[13.5px] outline-none focus:bg-white
+                                {{ $errors->has('current_password') ? 'border-rose-300 bg-rose-50' : 'border-slate-100 bg-slate-50 focus:border-slate-300' }}">
+                            <span class="absolute inset-y-0 right-3.5 flex items-center cursor-pointer">
+                                <i class="fa-regular fa-eye text-slate-400 password-toggle"></i>
+                            </span>
+                        </div>
+                        @error('current_password')
+                            <p class="text-[12px] text-rose-600 mt-1.5 flex items-center gap-1">
+                                <i class="fa-solid fa-circle-exclamation text-[10px]"></i> {{ $message }}
+                            </p>
+                        @enderror
                     </div>
-                </div>
-                <div class="mb-5">
-                    <label class="block text-[13px] font-semibold text-slate-700 mb-2">New Password</label>
-                    <div class="relative">
-                        <input type="password" placeholder="Min. 8 characters"
-                               class="w-full border border-slate-100 bg-slate-50 rounded-lg px-3.5 py-2.5 pr-10 text-[13.5px] outline-none focus:border-slate-300 focus:bg-white password-input">
-                        <span class="absolute inset-y-0 right-3.5 flex items-center cursor-pointer">
-                            <i class="fa-regular fa-eye text-slate-400 password-toggle"></i>
-                        </span>
+
+                    {{-- New Password --}}
+                    <div class="mb-5">
+                        <label class="block text-[13px] font-semibold text-slate-700 mb-2">New Password</label>
+                        <div class="relative">
+                            <input type="password" name="password" placeholder="Min. 8 characters"
+                                class="password-input w-full border rounded-lg px-3.5 py-2.5 pr-10 text-[13.5px] outline-none focus:bg-white
+                                {{ $errors->has('password') ? 'border-rose-300 bg-rose-50' : 'border-slate-100 bg-slate-50 focus:border-slate-300' }}">
+                            <span class="absolute inset-y-0 right-3.5 flex items-center cursor-pointer">
+                                <i class="fa-regular fa-eye text-slate-400 password-toggle"></i>
+                            </span>
+                        </div>
+                        @error('password')
+                            <p class="text-[12px] text-rose-600 mt-1.5 flex items-center gap-1">
+                                <i class="fa-solid fa-circle-exclamation text-[10px]"></i> {{ $message }}
+                            </p>
+                        @enderror
                     </div>
-                </div>
-                <div class="mb-5">
-                    <label class="block text-[13px] font-semibold text-slate-700 mb-2">Confirm New Password</label>
-                    <div class="relative">
-                        <input type="password" placeholder="Repeat new password"
-                               class="w-full border border-slate-100 bg-slate-50 rounded-lg px-3.5 py-2.5 pr-10 text-[13.5px] outline-none focus:border-slate-300 focus:bg-white password-input">
-                        <span class="absolute inset-y-0 right-3.5 flex items-center cursor-pointer">
-                            <i class="fa-regular fa-eye text-slate-400 password-toggle"></i>
-                        </span>
+
+                    {{-- Confirm New Password --}}
+                    <div class="mb-5">
+                        <label class="block text-[13px] font-semibold text-slate-700 mb-2">Confirm New Password</label>
+                        <div class="relative">
+                            <input type="password" name="password_confirmation" placeholder="Repeat new password"
+                                class="password-input w-full border rounded-lg px-3.5 py-2.5 pr-10 text-[13.5px] outline-none focus:bg-white
+                                {{ $errors->has('password_confirmation') ? 'border-rose-300 bg-rose-50' : 'border-slate-100 bg-slate-50 focus:border-slate-300' }}">
+                            <span class="absolute inset-y-0 right-3.5 flex items-center cursor-pointer">
+                                <i class="fa-regular fa-eye text-slate-400 password-toggle"></i>
+                            </span>
+                        </div>
+                        @error('password_confirmation')
+                            <p class="text-[12px] text-rose-600 mt-1.5 flex items-center gap-1">
+                                <i class="fa-solid fa-circle-exclamation text-[10px]"></i> {{ $message }}
+                            </p>
+                        @enderror
                     </div>
-                </div>
-                <div class="flex justify-end">
-                    <button class="bg-[#02122c] hover:bg-[#091e42] text-white px-5 py-2.5 rounded-lg text-[13px] font-semibold inline-flex items-center gap-2 transition">
-                        <i class="fa-solid fa-lock"></i> Update Password
-                    </button>
-                </div>
+
+                    <div class="flex justify-end">
+                        <button type="submit" class="bg-[#02122c] hover:bg-[#091e42] text-white px-5 py-2.5 rounded-lg text-[13px] font-semibold inline-flex items-center gap-2 transition">
+                            <i class="fa-solid fa-lock"></i> Update Password
+                        </button>
+                    </div>
+                </form>
             </div>
 
             {{-- ---------- PREFERENCES ---------- --}}
-            <div class="settings-panel hidden bg-white rounded-xl border border-slate-100 p-7 shadow-sm" id="panel-preferences">
+            <div class="settings-panel {{ $activeTab === 'preferences' ? '' : 'hidden' }} bg-white rounded-xl border border-slate-100 p-7 shadow-sm" id="panel-preferences">
                 <h3 class="text-[17px] font-bold text-slate-900 mb-1">Preferences</h3>
                 <p class="text-[13px] text-slate-500 mb-6">Customize your boarding house experience</p>
 
-                @foreach([
-                    ['id' => 'email', 'label' => 'Email Notifications', 'default' => true],
-                    ['id' => 'sms', 'label' => 'SMS Alerts', 'default' => false],
-                    ['id' => 'push', 'label' => 'Push Notifications', 'default' => false],
-                ] as $pref)
-                <div class="flex items-center justify-between py-4 border-b border-slate-50 last:border-0">
-                    <div class="flex items-start gap-3">
-                        <i class="fa-regular fa-bell text-base text-slate-900 mt-0.5"></i>
-                        <div>
-                            <div class="text-sm font-semibold text-slate-900">{{ $pref['label'] }}</div>
-                            <div class="text-xs text-slate-400 mt-0.5" id="{{ $pref['id'] }}-status">{{ $pref['default'] ? 'Enabled' : 'Disabled' }}</div>
+                <form action="#" method="POST">
+                    @csrf
+                    @foreach([
+                        ['id' => 'email', 'label' => 'Email Notifications', 'default' => true],
+                        ['id' => 'sms', 'label' => 'SMS Alerts', 'default' => false],
+                        ['id' => 'push', 'label' => 'Push Notifications', 'default' => false],
+                    ] as $pref)
+                    <div class="flex items-center justify-between py-4 border-b border-slate-50 last:border-0">
+                        <div class="flex items-start gap-3">
+                            <i class="fa-regular fa-bell text-base text-slate-900 mt-0.5"></i>
+                            <div>
+                                <div class="text-sm font-semibold text-slate-900">{{ $pref['label'] }}</div>
+                                <div class="text-xs text-slate-400 mt-0.5" id="{{ $pref['id'] }}-status">{{ $pref['default'] ? 'Enabled' : 'Disabled' }}</div>
+                            </div>
                         </div>
+                        <label class="relative inline-block w-11 h-6 cursor-pointer">
+                            <input type="checkbox" name="preferences[{{ $pref['id'] }}]" id="{{ $pref['id'] }}-toggle" @if($pref['default']) checked @endif class="peer opacity-0 w-0 h-0">
+                            <span class="absolute inset-0 bg-slate-200 rounded-full transition peer-checked:bg-emerald-500"></span>
+                            <span class="absolute left-[3px] bottom-[3px] bg-white w-[18px] h-[18px] rounded-full transition peer-checked:translate-x-5"></span>
+                        </label>
                     </div>
-                    <label class="relative inline-block w-11 h-6 cursor-pointer">
-                        <input type="checkbox" id="{{ $pref['id'] }}-toggle" @if($pref['default']) checked @endif class="peer opacity-0 w-0 h-0">
-                        <span class="absolute inset-0 bg-slate-200 rounded-full transition peer-checked:bg-emerald-500"></span>
-                        <span class="absolute left-[3px] bottom-[3px] bg-white w-[18px] h-[18px] rounded-full transition peer-checked:translate-x-5"></span>
-                    </label>
-                </div>
-                @endforeach
+                    @endforeach
 
-                <div class="flex justify-end mt-7">
-                    <button class="bg-[#02122c] hover:bg-[#091e42] text-white px-5 py-2.5 rounded-lg text-[13px] font-semibold inline-flex items-center gap-2 transition">
-                        <i class="fa-regular fa-floppy-disk"></i> Save Appearance
-                    </button>
-                </div>
+                    <div class="flex justify-end mt-7">
+                        <button type="submit" class="bg-[#02122c] hover:bg-[#091e42] text-white px-5 py-2.5 rounded-lg text-[13px] font-semibold inline-flex items-center gap-2 transition">
+                            <i class="fa-regular fa-floppy-disk"></i> Save Appearance
+                        </button>
+                    </div>
+                </form>
             </div>
 
             {{-- ---------- TERMS & CONDITIONS ---------- --}}
-            <div class="settings-panel hidden bg-white rounded-xl border border-slate-100 p-7 shadow-sm" id="panel-terms">
+            <div class="settings-panel {{ $activeTab === 'terms' ? '' : 'hidden' }} bg-white rounded-xl border border-slate-100 p-7 shadow-sm" id="panel-terms">
                 <div class="flex items-center gap-3 mb-2">
                     <i class="fa-regular fa-file-lines text-slate-500 text-[18px]"></i>
                     <h3 class="text-[17px] font-bold text-slate-900">JLM Cozy Cabin Terms &amp; Conditions</h3>
@@ -305,7 +346,7 @@
             </div>
 
             {{-- ---------- PRIVACY POLICY ---------- --}}
-            <div class="settings-panel hidden bg-white rounded-xl border border-slate-100 p-7 shadow-sm" id="panel-privacy">
+            <div class="settings-panel {{ $activeTab === 'privacy' ? '' : 'hidden' }} bg-white rounded-xl border border-slate-100 p-7 shadow-sm" id="panel-privacy">
                 <div class="flex items-center gap-3 mb-2">
                     <i class="fa-solid fa-shield-halved text-slate-500 text-[18px]"></i>
                     <h3 class="text-[17px] font-bold text-slate-900">JLM Cozy Cabin Privacy Policy</h3>
@@ -314,7 +355,6 @@
 
                 <div class="flex flex-col gap-4">
 
-                    {{-- Purpose of Data Collection --}}
                     <div class="settings-accordion bg-white border border-slate-100 rounded-xl overflow-hidden" data-accordion-key="purpose">
                         <div class="settings-accordion-header px-6 py-[18px] flex items-center justify-between cursor-pointer select-none hover:bg-slate-50 transition">
                             <h4 class="text-[15px] font-semibold text-slate-900">Purpose of Data Collection</h4>
@@ -337,7 +377,6 @@
                         </div>
                     </div>
 
-                    {{-- Use and Storage of Data --}}
                     <div class="settings-accordion bg-white border border-slate-100 rounded-xl overflow-hidden" data-accordion-key="use">
                         <div class="settings-accordion-header px-6 py-[18px] flex items-center justify-between cursor-pointer select-none hover:bg-slate-50 transition">
                             <h4 class="text-[15px] font-semibold text-slate-900">Use and Storage of Data</h4>
@@ -352,7 +391,6 @@
                         </div>
                     </div>
 
-                    {{-- Access and Protection --}}
                     <div class="settings-accordion bg-white border border-slate-100 rounded-xl overflow-hidden" data-accordion-key="access">
                         <div class="settings-accordion-header px-6 py-[18px] flex items-center justify-between cursor-pointer select-none hover:bg-slate-50 transition">
                             <h4 class="text-[15px] font-semibold text-slate-900">Access and Protection of Information</h4>
@@ -373,7 +411,6 @@
                         </div>
                     </div>
 
-                    {{-- Your Data Rights --}}
                     <div class="settings-accordion bg-white border border-slate-100 rounded-xl overflow-hidden" data-accordion-key="rights">
                         <div class="settings-accordion-header px-6 py-[18px] flex items-center justify-between cursor-pointer select-none hover:bg-slate-50 transition">
                             <h4 class="text-[15px] font-semibold text-slate-900">Your Data Rights</h4>
@@ -407,7 +444,6 @@
                         </div>
                     </div>
 
-                    {{-- Privacy Concerns --}}
                     <div class="settings-accordion bg-white border border-slate-100 rounded-xl overflow-hidden" data-accordion-key="concerns">
                         <div class="settings-accordion-header px-6 py-[18px] flex items-center justify-between cursor-pointer select-none hover:bg-slate-50 transition">
                             <h4 class="text-[15px] font-semibold text-slate-900">Privacy Concerns and Contact</h4>
@@ -420,7 +456,6 @@
                         </div>
                     </div>
 
-                    {{-- Updates to Privacy Policy --}}
                     <div class="settings-accordion bg-white border border-slate-100 rounded-xl overflow-hidden" data-accordion-key="updates">
                         <div class="settings-accordion-header px-6 py-[18px] flex items-center justify-between cursor-pointer select-none hover:bg-slate-50 transition">
                             <h4 class="text-[15px] font-semibold text-slate-900">Updates to the Privacy Policy</h4>
@@ -437,16 +472,14 @@
             </div>
 
             {{-- ---------- CONTACT & HELP ---------- --}}
-            <div class="settings-panel hidden bg-white rounded-xl border border-slate-100 p-7 shadow-sm" id="panel-contact">
+            <div class="settings-panel {{ $activeTab === 'contact' ? '' : 'hidden' }} bg-white rounded-xl border border-slate-100 p-7 shadow-sm" id="panel-contact">
                 <div class="flex items-center gap-3 mb-2">
                     <i class="fa-solid fa-headset text-slate-500 text-[18px]"></i>
                     <h3 class="text-[17px] font-bold text-slate-900">Contact &amp; Help</h3>
                 </div>
                 <p class="text-[13px] text-slate-500 mb-6">Official contact information and support resources for JLM Cozy Cabin</p>
 
-                {{-- Contact cards --}}
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-5 mb-6">
-                    {{-- Management Office --}}
                     <div class="bg-white border border-slate-100 rounded-xl p-5">
                         <h4 class="text-[15px] font-bold text-slate-900 mb-4 flex items-center gap-2">
                             <i class="fa-solid fa-building text-emerald-500 text-[16px]"></i> Management Office
@@ -480,7 +513,6 @@
                         </div>
                     </div>
 
-                    {{-- Location & Hours --}}
                     <div class="bg-white border border-slate-100 rounded-xl p-5">
                         <h4 class="text-[15px] font-bold text-slate-900 mb-4 flex items-center gap-2">
                             <i class="fa-solid fa-map-pin text-emerald-500 text-[16px]"></i> Location &amp; Hours
@@ -515,7 +547,6 @@
                     </div>
                 </div>
 
-                {{-- Message banner --}}
                 <div class="bg-[#02122c] rounded-xl px-6 py-5 flex flex-col md:flex-row md:items-center md:justify-between gap-4 text-white mb-6">
                     <div class="flex items-center gap-3.5">
                         <div class="w-10 h-10 bg-emerald-500/20 rounded-[10px] flex items-center justify-center text-emerald-400 text-[18px] shrink-0">
@@ -532,7 +563,6 @@
                     </a>
                 </div>
 
-                {{-- Quick help --}}
                 <h3 class="text-[15px] font-bold text-slate-900 mb-4">Quick Help Topics</h3>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div class="bg-white border border-slate-100 rounded-lg p-4 flex flex-col gap-2 hover:border-slate-200 transition">
@@ -580,22 +610,29 @@
     const tabs   = document.querySelectorAll('.settings-tab');
     const panels = document.querySelectorAll('.settings-panel');
 
-    tabs.forEach(tab => tab.addEventListener('click', () => {
+    function activateTab(key) {
         tabs.forEach(t => {
             t.classList.remove('bg-[#02122c]', 'text-white');
             t.classList.add('text-slate-600', 'hover:bg-slate-50');
             const ch = t.querySelector('.chevron');
             if (ch) ch.classList.add('hidden');
         });
-
-        tab.classList.add('bg-[#02122c]', 'text-white');
-        tab.classList.remove('text-slate-600', 'hover:bg-slate-50');
-        const activeCh = tab.querySelector('.chevron');
-        if (activeCh) activeCh.classList.remove('hidden');
+        const target = document.querySelector(`.settings-tab[data-tab="${key}"]`);
+        if (target) {
+            target.classList.add('bg-[#02122c]', 'text-white');
+            target.classList.remove('text-slate-600', 'hover:bg-slate-50');
+            const ch = target.querySelector('.chevron');
+            if (ch) ch.classList.remove('hidden');
+        }
 
         panels.forEach(p => p.classList.add('hidden'));
-        document.getElementById('panel-' + tab.dataset.tab).classList.remove('hidden');
-    }));
+        const panel = document.getElementById('panel-' + key);
+        if (panel) panel.classList.remove('hidden');
+    }
+
+    tabs.forEach(tab => {
+        tab.addEventListener('click', () => activateTab(tab.dataset.tab));
+    });
 
     // ============================================================
     // PREFERENCE TOGGLES — live status text
@@ -614,33 +651,40 @@
             const wrapper = icon.closest('.relative');
             const input = wrapper?.querySelector('.password-input');
             if (!input) return;
-            const isPassword = input.type === 'password';
-            input.type = isPassword ? 'text' : 'password';
-            icon.classList.toggle('fa-eye', !isPassword);
-            icon.classList.toggle('fa-eye-slash', isPassword);
+
+            if (input.type === 'password') {
+                input.type = 'text';
+                icon.classList.remove('fa-eye');
+                icon.classList.add('fa-eye-slash');
+            } else {
+                input.type = 'password';
+                icon.classList.remove('fa-eye-slash');
+                icon.classList.add('fa-eye');
+            }
         });
     });
 
     // ============================================================
-    // CHANGE PHOTO — trigger file input
+    // CHANGE PHOTO — trigger file input & live preview
     // ============================================================
     const photoInput = document.getElementById('profile-photo-input');
     if (photoInput) {
         photoInput.addEventListener('change', () => {
             const file = photoInput.files?.[0];
             if (file) {
-                const img = document.querySelector('#panel-profile img');
-                if (img) img.src = URL.createObjectURL(file);
+                const img = document.getElementById('profile-preview');
+                const fallback = document.getElementById('profile-preview-fallback');
+                if (img) {
+                    img.src = URL.createObjectURL(file);
+                    img.classList.remove('hidden');
+                }
+                if (fallback) fallback.classList.add('hidden');
             }
         });
     }
 
     // ============================================================
     // ACCORDION INITIAL STATE — ALL COLLAPSED
-    // ------------------------------------------------------------
-    // The React component (`SettingsAccordions.jsx`) handles the
-    // click toggle. This just enforces the collapsed baseline on
-    // load so nothing appears pre-expanded.
     // ============================================================
     document.querySelectorAll('.settings-accordion').forEach(item => {
         item.classList.remove('expanded');

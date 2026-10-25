@@ -2,22 +2,25 @@
 @php
     $user = auth()->user();
 
-    $avatarUrl = $user && $user->profile_picture
-        ? (str_starts_with($user->profile_picture, 'http')
-            ? $user->profile_picture
-            : asset('storage/' . $user->profile_picture))
-        : 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&q=80&w=120';
+    // Prioritize the uploaded profile picture from personal_information
+    $profilePic = $user?->personalInformation?->profile_picture ?? $user?->profile_picture;
+
+    $avatarUrl = $profilePic
+        ? (str_starts_with($profilePic, 'http')
+            ? $profilePic
+            : asset('storage/' . $profilePic))
+        : null;
 
     $sidebarProps = json_encode([
         'active'   => $active ?? 'dashboard',
-        'userName' => $user?->name ?? 'Administrator',
+        'userName' => $user?->personalInformation?->full_name ?? $user?->name ?? 'Administrator',
         'userRole' => 'Administrator',
         'avatar'   => $avatarUrl,
     ]);
 
     $headerProps = json_encode([
         'title'         => $pageTitle ?? 'Dashboard',
-        'userName'      => $user?->name ?? 'Administrator',
+        'userName'      => $user?->personalInformation?->full_name ?? $user?->name ?? 'Administrator',
         'userRole'      => 'Admin',
         'userEmail'     => $user?->email ?? '',
         'avatar'        => $avatarUrl,
@@ -36,9 +39,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
-    {{-- Required for React Fast Refresh --}}
     @viteReactRefresh
-
     @vite(['resources/css/app.css', 'resources/js/app.jsx'])
     @stack('styles')
 </head>
@@ -49,20 +50,16 @@
 
 <body class="bg-[#f4f6f9] text-slate-900 antialiased flex h-full w-full overflow-hidden">
 
-    {{-- Mobile backdrop --}}
     <div id="admin-sidebar-overlay"
          class="fixed inset-0 bg-slate-900/50 z-[999] hidden md:hidden backdrop-blur-sm"></div>
 
-    {{-- Admin SIDEBAR (React) --}}
     <div data-react="admin-sidebar"
          data-props='{!! $sidebarProps !!}'
          id="admin-sidebar-mount"
          class="shrink-0 h-full flex flex-col"></div>
 
-    {{-- MAIN WRAPPER --}}
     <div class="flex-1 flex flex-col min-w-0 h-full overflow-y-auto">
 
-        {{-- Admin TOP HEADER (React) --}}
         <div data-react="admin-top-header" data-props='{!! $headerProps !!}'></div>
 
         <main class="flex-1">

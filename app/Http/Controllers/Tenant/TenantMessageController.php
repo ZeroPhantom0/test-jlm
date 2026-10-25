@@ -8,14 +8,15 @@ use App\Models\Conversation;
 use App\Models\Message;
 use App\Models\MessageReaction;
 use App\Models\Tenant;
+use App\Models\User;
+use App\Services\SmsService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
 class TenantMessageController extends Controller
 {
-    /**
-     * Display the tenant's messages page.
-     */
+    // ... [index() and show() methods remain exactly the same] ...
+    
     public function index(Request $request)
     {
         $user   = Auth::user();
@@ -31,7 +32,6 @@ class TenantMessageController extends Controller
             ]);
         }
 
-        // Hide conversations the tenant deleted
         $conversations = Conversation::with(['tenant.user', 'latestMessage'])
             ->where('tenant_id', $tenant->id)
             ->where('deleted_by_tenant', false)
@@ -70,9 +70,6 @@ class TenantMessageController extends Controller
         ));
     }
 
-    /**
-     * Load messages of a single conversation (AJAX).
-     */
     public function show(Conversation $conversation)
     {
         $user   = Auth::user();
@@ -144,6 +141,13 @@ class TenantMessageController extends Controller
             'body'            => $validated['body'],
         ]);
 
+        // ── TRIGGER SMS TO ADMIN ──
+        $admin = User::where('role', 'admin')->first();
+        if ($admin && $admin->phone) {
+            $msg = "New Message from Tenant: You have received a new message from a tenant. Log in to JLM Cozy Cabin to view it.";
+            SmsService::send($admin->phone, $msg);
+        }
+
         return response()->json([
             'success' => true,
             'message' => 'Message sent.',
@@ -176,15 +180,21 @@ class TenantMessageController extends Controller
 
         $conversation->update(['last_message_at' => now()]);
 
+        // ── TRIGGER SMS TO ADMIN ──
+        $admin = User::where('role', 'admin')->first();
+        if ($admin && $admin->phone) {
+            $msg = "New Message from Tenant: You have received a new message from a tenant. Log in to JLM Cozy Cabin to view it.";
+            SmsService::send($admin->phone, $msg);
+        }
+
         return response()->json([
             'success' => true,
             'message' => 'Reply sent.',
         ]);
     }
 
-    /**
-     * Soft-delete a message from the tenant's view.
-     */
+    // ... [deleteMessage(), reactToMessage(), deleteConversation() remain exactly the same] ...
+    
     public function deleteMessage(Message $message)
     {
         $user   = Auth::user();
@@ -211,9 +221,6 @@ class TenantMessageController extends Controller
         ]);
     }
 
-    /**
-     * Toggle an emoji reaction on a message.
-     */
     public function reactToMessage(Request $request, Message $message)
     {
         $user   = Auth::user();
@@ -255,9 +262,6 @@ class TenantMessageController extends Controller
         ]);
     }
 
-    /**
-     * Soft-delete the WHOLE conversation from the tenant's side.
-     */
     public function deleteConversation(Conversation $conversation)
     {
         $user   = Auth::user();

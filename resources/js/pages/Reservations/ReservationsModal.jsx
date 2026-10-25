@@ -13,8 +13,9 @@ const FALLBACK_ROOM = {
     roomNumber: "ROOM 101",
     floor: 1,
     status: "Available",
-    is_bookable: true,  // <-- Added
-    empty_beds: 1,      // <-- Added
+    is_bookable: true,
+    has_reserved: false,
+    empty_beds: 1,
     price: 600,
     img: "https://images.unsplash.com/photo-1598928506311-c55ded91a20c?auto=format&fit=crop&w=600&q=80",
     pax: "1-2 pax",
@@ -402,14 +403,16 @@ export default function ReservationsModal() {
 
                             <span
                                 className={`absolute top-3 left-3 text-[11px] font-bold px-3 py-1 rounded-full ${
-                                    room.status === "Occupied"
+                                    room.has_reserved
+                                        ? "bg-emerald-100 text-emerald-700 border border-emerald-200"
+                                        : room.status === "Occupied"
                                         ? "bg-rose-200 text-rose-700"
                                         : room.status === "Available"
                                           ? "bg-green-100 text-green-700"
                                           : "bg-amber-100 text-amber-700"
                                 }`}
                             >
-                                {room.status}
+                                {room.has_reserved ? "Reserved by You" : room.status}
                             </span>
 
                             {room.tourId && (
@@ -428,7 +431,7 @@ export default function ReservationsModal() {
                                 {room.roomNumber}
                             </span>
 
-                            {room.status === "Occupied" && (
+                            {room.status === "Occupied" && !room.has_reserved && (
                                 <div className="absolute bottom-3 right-3 bg-white/95 px-3 py-1.5 rounded-md text-[10px] text-slate-700 text-right shadow">
                                     <div>
                                         Estimated Availability:{" "}
@@ -485,7 +488,14 @@ export default function ReservationsModal() {
                                 Close
                             </button>
                             {/* <-- Changed condition to room.is_bookable --> */}
-                            {room.is_bookable ? (
+                            {room.has_reserved ? (
+                                <button
+                                    disabled
+                                    className="bg-emerald-100 text-emerald-700 rounded-lg py-2.5 text-[13px] font-semibold cursor-not-allowed"
+                                >
+                                    Already Reserved
+                                </button>
+                            ) : room.is_bookable ? (
                                 <button
                                     onClick={() => {
                                         closeDetails();

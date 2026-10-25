@@ -64,7 +64,7 @@ class TenantReservationController extends Controller
             ->whereHas('virtualTour', fn($q) => $q->where('status', 'Published'))
             ->orderBy('room_number')
             ->get()
-            ->map(function (Room $room) {
+            ->map(function (Room $room) use ($myReservations) {
                 $bedSlots = $this->buildBedSlots($room);
                 
                 // Calculate actual empty beds
@@ -72,8 +72,14 @@ class TenantReservationController extends Controller
                 $totalBeds = (int) $room->total_beds;
                 $emptyBeds = max(0, $totalBeds - $occupiedSlots);
 
-                // A room is bookable if it has empty beds OR if its status is strictly Available
-                $isBookable = $emptyBeds > 0 || $room->status === 'Available';
+                // Check if this user already has an active/pending reservation for this room
+                $existingReservation = $myReservations->first(function ($res) use ($room) {
+                    return $res->room_id === $room->id && in_array($res->status, ['Pending', 'Approved']);
+                });
+                $hasReserved = (bool) $existingReservation;
+
+                // Room is bookable if it has empty beds AND user hasn't reserved it
+                $isBookable = ($emptyBeds > 0 || $room->status === 'Available') && !$hasReserved;
 
                 return [
                     'id'          => $room->id,
@@ -82,6 +88,7 @@ class TenantReservationController extends Controller
                     'price'       => (float) $room->daily_rent,
                     'status'      => $room->status,
                     'is_bookable' => $isBookable,
+                    'has_reserved'=> $hasReserved,
                     'empty_beds'  => $emptyBeds,
                     'img'         => $room->virtualTour?->thumbnail_url
                         ?? 'https://images.unsplash.com/photo-1598928506311-c55ded91a20c?auto=format&fit=crop&w=600&q=80',
@@ -224,6 +231,18 @@ class TenantReservationController extends Controller
         if ($inDate->diffInHours($outDate) < 24) {
             return response()->json([
                 'message' => 'The minimum stay is 24 hours (1 full day). Please extend your check-out date.',
+            ], 422);
+        }
+
+        // Prevent double booking by checking if they already have a reservation
+        $existing = Reservation::where('user_id', $user->id)
+            ->where('room_id', $validated['room_id'])
+            ->whereIn('status', ['Pending', 'Approved'])
+            ->exists();
+
+        if ($existing) {
+            return response()->json([
+                'message' => 'You already have an active or pending reservation for this room.',
             ], 422);
         }
 

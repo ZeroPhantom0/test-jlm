@@ -15,6 +15,12 @@ export default function RoomChangeModals() {
     const [saving, setSaving] = useState(false);
     const [requestsData, setRequestsData] = useState({});
 
+    // ----- Confirmation modal state -----
+    const [showApprove, setShowApprove] = useState(false);
+    const [showReject, setShowReject] = useState(false);
+    const [actionTarget, setActionTarget] = useState(null);
+    const [rejectNotes, setRejectNotes] = useState('');
+
     // ============================================================
     // Read requests data from the DOM (passed by Blade)
     // ============================================================
@@ -47,61 +53,28 @@ export default function RoomChangeModals() {
                 return;
             }
 
-            // Approve — from row (quick action)
+            // Approve — from row (opens confirmation modal)
             const approveBtn = e.target.closest('.icon-approve');
             if (approveBtn) {
                 const id = approveBtn.dataset.requestId;
                 const data = requestsData[id];
-                if (!data) return;
-
-                if (!confirm(`Approve room change for ${data.tenant}?`)) return;
-
-                setSaving(true);
-                fetch(`/admin/services/room-change/${id}/approve`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Accept': 'application/json',
-                        'X-CSRF-TOKEN': csrf(),
-                    },
-                    body: JSON.stringify({ admin_notes: '' }),
-                })
-                    .then(async (res) => {
-                        const result = await res.json();
-                        if (!res.ok) throw new Error(result.message || 'Failed to approve.');
-                        window.location.reload();
-                    })
-                    .catch((err) => alert(err.message))
-                    .finally(() => setSaving(false));
+                if (data) {
+                    setActionTarget(data);
+                    setShowApprove(true);
+                }
                 return;
             }
 
-            // Reject — from row (quick action)
+            // Reject — from row (opens confirmation modal)
             const rejectBtn = e.target.closest('.icon-reject');
             if (rejectBtn) {
                 const id = rejectBtn.dataset.requestId;
                 const data = requestsData[id];
-                if (!data) return;
-
-                if (!confirm(`Reject room change for ${data.tenant}?`)) return;
-
-                setSaving(true);
-                fetch(`/admin/services/room-change/${id}/reject`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Accept': 'application/json',
-                        'X-CSRF-TOKEN': csrf(),
-                    },
-                    body: JSON.stringify({ admin_notes: '' }),
-                })
-                    .then(async (res) => {
-                        const result = await res.json();
-                        if (!res.ok) throw new Error(result.message || 'Failed to reject.');
-                        window.location.reload();
-                    })
-                    .catch((err) => alert(err.message))
-                    .finally(() => setSaving(false));
+                if (data) {
+                    setActionTarget(data);
+                    setRejectNotes('');
+                    setShowReject(true);
+                }
                 return;
             }
         };
@@ -117,23 +90,42 @@ export default function RoomChangeModals() {
     };
 
     // ============================================================
-    // Actions from within the modal
+    // Actions from within the details modal
     // ============================================================
-    const handleApprove = async () => {
+    const handleApprove = () => {
         if (!request) return;
+        // Open confirmation modal, carrying admin notes along
+        setActionTarget({ ...request, admin_notes: adminNotes });
+        setShowApprove(true);
+    };
+
+    const handleReject = () => {
+        if (!request) return;
+        setActionTarget({ ...request, admin_notes: adminNotes });
+        setRejectNotes('');
+        setShowReject(true);
+    };
+
+    // ============================================================
+    // Actual API calls (fired from confirmation modals)
+    // ============================================================
+    const confirmApprove = async () => {
+        if (!actionTarget) return;
         setSaving(true);
         try {
-            const res = await fetch(`/admin/services/room-change/${request.id}/approve`, {
+            const res = await fetch(`/admin/services/room-change/${actionTarget.id}/approve`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'Accept': 'application/json',
                     'X-CSRF-TOKEN': csrf(),
                 },
-                body: JSON.stringify({ admin_notes: adminNotes }),
+                body: JSON.stringify({ admin_notes: actionTarget.admin_notes || adminNotes || '' }),
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.message || 'Failed to approve.');
+            setShowApprove(false);
+            setActionTarget(null);
             closeModal();
             window.location.reload();
         } catch (err) {
@@ -143,21 +135,28 @@ export default function RoomChangeModals() {
         }
     };
 
-    const handleReject = async () => {
-        if (!request) return;
+    const confirmReject = async () => {
+        if (!actionTarget) return;
+        if (!rejectNotes.trim()) {
+            alert('Please provide a reason for rejection.');
+            return;
+        }
         setSaving(true);
         try {
-            const res = await fetch(`/admin/services/room-change/${request.id}/reject`, {
+            const res = await fetch(`/admin/services/room-change/${actionTarget.id}/reject`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'Accept': 'application/json',
                     'X-CSRF-TOKEN': csrf(),
                 },
-                body: JSON.stringify({ admin_notes: adminNotes }),
+                body: JSON.stringify({ admin_notes: rejectNotes }),
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.message || 'Failed to reject.');
+            setShowReject(false);
+            setActionTarget(null);
+            setRejectNotes('');
             closeModal();
             window.location.reload();
         } catch (err) {
@@ -165,6 +164,19 @@ export default function RoomChangeModals() {
         } finally {
             setSaving(false);
         }
+    };
+
+    const closeApproveModal = () => {
+        if (saving) return;
+        setShowApprove(false);
+        setActionTarget(null);
+    };
+
+    const closeRejectModal = () => {
+        if (saving) return;
+        setShowReject(false);
+        setActionTarget(null);
+        setRejectNotes('');
     };
 
     // ============================================================
@@ -212,16 +224,40 @@ export default function RoomChangeModals() {
         }
     };
 
+    // ============================================================
+    // Render — when details closed, still render confirmation modals
+    // ============================================================
     if (!showDetails || !request) {
-        // Still render the delete modal even when details closed
-        return showDelete && deleteTarget ? (
-            <DeleteRoomChangeModal
-                target={deleteTarget}
-                saving={saving}
-                onClose={closeDeleteModal}
-                onConfirm={confirmDelete}
-            />
-        ) : null;
+        return (
+            <>
+                {showApprove && actionTarget && (
+                    <ApproveRoomChangeModal
+                        target={actionTarget}
+                        saving={saving}
+                        onClose={closeApproveModal}
+                        onConfirm={confirmApprove}
+                    />
+                )}
+                {showReject && actionTarget && (
+                    <RejectRoomChangeModal
+                        target={actionTarget}
+                        saving={saving}
+                        notes={rejectNotes}
+                        onNotesChange={setRejectNotes}
+                        onClose={closeRejectModal}
+                        onConfirm={confirmReject}
+                    />
+                )}
+                {showDelete && deleteTarget && (
+                    <DeleteRoomChangeModal
+                        target={deleteTarget}
+                        saving={saving}
+                        onClose={closeDeleteModal}
+                        onConfirm={confirmDelete}
+                    />
+                )}
+            </>
+        );
     }
 
     // ============================================================
@@ -327,7 +363,7 @@ export default function RoomChangeModals() {
                                 className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-4 py-2.5 rounded-lg text-[13px] font-semibold inline-flex items-center gap-1.5"
                             >
                                 <i className="fa-regular fa-circle-check"></i>
-                                {saving ? 'Saving…' : 'Approve'}
+                                Approve
                             </button>
                             <button
                                 onClick={handleReject}
@@ -356,6 +392,32 @@ export default function RoomChangeModals() {
             </Modal>
 
             {/* ============================================================ */}
+            {/* APPROVE CONFIRMATION MODAL */}
+            {/* ============================================================ */}
+            {showApprove && actionTarget && (
+                <ApproveRoomChangeModal
+                    target={actionTarget}
+                    saving={saving}
+                    onClose={closeApproveModal}
+                    onConfirm={confirmApprove}
+                />
+            )}
+
+            {/* ============================================================ */}
+            {/* REJECT CONFIRMATION MODAL */}
+            {/* ============================================================ */}
+            {showReject && actionTarget && (
+                <RejectRoomChangeModal
+                    target={actionTarget}
+                    saving={saving}
+                    notes={rejectNotes}
+                    onNotesChange={setRejectNotes}
+                    onClose={closeRejectModal}
+                    onConfirm={confirmReject}
+                />
+            )}
+
+            {/* ============================================================ */}
             {/* DELETE CONFIRMATION MODAL */}
             {/* ============================================================ */}
             {showDelete && deleteTarget && (
@@ -367,6 +429,184 @@ export default function RoomChangeModals() {
                 />
             )}
         </>
+    );
+}
+
+// ============================================================
+// APPROVE CONFIRMATION SUBCOMPONENT
+// ============================================================
+function ApproveRoomChangeModal({ target, saving, onClose, onConfirm }) {
+    return (
+        <Modal onClose={onClose} maxWidth="max-w-[460px]">
+            <div className="p-5 pb-4 flex items-center justify-between border-b border-slate-100 shrink-0">
+                <h3 className="text-lg font-bold text-slate-900">Approve Room Change</h3>
+                <button
+                    onClick={onClose}
+                    disabled={saving}
+                    className="text-slate-400 hover:text-slate-700 text-lg disabled:opacity-50"
+                >
+                    <i className="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <div className="p-6 text-center overflow-y-auto max-h-[60vh]">
+                <div className="w-16 h-16 mx-auto rounded-full bg-emerald-50 flex items-center justify-center mb-4">
+                    <i className="fa-solid fa-circle-check text-emerald-500 text-2xl"></i>
+                </div>
+                <h4 className="text-lg font-bold text-slate-900 mb-2">
+                    Approve this room change?
+                </h4>
+                <p className="text-slate-500 text-[13px] mb-4">
+                    This will transfer the tenant to the requested room and update both rooms&rsquo; bed assignments.
+                </p>
+
+                <div className="bg-slate-50 rounded-xl p-4 text-left flex flex-col gap-2.5 mb-4">
+                    <div className="flex justify-between text-xs">
+                        <span className="text-slate-500">Tenant</span>
+                        <span className="font-bold text-slate-900">{target.tenant}</span>
+                    </div>
+                    <div className="flex justify-between text-xs">
+                        <span className="text-slate-500">Reference</span>
+                        <span className="font-bold text-slate-900">{target.reference_no}</span>
+                    </div>
+                    <div className="flex justify-between text-xs">
+                        <span className="text-slate-500">Room Transfer</span>
+                        <span className="font-bold text-slate-900">
+                            {target.current_room}
+                            <i className="fa-solid fa-arrow-right text-slate-400 text-[9px] mx-1.5"></i>
+                            <span className="text-indigo-700">{target.requested_room}</span>
+                        </span>
+                    </div>
+                </div>
+
+                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-left">
+                    <p className="text-[12px] text-emerald-800 leading-snug">
+                        <i className="fa-solid fa-circle-info mr-1"></i>
+                        The tenant will be notified that their room change request has been approved.
+                    </p>
+                </div>
+            </div>
+
+            <div className="p-5 border-t border-slate-100 flex justify-end gap-3 shrink-0">
+                <button
+                    onClick={onClose}
+                    disabled={saving}
+                    className="text-slate-600 text-[13.5px] font-semibold px-4 py-2 disabled:opacity-50"
+                >
+                    Cancel
+                </button>
+                <button
+                    onClick={onConfirm}
+                    disabled={saving}
+                    className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-5 py-2.5 rounded-lg text-[13.5px] font-semibold inline-flex items-center gap-2 transition"
+                >
+                    {saving ? (
+                        <>
+                            <i className="fa-solid fa-spinner fa-spin"></i>
+                            Approving…
+                        </>
+                    ) : (
+                        <>
+                            <i className="fa-solid fa-check"></i>
+                            Yes, Approve
+                        </>
+                    )}
+                </button>
+            </div>
+        </Modal>
+    );
+}
+
+// ============================================================
+// REJECT CONFIRMATION SUBCOMPONENT
+// ============================================================
+function RejectRoomChangeModal({ target, saving, notes, onNotesChange, onClose, onConfirm }) {
+    return (
+        <Modal onClose={onClose} maxWidth="max-w-[460px]">
+            <div className="p-5 pb-4 flex items-center justify-between border-b border-slate-100 shrink-0">
+                <h3 className="text-lg font-bold text-slate-900">Reject Room Change</h3>
+                <button
+                    onClick={onClose}
+                    disabled={saving}
+                    className="text-slate-400 hover:text-slate-700 text-lg disabled:opacity-50"
+                >
+                    <i className="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto max-h-[60vh]">
+                <div className="text-center mb-4">
+                    <div className="w-16 h-16 mx-auto rounded-full bg-rose-50 flex items-center justify-center mb-4">
+                        <i className="fa-solid fa-circle-xmark text-rose-500 text-2xl"></i>
+                    </div>
+                    <h4 className="text-lg font-bold text-slate-900 mb-2">
+                        Reject this room change?
+                    </h4>
+                    <p className="text-slate-500 text-[13px]">
+                        The tenant will remain in their current room and will be notified of the rejection.
+                    </p>
+                </div>
+
+                <div className="bg-slate-50 rounded-xl p-4 text-left flex flex-col gap-2.5 mb-4">
+                    <div className="flex justify-between text-xs">
+                        <span className="text-slate-500">Tenant</span>
+                        <span className="font-bold text-slate-900">{target.tenant}</span>
+                    </div>
+                    <div className="flex justify-between text-xs">
+                        <span className="text-slate-500">Reference</span>
+                        <span className="font-bold text-slate-900">{target.reference_no}</span>
+                    </div>
+                    <div className="flex justify-between text-xs">
+                        <span className="text-slate-500">Room Transfer</span>
+                        <span className="font-bold text-slate-900">
+                            {target.current_room}
+                            <i className="fa-solid fa-arrow-right text-slate-400 text-[9px] mx-1.5"></i>
+                            <span className="text-indigo-700">{target.requested_room}</span>
+                        </span>
+                    </div>
+                </div>
+
+                <label className="block text-[13px] font-semibold text-slate-700 mb-1.5">
+                    Reason for rejection <span className="text-rose-500">*</span>
+                </label>
+                <textarea
+                    value={notes}
+                    onChange={(e) => onNotesChange(e.target.value)}
+                    placeholder="Explain why this room change is being rejected..."
+                    className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-[13px] outline-none resize-y min-h-[90px] focus:border-slate-400"
+                />
+                <p className="text-[11px] text-slate-400 mt-1">
+                    The tenant will see this reason on their room change request details.
+                </p>
+            </div>
+
+            <div className="p-5 border-t border-slate-100 flex justify-end gap-3 shrink-0">
+                <button
+                    onClick={onClose}
+                    disabled={saving}
+                    className="text-slate-600 text-[13.5px] font-semibold px-4 py-2 disabled:opacity-50"
+                >
+                    Cancel
+                </button>
+                <button
+                    onClick={onConfirm}
+                    disabled={saving || !notes.trim()}
+                    className="bg-rose-500 hover:bg-rose-600 disabled:opacity-50 text-white px-5 py-2.5 rounded-lg text-[13.5px] font-semibold inline-flex items-center gap-2 transition"
+                >
+                    {saving ? (
+                        <>
+                            <i className="fa-solid fa-spinner fa-spin"></i>
+                            Rejecting…
+                        </>
+                    ) : (
+                        <>
+                            <i className="fa-solid fa-ban"></i>
+                            Yes, Reject
+                        </>
+                    )}
+                </button>
+            </div>
+        </Modal>
     );
 }
 

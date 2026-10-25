@@ -8,19 +8,18 @@ use App\Models\Conversation;
 use App\Models\Message;
 use App\Models\MessageReaction;
 use App\Models\Tenant;
+use App\Services\SmsService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
 class MessageController extends Controller
 {
-    /**
-     * Display the admin messages overview.
-     */
+    // ... [index() and show() methods remain exactly the same] ...
+    
     public function index(Request $request)
     {
         $admin = Auth::user();
 
-        // Hide conversations the admin has deleted
         $conversations = Conversation::with(['tenant.user', 'latestMessage'])
             ->where('deleted_by_admin', false)
             ->whereNull('deleted_at')
@@ -74,9 +73,6 @@ class MessageController extends Controller
         ));
     }
 
-    /**
-     * Load messages of a single conversation (AJAX).
-     */
     public function show(Conversation $conversation)
     {
         $conversation->messages()
@@ -121,7 +117,7 @@ class MessageController extends Controller
         ]);
 
         $admin  = Auth::user();
-        $tenant = Tenant::findOrFail($validated['tenant_id']);
+        $tenant = Tenant::with('user')->findOrFail($validated['tenant_id']);
 
         $conversation = Conversation::create([
             'tenant_id'       => $tenant->id,
@@ -136,6 +132,12 @@ class MessageController extends Controller
             'sender_role'     => 'admin',
             'body'            => $validated['body'],
         ]);
+
+        // ── TRIGGER SMS TO TENANT ──
+        if ($tenant->user && $tenant->user->phone) {
+            $msg = "JLM Cozy Cabin: You have received a new message from the administrator. Log in to your account and visit the Messages section to view and reply.";
+            SmsService::send($tenant->user->phone, $msg);
+        }
 
         return response()->json([
             'success' => true,
@@ -164,16 +166,21 @@ class MessageController extends Controller
 
         $conversation->update(['last_message_at' => now()]);
 
+        // ── TRIGGER SMS TO TENANT ──
+        $conversation->load('tenant.user');
+        if ($conversation->tenant?->user?->phone) {
+            $msg = "JLM Cozy Cabin: You have received a new message from the administrator. Log in to your account and visit the Messages section to view and reply.";
+            SmsService::send($conversation->tenant->user->phone, $msg);
+        }
+
         return response()->json([
             'success' => true,
             'message' => 'Reply sent.',
         ]);
     }
 
-    /**
-     * Soft-delete a message from the admin's view.
-     * If BOTH sides have deleted it, mark it as "deleted for everyone".
-     */
+    // ... [deleteMessage(), reactToMessage(), deleteConversation() remain exactly the same] ...
+    
     public function deleteMessage(Message $message)
     {
         $message->update(['deleted_by_receiver' => true]);
@@ -193,10 +200,6 @@ class MessageController extends Controller
         ]);
     }
 
-    /**
-     * Toggle an emoji reaction on a message.
-     * Same emoji again → removed. Different emoji → replaced.
-     */
     public function reactToMessage(Request $request, Message $message)
     {
         $validated = $request->validate([
@@ -233,10 +236,6 @@ class MessageController extends Controller
         ]);
     }
 
-    /**
-     * Soft-delete the WHOLE conversation from the admin's side.
-     * If both sides delete it, mark fully deleted.
-     */
     public function deleteConversation(Conversation $conversation)
     {
         $conversation->update(['deleted_by_admin' => true]);

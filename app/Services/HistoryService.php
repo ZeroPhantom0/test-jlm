@@ -14,6 +14,13 @@ class HistoryService
 {
     /**
      * Build the unified activity timeline.
+     *
+     * Only finalized states are included:
+     *   Payments        → Paid | Rejected
+     *   Reservations    → Approved | Rejected | Expired
+     *   Maintenance     → Completed | Cancelled
+     *   Room Changes    → Approved | Rejected
+     *   Stay Extensions → Approved | Rejected
      */
     public function build(array $filters = []): Collection
     {
@@ -24,12 +31,10 @@ class HistoryService
             ->merge($this->roomChanges())
             ->merge($this->stayExtensions());
 
-        // Apply category filter
         if (!empty($filters['category']) && $filters['category'] !== 'all') {
             $events = $events->where('category', $filters['category']);
         }
 
-        // Apply search filter
         if (!empty($filters['search'])) {
             $q = strtolower($filters['search']);
             $events = $events->filter(function ($e) use ($q) {
@@ -40,23 +45,22 @@ class HistoryService
             });
         }
 
-        // Sort newest first
         return $events->sortByDesc('timestamp')->values();
     }
 
     /**
-     * Compute the summary metrics for the top of the history page.
+     * Summary metrics for the top cards.
      */
     public function metrics(): array
     {
-        // Only count fully PAID invoices in total payments
+        // Only fully Paid invoices count as "total payments"
         $paidTotal = Invoice::where('status', 'Paid')->sum('amount_paid');
         $paidCount = Invoice::where('status', 'Paid')->count();
 
         return [
             'total_payments'       => (float) $paidTotal,
             'total_payments_count' => $paidCount,
-            'past_reservations'    => Reservation::whereIn('status', ['Approved', 'Rejected'])->count(),
+            'past_reservations'    => Reservation::whereIn('status', ['Approved', 'Rejected', 'Expired'])->count(),
             'service_requests'     => MaintenanceRequest::whereIn('status', ['Completed', 'Cancelled'])->count(),
             'approved_requests'    => RoomChangeRequest::whereIn('status', ['Approved', 'Rejected'])->count()
                                     + StayExtensionRequest::whereIn('status', ['Approved', 'Rejected'])->count(),
@@ -64,34 +68,38 @@ class HistoryService
     }
 
     // ============================================================
-    // SOURCES — each returns a Collection of normalized events
+    // PAYMENTS — only Paid and Rejected
     // ============================================================
-
     protected function payments(): Collection
     {
-        // ONLY fetch fully paid invoices. Pending and Partial are excluded.
-        return Invoice::where('status', 'Paid')
+        return Invoice::whereIn('status', ['Paid', 'Rejected'])
             ->latest()
             ->get()
             ->map(function (Invoice $inv) {
+                $isPaid = $inv->status === 'Paid';
+
                 $methodLabel = $inv->payment_method ?? 'Not Set';
                 $paidAmount  = (float) $inv->amount_paid;
                 $amountLabel = '₱' . number_format($paidAmount, 0);
 
+                $desc = $isPaid
+                    ? 'Payment of ' . $amountLabel . ' via ' . strtolower($methodLabel)
+                    : 'Payment rejected — ' . ($inv->receipt_no ? 'ref ' . $inv->receipt_no : 'no reference');
+
                 return [
                     'category'  => 'payment',
                     'icon'      => 'fa-solid fa-peso-sign',
-                    'color'     => 'green',
+                    'color'     => $isPaid ? 'green' : 'red',
                     'title'     => $inv->description,
                     'tenant'    => $inv->tenant_name,
                     'room'      => 'Room ' . $inv->room_number,
-                    'desc'      => 'Payment of ' . $amountLabel . ' via ' . strtolower($methodLabel),
+                    'desc'      => $desc,
                     'date'      => $inv->date_paid?->format('M d, Y · h:i A')
                                  ?? $inv->updated_at?->format('M d, Y · h:i A')
                                  ?? $inv->created_at?->format('M d, Y · h:i A'),
                     'timestamp' => $inv->date_paid ?? $inv->updated_at ?? $inv->created_at,
-                    'amount'    => $amountLabel,
-                    'status'    => 'paid',
+                    'amount'    => $isPaid ? $amountLabel : null,
+                    'status'    => $isPaid ? 'paid' : 'rejected',
                     'details'   => [
                         ['label' => 'Invoice ID',       'value' => $inv->transaction_no],
                         ['label' => 'Tenant',           'value' => $inv->tenant_name],
@@ -106,22 +114,26 @@ class HistoryService
             });
     }
 
+    // ============================================================
+    // RESERVATIONS — only Approved, Rejected, Expired
+    // ============================================================
     protected function reservations(): Collection
     {
-        // ONLY Approved and Rejected
-        return Reservation::whereIn('status', ['Approved', 'Rejected'])
+        return Reservation::whereIn('status', ['Approved', 'Rejected', 'Expired'])
             ->latest()
             ->get()
             ->map(function (Reservation $res) {
                 $statusMap = [
                     'Approved' => 'approved',
                     'Rejected' => 'rejected',
+                    'Expired'  => 'expired',
                 ];
-                $status = $statusMap[$res->status] ?? 'pending';
+                $status = $statusMap[$res->status] ?? 'expired';
 
                 $color = match ($status) {
                     'approved' => 'blue',
                     'rejected' => 'red',
+                    'expired'  => 'yellow',
                     default    => 'gray',
                 };
 
@@ -148,24 +160,18 @@ class HistoryService
             });
     }
 
+    // ============================================================
+    // MAINTENANCE — only Completed and Cancelled
+    // ============================================================
     protected function maintenance(): Collection
     {
-        // ONLY Completed and Cancelled
         return MaintenanceRequest::with(['tenant.user', 'room'])
             ->whereIn('status', ['Completed', 'Cancelled'])
             ->latest()
             ->get()
             ->map(function (MaintenanceRequest $m) {
-                $status = match ($m->status) {
-                    'Completed' => 'completed',
-                    'Cancelled' => 'cancelled',
-                    default     => 'pending',
-                };
-                $color = match ($status) {
-                    'completed' => 'blue',
-                    'cancelled' => 'gray',
-                    default     => 'yellow',
-                };
+                $status = $m->status === 'Completed' ? 'completed' : 'cancelled';
+                $color  = $m->status === 'Completed' ? 'blue' : 'gray';
 
                 return [
                     'category'  => 'maintenance',
@@ -176,7 +182,7 @@ class HistoryService
                     'room'      => $m->room ? 'Room ' . $m->room->room_number : 'N/A',
                     'desc'      => $m->description,
                     'date'      => $m->created_at?->format('M d, Y · h:i A'),
-                    'timestamp' => $m->completed_at ?? $m->created_at,
+                    'timestamp' => $m->completed_at ?? $m->updated_at ?? $m->created_at,
                     'amount'    => null,
                     'status'    => $status,
                     'details'   => [
@@ -191,24 +197,18 @@ class HistoryService
             });
     }
 
+    // ============================================================
+    // ROOM CHANGES — only Approved and Rejected
+    // ============================================================
     protected function roomChanges(): Collection
     {
-        // ONLY Approved and Rejected
         return RoomChangeRequest::with(['tenant.user'])
             ->whereIn('status', ['Approved', 'Rejected'])
             ->latest()
             ->get()
             ->map(function (RoomChangeRequest $r) {
-                $status = match ($r->status) {
-                    'Approved' => 'approved',
-                    'Rejected' => 'rejected',
-                    default     => 'pending',
-                };
-                $color = match ($status) {
-                    'approved' => 'purple',
-                    'rejected' => 'red',
-                    default     => 'gray',
-                };
+                $status = $r->status === 'Approved' ? 'approved' : 'rejected';
+                $color  = $r->status === 'Approved' ? 'purple' : 'red';
 
                 return [
                     'category'  => 'room-change',
@@ -233,24 +233,18 @@ class HistoryService
             });
     }
 
+    // ============================================================
+    // STAY EXTENSIONS — only Approved and Rejected
+    // ============================================================
     protected function stayExtensions(): Collection
     {
-        // ONLY Approved and Rejected
         return StayExtensionRequest::with(['tenant.user', 'room'])
             ->whereIn('status', ['Approved', 'Rejected'])
             ->latest()
             ->get()
             ->map(function (StayExtensionRequest $s) {
-                $status = match ($s->status) {
-                    'Approved' => 'approved',
-                    'Rejected' => 'rejected',
-                    default     => 'pending',
-                };
-                $color = match ($status) {
-                    'approved' => 'yellow',
-                    'rejected' => 'red',
-                    default     => 'gray',
-                };
+                $status = $s->status === 'Approved' ? 'approved' : 'rejected';
+                $color  = $s->status === 'Approved' ? 'yellow' : 'red';
 
                 return [
                     'category'  => 'stay-extension',

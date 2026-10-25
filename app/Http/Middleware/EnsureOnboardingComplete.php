@@ -9,14 +9,6 @@ use Symfony\Component\HttpFoundation\Response;
 
 class EnsureOnboardingComplete
 {
-    /**
-     * Block tenant portal access until BOTH onboarding steps are done.
-     *
-     * If a tenant hasn't finished BOTH steps, they always go back to
-     * Step 1 (Personal Information) — NOT to whichever step is missing.
-     * This guarantees a consistent "start from the beginning" flow on
-     * every visit and every fresh login.
-     */
     public function handle(Request $request, Closure $next): Response
     {
         $user = $request->user();
@@ -26,10 +18,13 @@ class EnsureOnboardingComplete
             return $next($request);
         }
 
-        // Admins bypass onboarding entirely.
-        if ($user->isAdmin()) {
-            return $next($request);
+        // ── TENANT GUARD ──────────────────────────────────────────
+        // This middleware is only applied to /tenants/*. Any non-tenant
+        // user (admin, future staff, etc.) must NOT be allowed through.
+        if (! $user->isTenant()) {
+            abort(403, 'Unauthorized. Tenant access only.');
         }
+        // ──────────────────────────────────────────────────────────
 
         $hasPersonal = $user->personalInformation()->exists();
         $hasIdentity = $user->identityVerification()->exists();

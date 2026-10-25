@@ -287,23 +287,30 @@ body:has(.landing-page) {
 .about-image {
     width: 100%;
     border-radius: 14px;
-    background: linear-gradient(135deg, #e9edf2 0%, #d6dde5 100%);
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
     box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
 }
+
 .image-1 {
     height: 200px;
+    background-image: url("/images/solo-room.jpg");
 }
 .image-2 {
     height: 200px;
     margin-top: 44px;
+    background-image: url("/images/barkada-room.jpg");
 }
 .image-3 {
     height: 200px;
     margin-top: -14px;
+    background-image: url("/images/bedspace-room.jpg");
 }
 .image-4 {
     height: 230px;
     margin-top: 16px;
+    background-image: url("/images/cr.jpg");
 }
 
 .about-content {

@@ -9,8 +9,6 @@ const NAV_ITEMS = [
     { key: "reservations",  label: "Reservations",  icon: "fa-regular fa-calendar-check",  href: "/tenants/reservations" },
     { key: "messages",      label: "Messages",      icon: "fa-regular fa-comment-dots",    href: "/tenants/messages" },
     { key: "announcements", label: "Announcements", icon: "fa-solid fa-bullhorn",          href: "/tenants/announcements" },
-    // ← History intentionally removed from the sidebar.
-    //   Still reachable via Dashboard → History → "View all".
     { key: "settings",      label: "Settings",      icon: "fa-solid fa-gear",              href: "/tenants/settings" },
 ];
 
@@ -20,11 +18,34 @@ const SERVICES_SUB = [
     { key: "services.stay-extension", label: "Stay Extension", icon: "fa-regular fa-calendar", href: "/tenants/services/stay-extension" },
 ];
 
+/* Reusable avatar block: shows uploaded pic if present, otherwise a default user icon */
+function SidebarAvatar({ src, name = "User", size = 22 }) {
+    // Check if src exists AND is a valid string
+    if (src && typeof src === 'string' && src.trim() !== "" && src !== "null") {
+        return (
+            <img
+                src={src}
+                alt={name}
+                className="rounded-full object-cover shrink-0 border border-white/30"
+                style={{ width: `${size}px`, height: `${size}px` }}
+            />
+        );
+    }
+    // Default Fallback
+    return (
+        <i
+            className="fa-solid fa-user-circle shrink-0"
+            style={{ fontSize: `${size}px` }}
+            aria-label={name}
+        />
+    );
+}
+
 export default function Sidebar({
     active        = "dashboard",
     userName      = "Tenant",
     userRole      = "Tenant",
-    avatar        = "https://i.pravatar.cc/100?img=47",
+    avatar        = null,   // Strictly null by default
     isTenant      = false,
 }) {
     const [collapsed, setCollapsed]       = useState(false);
@@ -103,7 +124,7 @@ export default function Sidebar({
                     </button>
                 </div>
 
-                {/* User pill — dynamic */}
+                {/* User pill — dynamic with uploaded avatar / fallback icon */}
                 <div className={`
                     bg-[#e06800] text-white font-semibold text-[13px] flex items-center gap-2.5
                     mx-3.5 mb-3.75 transition-all duration-300 shrink-0 whitespace-nowrap
@@ -111,12 +132,7 @@ export default function Sidebar({
                         ? "md:w-10 md:h-10 md:mx-auto md:my-2.5 md:p-0 md:justify-center rounded-full px-3.5 py-2"
                         : "px-3.5 py-2 rounded-[20px]"}
                 `}>
-                    {avatar ? (
-                        <img src={avatar} alt={userName}
-                             className="w-[22px] h-[22px] rounded-full object-cover shrink-0 border border-white/30" />
-                    ) : (
-                        <i className="fa-regular fa-user-circle text-base shrink-0" />
-                    )}
+                    <SidebarAvatar src={avatar} name={userName} size={22} />
                     <span className={`truncate ${collapsed ? "md:hidden" : ""}`}>{userName}</span>
                 </div>
 

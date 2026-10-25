@@ -2,11 +2,14 @@
 @php
     $user = auth()->user();
 
-    $avatarUrl = $user && $user->profile_picture
-        ? (str_starts_with($user->profile_picture, 'http')
-            ? $user->profile_picture
-            : asset('storage/' . $user->profile_picture))
-        : 'https://i.pravatar.cc/100?img=47';
+    // Prioritize the uploaded profile picture from personal_information
+    $profilePic = $user?->personalInformation?->profile_picture ?? $user?->profile_picture;
+
+    $avatarUrl = $profilePic
+        ? (str_starts_with($profilePic, 'http')
+            ? $profilePic
+            : asset('storage/' . $profilePic))
+        : null;
 
     // True only if an admin has approved this user's reservation
     $isTenant = \App\Models\Tenant::isApproved();
@@ -19,7 +22,7 @@
 
     $sidebarProps = json_encode([
         'active'   => $sidebarActive,
-        'userName' => $user?->name ?? 'Tenant',
+        'userName' => $user?->personalInformation?->full_name ?? $user?->name ?? 'Tenant',
         'userRole' => $isTenant ? 'Tenant' : 'New Tenant',
         'avatar'   => $avatarUrl,
         'isTenant' => $isTenant,
@@ -27,7 +30,7 @@
 
     $headerProps = json_encode([
         'title'     => $pageTitle ?? 'Dashboard',
-        'userName'  => $user?->name ?? 'Tenant',
+        'userName'  => $user?->personalInformation?->full_name ?? $user?->name ?? 'Tenant',
         'userRole'  => $isTenant ? 'Tenant' : 'New Tenant',
         'userEmail' => $user?->email ?? '',
         'avatar'    => $avatarUrl,
@@ -47,9 +50,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
-    {{-- Required for React Fast Refresh --}}
     @viteReactRefresh
-
     @vite(['resources/css/app.css', 'resources/js/app.jsx'])
     @stack('styles')
 </head>

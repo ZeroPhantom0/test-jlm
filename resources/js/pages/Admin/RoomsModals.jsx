@@ -285,6 +285,7 @@ export default function RoomsModals() {
 
     return (
         <>
+            {/* ADD MODAL */}
             {showAdd && (
                 <Modal onClose={() => setShowAdd(false)} maxWidth="max-w-[820px]">
                     <div className="p-6 pb-4 flex items-center justify-between border-b border-slate-100">
@@ -429,6 +430,7 @@ export default function RoomsModals() {
                 </Modal>
             )}
 
+            {/* VIEW MODAL */}
             {showView && room && (
                 <Modal onClose={() => setShowView(false)} maxWidth="max-w-[820px]">
                     <div className="p-6 pb-4 flex items-center justify-between border-b border-slate-100">
@@ -512,6 +514,7 @@ export default function RoomsModals() {
                 </Modal>
             )}
 
+            {/* EDIT MODAL */}
             {showEdit && room && (
                 <Modal onClose={() => setShowEdit(false)} maxWidth="max-w-[820px]">
                     <div className="p-6 pb-4 flex items-center justify-between border-b border-slate-100">
@@ -628,16 +631,8 @@ export default function RoomsModals() {
                                     <option>Barkada Room</option>
                                 </select>
                             </div>
-
-                            <div className="col-span-3">
-                                <label className="block text-xs font-semibold text-slate-600 mb-1.5">Tenant Name</label>
-                                <input
-                                    type="text"
-                                    value={form.tenant_name ?? ''}
-                                    onChange={(e) => updateField('tenant_name', e.target.value)}
-                                    className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-[13px] outline-none"
-                                />
-                            </div>
+                            
+                            {/* Removed the manual Tenant Name input because it is auto-calculated based on reservations */}
                         </div>
 
                         <div>
@@ -658,9 +653,7 @@ export default function RoomsModals() {
                 </Modal>
             )}
 
-            {/* ============================================================ */}
             {/* DELETE CONFIRMATION MODAL */}
-            {/* ============================================================ */}
             {showDelete && deleteTarget && (
                 <Modal onClose={closeDeleteModal} maxWidth="max-w-[460px]">
                     <div className="p-5 pb-4 flex items-center justify-between border-b border-slate-100">

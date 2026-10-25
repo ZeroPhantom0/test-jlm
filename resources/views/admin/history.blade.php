@@ -30,7 +30,8 @@
                     ₱{{ number_format($metrics['total_payments'], 0) }}
                 </div>
                 <div class="text-[11px] text-slate-400 mt-1">
-                    {{ $metrics['total_payments_count'] }} transaction{{ $metrics['total_payments_count'] === 1 ? '' : 's' }}
+                    {{ $metrics['total_payments_count'] }}
+                    transaction{{ $metrics['total_payments_count'] === 1 ? '' : 's' }}
                 </div>
             </div>
             <div class="bg-white rounded-2xl px-5 py-5 border border-slate-100 shadow-sm">
@@ -40,17 +41,20 @@
                         <i class="fa-regular fa-calendar-check"></i>
                     </div>
                 </div>
-                <div class="text-[26px] font-extrabold text-slate-900 leading-tight">{{ $metrics['past_reservations'] }}</div>
+                <div class="text-[26px] font-extrabold text-slate-900 leading-tight">{{ $metrics['past_reservations'] }}
+                </div>
                 <div class="text-[11px] text-slate-400 mt-1">All statuses</div>
             </div>
             <div class="bg-white rounded-2xl px-5 py-5 border border-slate-100 shadow-sm">
                 <div class="flex justify-between items-center mb-3">
                     <span class="text-[13px] font-semibold text-slate-500">Service Requests</span>
-                    <div class="w-9 h-9 rounded-[10px] bg-emerald-100 text-emerald-600 flex items-center justify-center text-lg">
+                    <div
+                        class="w-9 h-9 rounded-[10px] bg-emerald-100 text-emerald-600 flex items-center justify-center text-lg">
                         <i class="fa-regular fa-circle-check"></i>
                     </div>
                 </div>
-                <div class="text-[26px] font-extrabold text-slate-900 leading-tight">{{ $metrics['service_requests'] }}</div>
+                <div class="text-[26px] font-extrabold text-slate-900 leading-tight">{{ $metrics['service_requests'] }}
+                </div>
                 <div class="text-[11px] text-slate-400 mt-1">Completed</div>
             </div>
             <div class="bg-white rounded-2xl px-5 py-5 border border-slate-100 shadow-sm">
@@ -60,31 +64,35 @@
                         <i class="fa-solid fa-arrow-trend-up"></i>
                     </div>
                 </div>
-                <div class="text-[26px] font-extrabold text-slate-900 leading-tight">{{ $metrics['approved_requests'] }}</div>
+                <div class="text-[26px] font-extrabold text-slate-900 leading-tight">{{ $metrics['approved_requests'] }}
+                </div>
                 <div class="text-[11px] text-slate-400 mt-1">Room/stay changes</div>
             </div>
         </div>
 
         {{-- Filters --}}
         <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 space-y-4">
-            
+
             {{-- Category Tabs --}}
             <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
                 @php
                     $filterOptions = [
-                        ['key' => 'all',            'icon' => 'fa-solid fa-wave-square',           'label' => 'All'],
-                        ['key' => 'payment',        'icon' => 'fa-solid fa-peso-sign',             'label' => 'Payments'],
-                        ['key' => 'reservation',    'icon' => 'fa-regular fa-calendar-check',      'label' => 'Reservations'],
-                        ['key' => 'maintenance',    'icon' => 'fa-solid fa-wrench',                'label' => 'Maintenance'],
-                        ['key' => 'room-change',    'icon' => 'fa-solid fa-house',                 'label' => 'Room Changes'],
-                        ['key' => 'stay-extension', 'icon' => 'fa-regular fa-calendar-plus',       'label' => 'Stay Extensions'],
+                        ['key' => 'all', 'icon' => 'fa-solid fa-wave-square', 'label' => 'All'],
+                        ['key' => 'payment', 'icon' => 'fa-solid fa-peso-sign', 'label' => 'Payments'],
+                        ['key' => 'reservation', 'icon' => 'fa-regular fa-calendar-check', 'label' => 'Reservations'],
+                        ['key' => 'maintenance', 'icon' => 'fa-solid fa-wrench', 'label' => 'Maintenance'],
+                        ['key' => 'room-change', 'icon' => 'fa-solid fa-house', 'label' => 'Room Changes'],
+                        [
+                            'key' => 'stay-extension',
+                            'icon' => 'fa-regular fa-calendar-plus',
+                            'label' => 'Stay Extensions',
+                        ],
                     ];
                     $currentCategory = $filters['category'] ?? 'all';
                 @endphp
                 @foreach ($filterOptions as $f)
-                    <button type="button"
-                       data-category="{{ $f['key'] }}"
-                       class="history-filter-pill px-2 py-1.5 rounded-lg text-[12.5px] font-semibold inline-flex items-center justify-center gap-1.5 transition
+                    <button type="button" data-category="{{ $f['key'] }}"
+                        class="history-filter-pill px-2 py-1.5 rounded-lg text-[12.5px] font-semibold inline-flex items-center justify-center gap-1.5 transition
                        {{ $currentCategory === $f['key'] ? 'bg-[#0b1d3a] text-white shadow-sm' : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-transparent hover:border-slate-200' }}">
                         <i class="{{ $f['icon'] }} text-[12px]"></i>
                         <span>{{ $f['label'] }}</span>
@@ -95,7 +103,8 @@
             {{-- Search & Sort --}}
             <div class="flex flex-col md:flex-row gap-3">
                 {{-- Search Input --}}
-                <div class="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 flex items-center gap-2 transition focus-within:border-slate-300 focus-within:bg-white">
+                <div
+                    class="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 flex items-center gap-2 transition focus-within:border-slate-300 focus-within:bg-white">
                     <i class="fa-solid fa-magnifying-glass text-slate-400 text-[12px]"></i>
                     <input id="history-search" type="text" value="{{ $filters['search'] ?? '' }}"
                         placeholder="Search by tenant, room, or description..."
@@ -103,10 +112,12 @@
                 </div>
 
                 {{-- Sort Dropdown --}}
-                <div class="bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 flex items-center justify-between gap-2 text-[13px] font-medium text-slate-700 whitespace-nowrap transition focus-within:border-slate-300 focus-within:bg-white md:min-w-[160px]">
+                <div
+                    class="bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 flex items-center justify-between gap-2 text-[13px] font-medium text-slate-700 whitespace-nowrap transition focus-within:border-slate-300 focus-within:bg-white md:min-w-[160px]">
                     <div class="flex items-center gap-2">
                         <i class="fa-regular fa-calendar text-[12px] text-slate-500"></i>
-                        <select id="history-sort" class="outline-none bg-transparent cursor-pointer appearance-none w-full pr-4">
+                        <select id="history-sort"
+                            class="outline-none bg-transparent cursor-pointer appearance-none w-full pr-4">
                             <option value="newest">Newest First</option>
                             <option value="oldest">Oldest First</option>
                         </select>
@@ -129,26 +140,25 @@
             @forelse ($events as $item)
                 @php
                     $badges = [
-                        'paid'      => 'bg-emerald-100 text-emerald-600',
-                        'approved'  => 'bg-sky-100 text-sky-600',
-                        'rejected'  => 'bg-rose-100 text-rose-600',
+                        'paid' => 'bg-emerald-100 text-emerald-600',
+                        'approved' => 'bg-sky-100 text-sky-600',
+                        'rejected' => 'bg-rose-100 text-rose-600',
                         'completed' => 'bg-emerald-100 text-emerald-600',
                         'cancelled' => 'bg-slate-100 text-slate-500',
-                        'expired'   => 'bg-yellow-100 text-amber-700',
-                        'pending'   => 'bg-yellow-100 text-amber-700',
+                        'expired' => 'bg-yellow-100 text-amber-700',
                     ];
                     $iconColor = match ($item['color']) {
-                        'green'  => 'bg-emerald-100 text-emerald-600',
-                        'blue'   => 'bg-sky-100 text-sky-600',
+                        'green' => 'bg-emerald-100 text-emerald-600',
+                        'blue' => 'bg-sky-100 text-sky-600',
                         'purple' => 'bg-violet-100 text-violet-600',
-                        'red'    => 'bg-rose-100 text-rose-600',
+                        'red' => 'bg-rose-100 text-rose-600',
                         'yellow' => 'bg-yellow-100 text-amber-700',
-                        'gray'   => 'bg-slate-100 text-slate-500',
-                        default  => 'bg-slate-100 text-slate-500',
+                        'gray' => 'bg-slate-100 text-slate-500',
+                        default => 'bg-slate-100 text-slate-500',
                     };
                     $badgeIcon = in_array($item['status'], ['rejected', 'cancelled'])
                         ? 'fa-regular fa-circle-xmark'
-                        : (in_array($item['status'], ['expired', 'pending'])
+                        : (in_array($item['status'], ['expired'])
                             ? 'fa-regular fa-clock'
                             : 'fa-regular fa-circle-check');
                 @endphp
@@ -159,7 +169,8 @@
                     {{-- Collapsed Header (clickable) --}}
                     <div class="history-item-header flex justify-between items-center p-5 cursor-pointer select-none">
                         <div class="flex items-center gap-4 flex-1 min-w-0">
-                            <div class="w-11 h-11 rounded-full flex items-center justify-center text-lg shrink-0 {{ $iconColor }}">
+                            <div
+                                class="w-11 h-11 rounded-full flex items-center justify-center text-lg shrink-0 {{ $iconColor }}">
                                 <i class="{{ $item['icon'] }}"></i>
                             </div>
                             <div class="flex-1 min-w-0">
@@ -185,11 +196,13 @@
                             </div>
                         </div>
                         <div class="flex items-center gap-4">
-                            <span class="px-3.5 py-1 rounded-full text-xs font-bold inline-flex items-center gap-1.5 {{ $badges[$item['status']] ?? 'bg-slate-100 text-slate-500' }}">
+                            <span
+                                class="px-3.5 py-1 rounded-full text-xs font-bold inline-flex items-center gap-1.5 {{ $badges[$item['status']] ?? 'bg-slate-100 text-slate-500' }}">
                                 <i class="{{ $badgeIcon }}"></i>
                                 {{ ucfirst($item['status']) }}
                             </span>
-                            <i class="fa-solid fa-chevron-down text-slate-400 text-xs chevron-icon transition-transform duration-200"></i>
+                            <i
+                                class="fa-solid fa-chevron-down text-slate-400 text-xs chevron-icon transition-transform duration-200"></i>
                         </div>
                     </div>
 
@@ -197,8 +210,10 @@
                     <div class="history-item-details hidden border-t border-slate-100 bg-slate-50/50 px-5 pb-5 pt-4">
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                             @foreach ($item['details'] as $d)
-                                <div class="bg-white border border-slate-100 rounded-[10px] px-4 py-3 flex flex-col gap-0.5">
-                                    <span class="text-[11px] text-slate-400 font-semibold uppercase tracking-wider">{{ $d['label'] }}</span>
+                                <div
+                                    class="bg-white border border-slate-100 rounded-[10px] px-4 py-3 flex flex-col gap-0.5">
+                                    <span
+                                        class="text-[11px] text-slate-400 font-semibold uppercase tracking-wider">{{ $d['label'] }}</span>
                                     <span class="text-[14px] font-semibold text-slate-900">{{ $d['value'] }}</span>
                                 </div>
                             @endforeach
@@ -213,7 +228,8 @@
             @endforelse
 
             {{-- Empty State for JS filtering --}}
-            <div id="empty-filter-state" class="hidden bg-white border border-slate-200 rounded-2xl p-12 text-center text-slate-400">
+            <div id="empty-filter-state"
+                class="hidden bg-white border border-slate-200 rounded-2xl p-12 text-center text-slate-400">
                 <i class="fa-solid fa-magnifying-glass text-4xl mb-3 opacity-50"></i>
                 <p class="text-sm">No records match your current filters.</p>
             </div>
@@ -244,7 +260,7 @@
                 const header = item.querySelector('.history-item-header');
                 header.addEventListener('click', (e) => {
                     // Prevent click if they click the status pill (optional safeguard)
-                    if (e.target.closest('.px-3\\.5')) return; 
+                    if (e.target.closest('.px-3\\.5')) return;
 
                     const details = item.querySelector('.history-item-details');
                     const chevron = item.querySelector('.chevron-icon');
@@ -269,8 +285,9 @@
 
                 // 1. Filter items
                 items.forEach(item => {
-                    const categoryMatch = (currentCategory === 'all' || item.dataset.category === currentCategory);
-                    
+                    const categoryMatch = (currentCategory === 'all' || item.dataset.category ===
+                        currentCategory);
+
                     // Extract text from title, tenant, room, desc
                     const text = item.innerText.toLowerCase();
                     const searchMatch = (query === '' || text.includes(query));
@@ -283,8 +300,8 @@
                         // Collapse details if hidden
                         const details = item.querySelector('.history-item-details');
                         const chevron = item.querySelector('.chevron-icon');
-                        if(details) details.classList.add('hidden');
-                        if(chevron) chevron.style.transform = 'rotate(0deg)';
+                        if (details) details.classList.add('hidden');
+                        if (chevron) chevron.style.transform = 'rotate(0deg)';
                     }
                 });
 
@@ -308,18 +325,20 @@
             // ============================================================
             // 3. EVENT LISTENERS
             // ============================================================
-            
+
             // Pills (Navigation)
             pills.forEach(pill => {
                 pill.addEventListener('click', () => {
                     // Reset UI state for all pills
                     pills.forEach(p => {
                         p.classList.remove('bg-[#0b1d3a]', 'text-white', 'shadow-sm');
-                        p.classList.add('bg-slate-50', 'text-slate-600', 'hover:bg-slate-100', 'border-transparent', 'hover:border-slate-200');
+                        p.classList.add('bg-slate-50', 'text-slate-600', 'hover:bg-slate-100',
+                            'border-transparent', 'hover:border-slate-200');
                     });
 
                     // Highlight clicked pill
-                    pill.classList.remove('bg-slate-50', 'text-slate-600', 'hover:bg-slate-100', 'border-transparent', 'hover:border-slate-200');
+                    pill.classList.remove('bg-slate-50', 'text-slate-600', 'hover:bg-slate-100',
+                        'border-transparent', 'hover:border-slate-200');
                     pill.classList.add('bg-[#0b1d3a]', 'text-white', 'shadow-sm');
 
                     // Update category & filter

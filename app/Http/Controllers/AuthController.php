@@ -3,7 +3,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Mail\AccountRegisteredMail;
 use App\Mail\LoginVerificationCodeMail;
+use App\Mail\PasswordResetMail;
 use App\Models\IdentityVerification;
 use App\Models\LoginVerificationCode;
 use App\Models\PersonalInformation;
@@ -11,8 +13,10 @@ use App\Models\User;
 use App\Services\AuditLogger;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Password;
 use Inertia\Inertia;
 use Laravel\Socialite\Facades\Socialite;
@@ -61,7 +65,6 @@ class AuthController extends Controller
     // ============ GOOGLE OAUTH ============
     public function redirectToGoogle(Request $request)
     {
-        // Persist "remember" through the OAuth round-trip
         $request->session()->put('google_remember', $request->boolean('remember'));
 
         try {
@@ -83,7 +86,6 @@ class AuthController extends Controller
 
     public function handleGoogleCallback(Request $request)
     {
-        // If Google returned an error (e.g., user denied access)
         if ($request->has('error')) {
             return redirect()->route('login')->with(
                 'error',
@@ -117,7 +119,7 @@ class AuthController extends Controller
                 'name'     => $googleUser->getName() ?: explode('@', $email)[0],
                 'email'    => $email,
                 'phone'    => null,
-                'password' => Hash::make(\Illuminate\Support\Str::random(32)),
+                'password' => Hash::make(Str::random(32)),
                 'role'     => 'tenant',
             ]);
 
@@ -128,6 +130,9 @@ class AuthController extends Controller
                 'subject_type' => User::class,
                 'subject_id'   => $user->id,
             ]);
+
+            // Send welcome email — non-blocking
+            $this->sendWelcomeEmail($user);
         }
 
         $remember = (bool) $request->session()->pull('google_remember', false);
@@ -326,6 +331,9 @@ class AuthController extends Controller
             'subject_id'   => $user->id,
         ]);
 
+        // Send welcome email — non-blocking
+        $this->sendWelcomeEmail($user);
+
         return redirect()->route('personal-information');
     }
 
@@ -347,6 +355,140 @@ class AuthController extends Controller
         $request->session()->regenerateToken();
 
         return Inertia::location('/');
+    }
+
+    // ============ PASSWORD RESET ============
+    public function showForgotPassword()
+    {
+        return Inertia::render('Auth/ForgotPassword', [
+            'flash' => [
+                'success' => session('success'),
+                'error'   => session('error'),
+            ],
+        ]);
+    }
+
+    public function sendPasswordResetLink(Request $request)
+    {
+        $validated = $request->validate([
+            'email' => ['required', 'email'],
+        ]);
+
+        $user = User::where('email', $validated['email'])->first();
+
+        // Check if user exists FIRST
+        if (! $user) {
+            return back()->withErrors([
+                'email' => 'We could not find an account associated with this email address.',
+            ])->onlyInput('email');
+        }
+
+        // If they exist, generate token and send email
+        $token = Str::random(64);
+
+        DB::table('password_reset_tokens')->updateOrInsert(
+            ['email' => $user->email],
+            [
+                'token'      => Hash::make($token),
+                'created_at' => now(),
+            ]
+        );
+
+        $resetUrl = url('/password/reset/' . $token)
+            . '?email=' . urlencode($user->email);
+
+        try {
+            Mail::to($user->email)->send(
+                new PasswordResetMail($user, $token, $resetUrl, 60)
+            );
+        } catch (\Throwable $e) {
+            report($e);
+            return back()->withErrors([
+                'email' => 'We are currently unable to send the reset email. Please try again later.',
+            ])->onlyInput('email');
+        }
+
+        AuditLogger::log([
+            'action'       => 'SUBMIT',
+            'module'       => 'AUTHENTICATION',
+            'description'  => 'Password reset requested for ' . $user->email,
+            'subject_type' => User::class,
+            'subject_id'   => $user->id,
+        ]);
+
+        return back()->with(
+            'success',
+            'A secure password reset link has been sent to your email address.'
+        );
+    }
+
+    public function showResetPassword(Request $request, string $token)
+    {
+        return Inertia::render('Auth/ResetPassword', [
+            'token' => $token,
+            'email' => $request->query('email', ''),
+            'flash' => [
+                'error' => session('error'),
+            ],
+        ]);
+    }
+
+    public function resetPassword(Request $request)
+    {
+        $validated = $request->validate([
+            'email'    => ['required', 'email'],
+            'token'    => ['required', 'string'],
+            'password' => ['required', 'confirmed', Password::min(8)],
+        ]);
+
+        $record = DB::table('password_reset_tokens')
+            ->where('email', $validated['email'])
+            ->first();
+
+        if (! $record) {
+            return back()->withErrors([
+                'email' => 'This password reset link is invalid or has expired.',
+            ]);
+        }
+
+        // Token expires after 60 minutes
+        if (now()->diffInMinutes($record->created_at) > 60) {
+            DB::table('password_reset_tokens')->where('email', $validated['email'])->delete();
+            return back()->withErrors([
+                'email' => 'This password reset link has expired. Please request a new one.',
+            ]);
+        }
+
+        if (! Hash::check($validated['token'], $record->token)) {
+            return back()->withErrors([
+                'email' => 'This password reset link is invalid.',
+            ]);
+        }
+
+        $user = User::where('email', $validated['email'])->first();
+        if (! $user) {
+            return back()->withErrors([
+                'email' => 'We could not find an account with that email.',
+            ]);
+        }
+
+        $user->update([
+            'password' => Hash::make($validated['password']),
+        ]);
+
+        DB::table('password_reset_tokens')->where('email', $validated['email'])->delete();
+
+        AuditLogger::log([
+            'action'       => 'UPDATE',
+            'module'       => 'AUTHENTICATION',
+            'description'  => 'Password reset completed for ' . $user->email,
+            'subject_type' => User::class,
+            'subject_id'   => $user->id,
+        ]);
+
+        return redirect()
+            ->route('login')
+            ->with('success', 'Your password has been reset. You can now log in.');
     }
 
     // ============ ONBOARDING ============
@@ -503,5 +645,15 @@ class AuthController extends Controller
         }
 
         return Inertia::location('/tenants');
+    }
+
+    // ============ HELPERS ============
+    private function sendWelcomeEmail(User $user): void
+    {
+        try {
+            Mail::to($user->email)->send(new AccountRegisteredMail($user));
+        } catch (\Throwable $e) {
+            report($e); // never block signup if email fails
+        }
     }
 }

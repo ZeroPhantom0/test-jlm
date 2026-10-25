@@ -26,6 +26,7 @@ use App\Http\Controllers\Admin\HistoryController;
 use App\Http\Controllers\Admin\ReportsController;
 use App\Http\Controllers\Admin\MessageController;
 use App\Http\Controllers\Admin\AuditLogController;
+use App\Http\Controllers\Admin\SettingsController;
 
 // Tenant Controllers
 use App\Http\Controllers\Tenant\TenantDashboardController;
@@ -37,6 +38,7 @@ use App\Http\Controllers\Tenant\TenantAnnouncementController;
 use App\Http\Controllers\Tenant\TenantHistoryController;
 use App\Http\Controllers\Tenant\TenantMessageController;
 use App\Http\Controllers\Tenant\TenantReservationController;
+use App\Http\Controllers\Tenant\TenantSettingsController;
 
 use App\Models\TourScene;
 use App\Models\VirtualTour;
@@ -75,6 +77,12 @@ Route::middleware('guest')->group(function () {
     Route::post('/login/verify',  [AuthController::class, 'verify'])->name('login.verify.submit');
     Route::post('/login/resend',  [AuthController::class, 'resendCode'])->name('login.resend');
     Route::post('/login/cancel',  [AuthController::class, 'cancelVerification'])->name('login.cancel');
+
+    // ---------- PASSWORD RESET ----------
+    Route::get('/forgot-password',  [AuthController::class, 'showForgotPassword'])->name('password.request');
+    Route::post('/forgot-password', [AuthController::class, 'sendPasswordResetLink'])->name('password.email');
+    Route::get('/password/reset/{token}', [AuthController::class, 'showResetPassword'])->name('password.reset');
+    Route::post('/password/reset',        [AuthController::class, 'resetPassword'])->name('password.update');
 });
 
 Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
@@ -108,46 +116,50 @@ Route::middleware(['auth', 'onboarding.complete'])
     ->name('tenants.')
     ->group(function () {
 
-    Route::get('/', [TenantDashboardController::class, 'index'])->name('dashboard');
+        Route::get('/', [TenantDashboardController::class, 'index'])->name('dashboard');
 
-    Route::get('/notifications/feed', [TenantNotificationController::class, 'index'])
-        ->name('notifications.feed');
+        Route::get('/notifications/feed', [TenantNotificationController::class, 'index'])
+            ->name('notifications.feed');
 
-    Route::get('/billing',         [TenantBillingController::class, 'index'])->name('billing');
-    Route::post('/billing/pay',    [TenantBillingController::class, 'pay'])->name('billing.pay');
-    Route::post('/billing/cancel', [TenantBillingController::class, 'cancelPayment'])->name('billing.cancel');
+        Route::get('/billing',         [TenantBillingController::class, 'index'])->name('billing');
+        Route::post('/billing/pay',    [TenantBillingController::class, 'pay'])->name('billing.pay');
+        Route::post('/billing/cancel', [TenantBillingController::class, 'cancelPayment'])->name('billing.cancel');
 
-    Route::get('/reservations',                       [TenantReservationController::class, 'index'])->name('reservations');
-    Route::post('/reservations',                      [TenantReservationController::class, 'store'])->name('reservations.store');
-    Route::post('/reservations/{reservation}/cancel', [TenantReservationController::class, 'cancel'])->name('reservations.cancel');
+        Route::get('/reservations',                       [TenantReservationController::class, 'index'])->name('reservations');
+        Route::post('/reservations',                      [TenantReservationController::class, 'store'])->name('reservations.store');
+        Route::post('/reservations/{reservation}/cancel', [TenantReservationController::class, 'cancel'])->name('reservations.cancel');
 
-    Route::get('/messages',                       [TenantMessageController::class, 'index'])->name('messages');
-    Route::post('/messages',                      [TenantMessageController::class, 'store'])->name('messages.store');
-    Route::get('/messages/{conversation}',        [TenantMessageController::class, 'show'])->name('messages.show');
-    Route::post('/messages/{conversation}/reply', [TenantMessageController::class, 'reply'])->name('messages.reply');
+        Route::get('/messages',                       [TenantMessageController::class, 'index'])->name('messages');
+        Route::post('/messages',                      [TenantMessageController::class, 'store'])->name('messages.store');
+        Route::get('/messages/{conversation}',        [TenantMessageController::class, 'show'])->name('messages.show');
+        Route::post('/messages/{conversation}/reply', [TenantMessageController::class, 'reply'])->name('messages.reply');
 
-    Route::delete('/messages/{message}',           [TenantMessageController::class, 'deleteMessage'])->name('messages.delete');
-    Route::post('/messages/{message}/react',       [TenantMessageController::class, 'reactToMessage'])->name('messages.react');
-    Route::delete('/messages/conversation/{conversation}', [TenantMessageController::class, 'deleteConversation'])->name('messages.conversation.delete');
+        Route::delete('/messages/{message}',           [TenantMessageController::class, 'deleteMessage'])->name('messages.delete');
+        Route::post('/messages/{message}/react',       [TenantMessageController::class, 'reactToMessage'])->name('messages.react');
+        Route::delete('/messages/conversation/{conversation}', [TenantMessageController::class, 'deleteConversation'])->name('messages.conversation.delete');
 
-    Route::get('/announcements', [TenantAnnouncementController::class, 'index'])->name('announcements');
-    Route::get('/history',       [TenantHistoryController::class, 'index'])->name('history');
-    Route::view('/settings',     'tenants.settings')->name('settings');
+        Route::get('/announcements', [TenantAnnouncementController::class, 'index'])->name('announcements');
+        Route::get('/history',       [TenantHistoryController::class, 'index'])->name('history');
 
-    Route::prefix('services')->name('services.')->group(function () {
-        Route::get('/maintenance',                               [TenantMaintenanceController::class, 'index'])->name('maintenance');
-        Route::post('/maintenance',                              [TenantMaintenanceController::class, 'store'])->name('maintenance.store');
-        Route::post('/maintenance/{maintenanceRequest}/cancel',  [TenantMaintenanceController::class, 'cancel'])->name('maintenance.cancel');
+        // --- TENANT SETTINGS ROUTES ---
+        Route::get('/settings',           [TenantSettingsController::class, 'index'])->name('settings');
+        Route::put('/settings/profile',   [TenantSettingsController::class, 'updateProfile'])->name('settings.update');
+        Route::put('/settings/password',  [TenantSettingsController::class, 'updatePassword'])->name('settings.password');
 
-        Route::get('/room-change',                               [TenantRoomChangeController::class, 'index'])->name('room-change');
-        Route::post('/room-change',                              [TenantRoomChangeController::class, 'store'])->name('room-change.store');
-        Route::post('/room-change/{roomChangeRequest}/cancel',   [TenantRoomChangeController::class, 'cancel'])->name('room-change.cancel');
+        Route::prefix('services')->name('services.')->group(function () {
+            Route::get('/maintenance',                               [TenantMaintenanceController::class, 'index'])->name('maintenance');
+            Route::post('/maintenance',                              [TenantMaintenanceController::class, 'store'])->name('maintenance.store');
+            Route::post('/maintenance/{maintenanceRequest}/cancel',  [TenantMaintenanceController::class, 'cancel'])->name('maintenance.cancel');
 
-        Route::get('/stay-extension',                                [TenantStayExtensionController::class, 'index'])->name('stay-extension');
-        Route::post('/stay-extension',                               [TenantStayExtensionController::class, 'store'])->name('stay-extension.store');
-        Route::post('/stay-extension/{stayExtensionRequest}/cancel', [TenantStayExtensionController::class, 'cancel'])->name('stay-extension.cancel');
+            Route::get('/room-change',                               [TenantRoomChangeController::class, 'index'])->name('room-change');
+            Route::post('/room-change',                              [TenantRoomChangeController::class, 'store'])->name('room-change.store');
+            Route::post('/room-change/{roomChangeRequest}/cancel',   [TenantRoomChangeController::class, 'cancel'])->name('room-change.cancel');
+
+            Route::get('/stay-extension',                                [TenantStayExtensionController::class, 'index'])->name('stay-extension');
+            Route::post('/stay-extension',                               [TenantStayExtensionController::class, 'store'])->name('stay-extension.store');
+            Route::post('/stay-extension/{stayExtensionRequest}/cancel', [TenantStayExtensionController::class, 'cancel'])->name('stay-extension.cancel');
+        });
     });
-});
 
 
 // ============================================================
@@ -184,6 +196,7 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
     Route::post('/billing/{invoice:transaction_no}/remind',         [BillingController::class, 'sendReminder'])->name('billing.remind');
     Route::post('/billing/{invoice:transaction_no}/verify-payment', [BillingController::class, 'verifyPayment'])->name('billing.verify-payment');
     Route::post('/billing/{invoice:transaction_no}/reject-payment', [BillingController::class, 'rejectPayment'])->name('billing.reject-payment');
+    Route::post('/billing/{invoice:transaction_no}/send-overdue-notice', [BillingController::class, 'sendOverdueNotice'])->name('billing.send-overdue-notice');
 
     // ---------- Reservations ----------
     Route::get('/reservations',                        [ReservationController::class, 'index'])->name('reservations');
@@ -221,7 +234,17 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
     Route::get('/audit-logs/data',   [AuditLogController::class, 'data'])->name('audit-logs.data');
     Route::get('/audit-logs/export', [AuditLogController::class, 'export'])->name('audit-logs.export');
 
-    Route::view('/settings', 'admin.settings')->name('settings');
+    // ---------- Admin Settings ----------
+    Route::get('/settings', [SettingsController::class, 'index'])->name('settings');
+    Route::put('/settings/general', [SettingsController::class, 'updateGeneral'])->name('settings.general');
+    Route::put('/settings/profile', [SettingsController::class, 'updateProfile'])->name('settings.profile');
+    Route::put('/settings/password', [SettingsController::class, 'updatePassword'])->name('settings.password');
+
+    // ---------- Data Management ----------
+    Route::post('/settings/backup', [SettingsController::class, 'backupDatabase'])->name('settings.backup');
+    Route::get('/settings/backup/{filename}', [SettingsController::class, 'downloadBackup'])->name('settings.download-backup');
+    Route::get('/settings/export', [SettingsController::class, 'exportData'])->name('settings.export');
+    Route::post('/settings/archive', [SettingsController::class, 'archiveRecords'])->name('settings.archive');
 
     // ============================================================
     // SERVICES

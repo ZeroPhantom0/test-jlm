@@ -6,6 +6,7 @@ namespace App\Http\Controllers\Tenant;
 use App\Http\Controllers\Controller;
 use App\Models\StayExtensionRequest;
 use App\Models\Tenant;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
@@ -19,12 +20,23 @@ class TenantStayExtensionController extends Controller
         /** @var \App\Models\User $user */
         $user = Auth::user();
 
-        // Tenant record for the logged-in user
+        // Tenant record + current room + approved reservation
         $tenant = Tenant::with(['room', 'approvedReservation'])
             ->where('user_id', $user->id)
             ->first();
 
-        $currentLeaseEnd = $tenant?->approvedReservation?->check_out?->format('M j, Y') ?? 'Open-ended';
+        // ── CURRENT LEASE END comes from the approved reservation's check_out ──
+        $currentCheckOut = $tenant?->approvedReservation?->check_out;
+
+        $currentLeaseEnd = $currentCheckOut
+            ? $currentCheckOut->format('M j, Y')
+            : 'Open-ended';
+
+        // The earliest date the tenant is allowed to pick for the new end date.
+        // Must be strictly AFTER the current checkout.
+        $minRequestedDate = $currentCheckOut
+            ? $currentCheckOut->copy()->addDay()->toDateString()
+            : now()->toDateString();
 
         // Only this tenant's stay extension requests
         $requests = StayExtensionRequest::with('room')
@@ -34,9 +46,6 @@ class TenantStayExtensionController extends Controller
 
         // Room number label
         $roomNumber = $tenant?->room?->room_number ?? '—';
-
-        // Current lease end (from tenant record)
-        $currentLeaseEnd = $tenant?->move_out_date?->format('M j, Y') ?? '—';
 
         // Pass a normalised map to the React modals
         $requestsForReact = $requests->mapWithKeys(function ($r) {
@@ -61,6 +70,7 @@ class TenantStayExtensionController extends Controller
             'tenant',
             'roomNumber',
             'currentLeaseEnd',
+            'minRequestedDate',
             'requests',
             'requestsForReact'
         ));
@@ -74,7 +84,7 @@ class TenantStayExtensionController extends Controller
         /** @var \App\Models\User $user */
         $user = Auth::user();
 
-        $tenant = Tenant::with('room')
+        $tenant = Tenant::with(['room', 'approvedReservation'])
             ->where('user_id', $user->id)
             ->first();
 
@@ -84,22 +94,46 @@ class TenantStayExtensionController extends Controller
             ], 422);
         }
 
+        // Server-side guard: requested date must be AFTER the current checkout
+        $currentCheckOut = $tenant->approvedReservation?->check_out;
+
+        if (!$currentCheckOut) {
+            return response()->json([
+                'message' => 'You have no active lease to extend. Please contact the admin.',
+            ], 422);
+        }
+
         $validated = $request->validate([
             'current_lease_end'   => ['required', 'date'],
-            'requested_lease_end' => ['required', 'date', 'after:current_lease_end'],
+            'requested_lease_end' => [
+                'required',
+                'date',
+                'after:' . $currentCheckOut->toDateString(),
+            ],
             'reason'              => ['required', 'string'],
+        ], [
+            'requested_lease_end.after' =>
+                'The requested lease end must be after your current check-out date ('
+                . $currentCheckOut->format('M j, Y') . ').',
         ]);
 
+        // Recompute extension days server-side — never trust the client
         $extensionDays = StayExtensionRequest::calculateExtensionDays(
-            $validated['current_lease_end'],
+            $currentCheckOut->toDateString(),
             $validated['requested_lease_end']
         );
+
+        if ($extensionDays <= 0) {
+            return response()->json([
+                'message' => 'The requested lease end must be after your current check-out date.',
+            ], 422);
+        }
 
         $stayExtension = StayExtensionRequest::create([
             'reference_no'        => StayExtensionRequest::generateReferenceNo(),
             'tenant_id'           => $tenant->id,
             'room_id'             => $tenant->room_id,
-            'current_lease_end'   => $validated['current_lease_end'],
+            'current_lease_end'   => $currentCheckOut->toDateString(),
             'requested_lease_end' => $validated['requested_lease_end'],
             'extension_days'      => $extensionDays,
             'reason'              => $validated['reason'],
@@ -133,7 +167,7 @@ class TenantStayExtensionController extends Controller
         }
 
         $stayExtensionRequest->update([
-            'status' => 'Rejected', // or a dedicated 'Cancelled' if your enum supports it
+            'status' => 'Rejected',
         ]);
 
         return response()->json([

@@ -35,12 +35,40 @@ function csrfToken() {
         ?.getAttribute("content") || "";
 }
 
+/* Reusable avatar block: shows uploaded pic if present, otherwise a default user icon */
+function UserAvatar({ src, name = "User", size = 34, className = "" }) {
+    const dimension = `${size}px`;
+    
+    // Check if src exists AND is a valid string (not null, not empty, not "null")
+    if (src && typeof src === 'string' && src.trim() !== "" && src !== "null") {
+        return (
+            <img
+                src={src}
+                alt={name}
+                className={`rounded-full object-cover border border-slate-200 ${className}`}
+                style={{ width: dimension, height: dimension }}
+            />
+        );
+    }
+    
+    // Default Fallback: Styled icon instead of an image
+    return (
+        <div
+            className={`rounded-full bg-slate-100 text-slate-400 flex items-center justify-center border border-slate-200 ${className}`}
+            style={{ width: dimension, height: dimension }}
+            aria-label={name}
+        >
+            <i className="fa-solid fa-user" style={{ fontSize: size * 0.45 }} />
+        </div>
+    );
+}
+
 export default function TopHeader({
     title     = "Dashboard",
     userName  = "Tenant",
     userRole  = "Tenant",
     userEmail = "",
-    avatar    = "https://i.pravatar.cc/100?img=47",
+    avatar    = null,   // Strictly null by default
     isTenant  = false,
 }) {
     const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -253,22 +281,14 @@ export default function TopHeader({
                                 {displayRole}
                             </p>
                         </div>
-                        <img
-                            src={avatar}
-                            alt={userName}
-                            className="w-[34px] h-[34px] rounded-full object-cover border border-slate-200"
-                        />
+                        <UserAvatar src={avatar} name={userName} size={34} />
                         <i className="fa-solid fa-chevron-down text-[10px] text-slate-400" />
                     </div>
 
                     {dropdownOpen && (
                         <div className="absolute right-0 top-[calc(100%+12px)] w-60 bg-white rounded-2xl border border-slate-100 shadow-xl p-3 z-[1000] animate-in fade-in slide-in-from-top-2 duration-150">
                             <div className="flex items-center gap-3 p-2 pb-3 border-b border-slate-100 mb-1.5">
-                                <img
-                                    src={avatar}
-                                    alt={userName}
-                                    className="w-[38px] h-[38px] rounded-full object-cover"
-                                />
+                                <UserAvatar src={avatar} name={userName} size={38} />
                                 <div className="overflow-hidden">
                                     <h4 className="text-[13px] font-bold text-slate-900">
                                         {userName}

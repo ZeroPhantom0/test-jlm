@@ -3,6 +3,13 @@
 @section('title', 'Maintenance Requests')
 
 @section('content')
+@php
+    // Hide finalized statuses (Completed & Cancelled)
+    $activeRequests = $requests->filter(function ($req) {
+        return !in_array($req->status, ['Completed', 'Cancelled']);
+    })->values();
+@endphp
+
 <div class="p-4 md:p-8 max-w-[1400px] mx-auto space-y-5">
 
     {{-- Page Title --}}
@@ -12,7 +19,7 @@
         </div>
         <div>
             <h2 class="text-[22px] font-extrabold text-slate-900">Maintenance Requests</h2>
-            <p class="text-[13px] text-slate-500 mt-0.5">Track and resolve maintenance issues submitted by tenants</p>
+            <p class="text-[13px] text-slate-500 mt-0.5">Track and resolve active maintenance issues submitted by tenants</p>
         </div>
     </div>
 
@@ -56,7 +63,7 @@
                 </tr>
             </thead>
             <tbody>
-                @forelse($requests as $req)
+                @forelse($activeRequests as $req)
                 <tr class="border-b border-slate-50 last:border-0">
                     <td class="py-4 px-5">
                         <div class="font-bold text-slate-900 text-sm">{{ $req->title }}</div>
@@ -103,7 +110,7 @@
                 <tr>
                     <td colspan="6" class="py-12 text-center text-slate-400 text-[13px]">
                         <i class="fa-solid fa-inbox text-3xl mb-3 block opacity-30"></i>
-                        No maintenance requests found.
+                        No active maintenance requests found.
                     </td>
                 </tr>
                 @endforelse

@@ -2,6 +2,13 @@
 @section('title', 'Room Change Requests')
 
 @section('content')
+@php
+    // Hide finalized statuses (Approved & Rejected)
+    $activeRequests = $requests->filter(function ($r) {
+        return $r->status === 'Pending';
+    })->values();
+@endphp
+
 <div class="p-4 md:p-8 max-w-6xl">
 
     {{-- Page Title --}}
@@ -37,7 +44,7 @@
 
         <div class="flex justify-between items-center mb-5">
             <span class="text-[13.5px] text-slate-500">
-                {{ $requests->count() }} request{{ $requests->count() === 1 ? '' : 's' }}
+                {{ $activeRequests->count() }} active request{{ $activeRequests->count() === 1 ? '' : 's' }}
             </span>
             <button id="open-new-room-change"
                     class="bg-[#001838] hover:bg-[#0d2347] disabled:opacity-50 text-white px-4 py-2.5 rounded-lg font-medium text-[13px] inline-flex items-center gap-2"
@@ -46,27 +53,18 @@
             </button>
         </div>
 
-        @if ($requests->isEmpty())
+        @if ($activeRequests->isEmpty())
             <div class="text-center py-12 text-slate-400 text-sm">
                 <i class="fa-solid fa-inbox text-3xl mb-3"></i>
-                <p>No room change requests yet.</p>
+                <p>No active room change requests.</p>
             </div>
         @else
             <div class="flex flex-col gap-4">
-                @foreach ($requests as $r)
+                @foreach ($activeRequests as $r)
                     @php
-                        $statusClass = match ($r->status) {
-                            'Pending'  => 'bg-amber-100 text-amber-700',
-                            'Approved' => 'bg-emerald-100 text-emerald-600',
-                            'Rejected' => 'bg-rose-100 text-rose-600',
-                            default    => 'bg-slate-100 text-slate-500',
-                        };
-                        $statusIcon = match ($r->status) {
-                            'Pending'  => 'fa-regular fa-clock',
-                            'Approved' => 'fa-regular fa-circle-check',
-                            'Rejected' => 'fa-regular fa-circle-xmark',
-                            default    => 'fa-regular fa-circle',
-                        };
+                        // Since we only show Pending, we can hardcode the styling for it
+                        $statusClass = 'bg-amber-100 text-amber-700';
+                        $statusIcon = 'fa-regular fa-clock';
                         $availabilityLabel = ucfirst(strtolower($r->availability ?? 'Available'));
                     @endphp
 
@@ -86,11 +84,10 @@
                             <i class="fa-regular fa-eye cursor-pointer hover:text-slate-600 view-room-change-details-btn"
                                data-request-id="{{ $r->id }}"
                                title="View Details"></i>
-                            @if ($r->status === 'Pending')
-                                <i class="fa-regular fa-circle-xmark cursor-pointer hover:text-rose-600 cancel-room-change-btn"
-                                   data-request-id="{{ $r->id }}"
-                                   title="Cancel Request"></i>
-                            @endif
+                            {{-- Always show cancel since only Pending is visible --}}
+                            <i class="fa-regular fa-circle-xmark cursor-pointer hover:text-rose-600 cancel-room-change-btn"
+                               data-request-id="{{ $r->id }}"
+                               title="Cancel Request"></i>
                         </div>
 
                         <div class="text-slate-600 text-[13.5px] mb-3">{{ $r->reason }}</div>

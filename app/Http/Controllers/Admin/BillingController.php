@@ -9,7 +9,10 @@ use App\Models\Reservation;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Services\AuditLogger;
-use App\Mail\PaymentVerifiedMail;
+use App\Mail\PaymentApprovedMail;
+use App\Mail\PaymentRejectedMail;
+use App\Mail\PaymentDueReminderMail;
+use App\Mail\OverduePaymentMail;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -19,7 +22,7 @@ use Illuminate\Support\Facades\Storage;
 
 class BillingController extends Controller
 {
-    private const ACTIONABLE_STATUSES = ['Pending', 'Partial', 'Overdue'];
+    private const ACTIONABLE_STATUSES = ['Pending', 'Partial', 'Overdue', 'Unpaid'];
 
     public function index(Request $request)
     {
@@ -205,6 +208,11 @@ class BillingController extends Controller
 
             DB::commit();
 
+            // Send email if status changed to Paid
+            if (!$wasPaid && $status === 'Paid') {
+                $this->sendPaymentApprovedEmail($invoice->fresh());
+            }
+
             return response()->json([
                 'message' => 'Invoice updated.',
                 'invoice' => $invoice->fresh(),
@@ -247,8 +255,11 @@ class BillingController extends Controller
 
             $this->notifyTenant($invoice, 'verified');
 
+            // Send appropriate email based on status
             if ($status === 'Paid') {
-                $this->sendPaymentVerifiedEmail($invoice);
+                $this->sendPaymentApprovedEmail($invoice->fresh());
+            } elseif ($status === 'Partial') {
+                $this->sendPaymentApprovedEmail($invoice->fresh(), true);
             }
 
             $message = match ($status) {
@@ -341,6 +352,7 @@ class BillingController extends Controller
                 DB::commit();
 
                 $this->notifyTenant($invoice, 'rejected', $validated['admin_notes']);
+                $this->sendPaymentRejectedEmail($invoice, $validated['admin_notes']);
 
                 return response()->json([
                     'message' => 'Payment rejected. Reservation cancelled. Tenant has been notified.',
@@ -381,6 +393,7 @@ class BillingController extends Controller
             DB::commit();
 
             $this->notifyTenant($invoice, 'rejected', $validated['admin_notes']);
+            $this->sendPaymentRejectedEmail($invoice->fresh(), $validated['admin_notes']);
 
             return response()->json([
                 'message' => 'Payment rejected. Tenant has been notified.',
@@ -398,9 +411,35 @@ class BillingController extends Controller
 
     public function sendReminder(Invoice $invoice)
     {
-        return response()->json([
-            'message' => "Reminder sent to {$invoice->tenant_name}.",
-        ]);
+        // Only send reminders for invoices that are not paid
+        if ($invoice->status === 'Paid') {
+            return response()->json([
+                'message' => 'Cannot send reminder for a paid invoice.',
+            ], 422);
+        }
+
+        try {
+            $this->sendPaymentDueReminderEmail($invoice);
+            
+            AuditLogger::log([
+                'action'       => 'REMIND',
+                'module'       => 'BILLING',
+                'description'  => 'Sent payment reminder to ' . $invoice->tenant_name
+                    . ' for invoice ' . $invoice->transaction_no,
+                'status'       => 'success',
+                'subject_type' => Invoice::class,
+                'subject_id'   => $invoice->id,
+            ]);
+
+            return response()->json([
+                'message' => "Reminder sent to {$invoice->tenant_name}.",
+            ]);
+        } catch (\Throwable $e) {
+            report($e);
+            return response()->json([
+                'message' => 'Failed to send reminder: ' . $e->getMessage(),
+            ], 500);
+        }
     }
 
     // ============================================================
@@ -427,13 +466,6 @@ class BillingController extends Controller
 
     /**
      * Compute the due date for an invoice based on the stay length.
-     *
-     *   ≤ 1 day         → check_out (same day)
-     *   2 – 6 days      → check_in + 3 days
-     *   7 – 31 days     → check_in + 7 days
-     *   32 – 100 days   → check_in + 1 month
-     *   101 – 364 days  → check_in + 2 months
-     *   ≥ 365 days      → check_in + 3 months
      */
     private function computeDueDate(?Carbon $checkIn, ?Carbon $checkOut): Carbon
     {
@@ -574,23 +606,92 @@ class BillingController extends Controller
         }
     }
 
-    private function sendPaymentVerifiedEmail(Invoice $invoice): void
+    /**
+     * Get the tenant's email address from an invoice.
+     */
+    private function getTenantEmail(Invoice $invoice): ?string
+    {
+        $user = User::find($invoice->tenant_id);
+        if (!$user) {
+            $tenant = Tenant::find($invoice->tenant_id);
+            if ($tenant) {
+                $user = User::find($tenant->user_id);
+            }
+        }
+        return $user?->email;
+    }
+
+    /**
+     * Send payment approved email.
+     */
+    private function sendPaymentApprovedEmail(Invoice $invoice, bool $isPartial = false): void
     {
         try {
-            $user = User::find($invoice->tenant_id);
-
-            if (!$user) {
-                $tenant = Tenant::find($invoice->tenant_id);
-                if ($tenant) {
-                    $user = User::find($tenant->user_id);
-                }
-            }
-
-            if ($user && $user->email) {
-                Mail::to($user->email)->send(new PaymentVerifiedMail($invoice));
+            $email = $this->getTenantEmail($invoice);
+            
+            if ($email) {
+                Mail::to($email)->send(new PaymentApprovedMail($invoice));
             }
         } catch (\Throwable $e) {
             report($e);
+        }
+    }
+
+    /**
+     * Send payment rejected email.
+     */
+    private function sendPaymentRejectedEmail(Invoice $invoice, string $reason = ''): void
+    {
+        try {
+            $email = $this->getTenantEmail($invoice);
+            
+            if ($email) {
+                Mail::to($email)->send(new PaymentRejectedMail($invoice, $reason));
+            }
+        } catch (\Throwable $e) {
+            report($e);
+        }
+    }
+
+    /**
+     * Send payment due reminder email.
+     */
+    private function sendPaymentDueReminderEmail(Invoice $invoice): void
+    {
+        try {
+            $email = $this->getTenantEmail($invoice);
+            
+            if ($email) {
+                $daysUntilDue = $invoice->due_date 
+                    ? max(0, now()->diffInDays($invoice->due_date, false))
+                    : 7;
+                    
+                Mail::to($email)->send(new PaymentDueReminderMail($invoice, (int) $daysUntilDue));
+            }
+        } catch (\Throwable $e) {
+            report($e);
+            throw $e;
+        }
+    }
+
+    /**
+     * Send overdue payment notice email.
+     */
+    public function sendOverdueNotice(Invoice $invoice): void
+    {
+        try {
+            $email = $this->getTenantEmail($invoice);
+            
+            if ($email) {
+                $daysOverdue = $invoice->due_date 
+                    ? now()->diffInDays($invoice->due_date)
+                    : 0;
+                    
+                Mail::to($email)->send(new OverduePaymentMail($invoice, (int) $daysOverdue));
+            }
+        } catch (\Throwable $e) {
+            report($e);
+            throw $e;
         }
     }
 }

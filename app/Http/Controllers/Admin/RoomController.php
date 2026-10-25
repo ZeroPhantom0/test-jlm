@@ -14,8 +14,8 @@ class RoomController extends Controller
     public function index()
     {
         $rooms = Room::withCount([
-                'tenants as tenants_count' => fn ($q) => $q->where('status', 'active'),
-            ])
+            'tenants as tenants_count' => fn($q) => $q->where('status', 'active'),
+        ])
             ->orderBy('floor')
             ->orderBy('room_number')
             ->get();
@@ -36,7 +36,7 @@ class RoomController extends Controller
     {
         $data = $this->validated($request);
         $room = Room::create($data);
-        
+
         $room->syncStatus();
 
         AuditLogger::log([
@@ -57,7 +57,7 @@ class RoomController extends Controller
     public function show(Room $room)
     {
         $room->loadCount([
-            'tenants as tenants_count' => fn ($q) => $q->where('status', 'active'),
+            'tenants as tenants_count' => fn($q) => $q->where('status', 'active'),
         ]);
 
         return response()->json(['room' => $room]);
@@ -66,9 +66,11 @@ class RoomController extends Controller
     public function update(Request $request, Room $room)
     {
         $data = $this->validated($request, $room->id);
-        unset($data['status']); 
-        
-        // ── 1. Determine if data actually changed ─────────────────────
+
+        // We unset 'status' here so the model's syncStatus() method 
+        // correctly recalculates it based on the new bed counts.
+        unset($data['status']);
+
         $hasChanges = false;
         foreach ($data as $key => $value) {
             if ((string) $room->$key !== (string) $value) {
@@ -77,13 +79,13 @@ class RoomController extends Controller
             }
         }
 
-        // ── 2. Save Data ──────────────────────────────────────────────
         $room->update($data);
+
+        // This will recalculate the status AND the tenant names automatically
         $room->syncStatus();
 
-        // ── 3. Log Only if Changes Occurred ───────────────────────────
         if ($hasChanges) {
-            AuditLogger::log([
+            \App\Services\AuditLogger::log([
                 'action'       => 'UPDATE',
                 'module'       => 'ROOMS',
                 'description'  => 'Updated room ' . $room->room_number,

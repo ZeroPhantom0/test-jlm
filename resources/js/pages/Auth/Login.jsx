@@ -79,7 +79,7 @@ export default function Login() {
                                 <input type="checkbox" checked={data.remember} onChange={(e) => setData('remember', e.target.checked)} />
                                 <span>Remember me</span>
                             </label>
-                            <a href="#">Forgot password?</a>
+                            <Link href="/forgot-password">Forgot password?</Link>
                         </div>
 
                         <button type="submit" className="login-submit-btn" disabled={processing} style={{ opacity: processing ? 0.7 : 1 }}>

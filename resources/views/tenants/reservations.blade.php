@@ -103,6 +103,7 @@
                         'floor'          => $room['floor'],
                         'status'         => $room['status'],
                         'is_bookable'    => $room['is_bookable'],
+                        'has_reserved'   => $room['has_reserved'],
                         'empty_beds'     => $room['empty_beds'],
                         'price'          => $room['price'],
                         'img'            => $room['img'],
@@ -140,12 +141,18 @@
                              class="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105">
 
                         {{-- status badge (top-left) --}}
-                        <span class="absolute top-3 left-3 text-[11px] font-bold px-3 py-1 rounded-full
-                            {{ $displayStatus === 'Occupied' ? 'bg-rose-200 text-rose-700' : '' }}
-                            {{ $displayStatus === 'Available' ? 'bg-green-100 text-green-700' : '' }}
-                            {{ $displayStatus === 'Reserved' ? 'bg-amber-100 text-amber-700' : '' }}">
-                            {{ $displayStatus }}
-                        </span>
+                        @if($room['has_reserved'])
+                            <span class="absolute top-3 left-3 text-[11px] font-bold px-3 py-1 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200">
+                                <i class="fa-solid fa-check mr-1"></i> Reserved by You
+                            </span>
+                        @else
+                            <span class="absolute top-3 left-3 text-[11px] font-bold px-3 py-1 rounded-full
+                                {{ $displayStatus === 'Occupied' ? 'bg-rose-200 text-rose-700' : '' }}
+                                {{ $displayStatus === 'Available' ? 'bg-green-100 text-green-700' : '' }}
+                                {{ $displayStatus === 'Reserved' ? 'bg-amber-100 text-amber-700' : '' }}">
+                                {{ $displayStatus }}
+                            </span>
+                        @endif
 
                         {{-- hover hint --}}
                         <span class="absolute top-3 right-3 bg-black/60 text-white text-[10px] font-semibold px-2.5 py-1 rounded-full backdrop-blur opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
@@ -187,6 +194,10 @@
                                     data-room="{{ json_encode($roomData) }}"
                                 >
                                     <i class="fa-regular fa-calendar-check"></i> Reserve
+                                </button>
+                            @elseif($room['has_reserved'])
+                                <button disabled class="bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg py-2 text-xs font-semibold cursor-not-allowed text-center inline-flex items-center justify-center gap-1.5">
+                                    <i class="fa-solid fa-check"></i> Reserved
                                 </button>
                             @else
                                 <button disabled class="bg-slate-100 text-slate-400 rounded-lg py-2 text-xs font-semibold cursor-not-allowed text-center">

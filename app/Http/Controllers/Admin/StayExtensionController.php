@@ -4,9 +4,12 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\Invoice;
 use App\Models\StayExtensionRequest;
 use App\Models\Tenant;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 class StayExtensionController extends Controller
@@ -27,7 +30,6 @@ class StayExtensionController extends Controller
             'rejected' => StayExtensionRequest::rejected()->count(),
         ];
 
-        // Pass data for React modals
         $requestsForReact = $requests->mapWithKeys(function ($req) {
             return [$req->id => $req->toReactArray()];
         })->toArray();
@@ -36,7 +38,7 @@ class StayExtensionController extends Controller
     }
 
     /**
-     * Store a newly created stay extension request.
+     * Store a newly created stay extension request (admin-side).
      */
     public function store(Request $request)
     {
@@ -67,9 +69,6 @@ class StayExtensionController extends Controller
         ]);
     }
 
-    /**
-     * Display the specified stay extension request.
-     */
     public function show(StayExtensionRequest $stayExtensionRequest)
     {
         $stayExtensionRequest->load(['tenant.user', 'room']);
@@ -80,9 +79,6 @@ class StayExtensionController extends Controller
         ]);
     }
 
-    /**
-     * Update the specified stay extension request (admin notes, status).
-     */
     public function update(Request $request, StayExtensionRequest $stayExtensionRequest)
     {
         $validated = $request->validate([
@@ -106,6 +102,9 @@ class StayExtensionController extends Controller
 
     /**
      * Approve a stay extension request.
+     *
+     *  1. Extend the tenant's approved reservation check_out.
+     *  2. Create an invoice for the extra days at the tenant's room rate.
      */
     public function approve(Request $request, StayExtensionRequest $stayExtensionRequest)
     {
@@ -113,37 +112,54 @@ class StayExtensionController extends Controller
             'admin_notes' => ['nullable', 'string'],
         ]);
 
-        // Extend the SOURCE reservation's check_out — that's the single
-        // source of truth for the tenant's move-out date.
-        if ($stayExtensionRequest->tenant) {
-            $tenant = $stayExtensionRequest->tenant;
-            $reservation = $tenant->approvedReservation;
-
-            if ($reservation) {
-                $reservation->update([
-                    'check_out'      => $stayExtensionRequest->requested_lease_end,
-                    'check_out_time' => $reservation->check_out_time,
-                ]);
-            }
+        // Guard: already processed
+        if ($stayExtensionRequest->status !== 'Pending') {
+            return response()->json([
+                'message' => 'This request has already been processed.',
+            ], 422);
         }
 
-        $stayExtensionRequest->update([
-            'status'       => 'Approved',
-            'admin_notes'  => $validated['admin_notes'] ?? $stayExtensionRequest->admin_notes,
-            'processed_by' => $request->user()->id,
-            'processed_at' => now(),
-        ]);
+        DB::beginTransaction();
+        try {
+            $tenant      = $stayExtensionRequest->tenant;
+            $reservation = $tenant?->approvedReservation;
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Stay extension request approved.',
-            'data'    => $stayExtensionRequest->fresh(),
-        ]);
+            // ── 1. Extend the source reservation's check_out ──
+            if ($reservation) {
+                $reservation->update([
+                    'check_out' => $stayExtensionRequest->requested_lease_end,
+                ]);
+            }
+
+            // ── 2. Create a billing invoice for the extra days ──
+            $invoice = $this->createExtensionInvoice($stayExtensionRequest, $reservation);
+
+            // ── 3. Mark the request approved ──
+            $stayExtensionRequest->update([
+                'status'       => 'Approved',
+                'admin_notes'  => $validated['admin_notes'] ?? $stayExtensionRequest->admin_notes,
+                'processed_by' => $request->user()->id,
+                'processed_at' => now(),
+            ]);
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Stay extension approved.'
+                    . ($invoice ? ' Extension invoice generated.' : ''),
+                'data'    => $stayExtensionRequest->fresh(),
+                'invoice' => $invoice,
+            ]);
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            report($e);
+            return response()->json([
+                'message' => 'Failed to approve stay extension: ' . $e->getMessage(),
+            ], 500);
+        }
     }
 
-    /**
-     * Reject a stay extension request.
-     */
     public function reject(Request $request, StayExtensionRequest $stayExtensionRequest)
     {
         $validated = $request->validate([
@@ -164,9 +180,6 @@ class StayExtensionController extends Controller
         ]);
     }
 
-    /**
-     * Remove the specified stay extension request.
-     */
     public function destroy(StayExtensionRequest $stayExtensionRequest)
     {
         $stayExtensionRequest->delete();
@@ -175,5 +188,76 @@ class StayExtensionController extends Controller
             'success' => true,
             'message' => 'Stay extension request deleted successfully.',
         ]);
+    }
+
+    // ============================================================
+    // HELPERS
+    // ============================================================
+
+    /**
+     * Create an invoice for the extension days at the tenant's room rate.
+     * Idempotent — returns existing invoice if one already exists for this ref.
+     */
+    private function createExtensionInvoice(
+        StayExtensionRequest $request,
+        ?\App\Models\Reservation $reservation
+    ): ?Invoice {
+        $tenant = $request->tenant;
+
+        if (!$tenant) {
+            return null;
+        }
+
+        // Idempotency: skip if an extension invoice for this reference already exists
+        $existing = Invoice::where('description', 'like', '%' . $request->reference_no . '%')
+            ->where('description', 'like', '%Extension%')
+            ->first();
+
+        if ($existing) {
+            return $existing;
+        }
+
+        // Rate: tenant's rent rate, falling back to the room's daily_rent
+        $room = $tenant->room;
+        $ratePerDay = (float) ($tenant->rent_rate ?: ($room?->daily_rent ?? 0));
+
+        // Fall back to the reservation's rate if still zero
+        if ($ratePerDay <= 0 && $reservation && $reservation->room) {
+            $ratePerDay = (float) $reservation->room->daily_rent;
+        }
+
+        $days         = max(1, (int) $request->extension_days);
+        $totalAmount  = round($ratePerDay * $days, 2);
+
+        // Invoice dates
+        $checkIn  = $request->current_lease_end ?? now();
+        $checkOut = $request->requested_lease_end ?? now()->addDays($days);
+
+        $roomNumber = $room?->room_number
+            ?? $reservation?->desired_room
+            ?? 'N/A';
+
+        $invoice = Invoice::create([
+            'transaction_no' => Invoice::generateTransactionNo(),
+            'tenant_id'      => $tenant->id,
+            'room_id'        => $tenant->room_id,
+            'tenant_name'    => $tenant->user->name ?? 'Unknown',
+            'room_number'    => $roomNumber,
+            'description'    => 'Stay Extension Fee — +' . $days . ' day'
+                . ($days === 1 ? '' : 's')
+                . ' (Ref: ' . $request->reference_no . ')',
+            'check_in'       => $checkIn,
+            'check_out'      => $checkOut,
+            'rate_per_day'   => $ratePerDay,
+            'days'           => $days,
+            'total_amount'   => $totalAmount,
+            'amount_paid'    => 0,
+            'balance'        => $totalAmount,
+            'due_date'       => now()->addDays(7)->toDateString(),
+            'payment_method' => 'Not Set',
+            'status'         => 'Unpaid',
+        ]);
+
+        return $invoice;
     }
 }

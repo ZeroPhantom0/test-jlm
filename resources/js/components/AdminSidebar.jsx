@@ -24,11 +24,34 @@ const SERVICES_SUB = [
     { key: "services.stay-extension",  label: "Stay Extension", icon: "fa-regular fa-calendar", href: "/admin/services/stay-extension" },
 ];
 
+/* Reusable avatar block */
+function SidebarAvatar({ src, name = "User", size = 34 }) {
+    if (src && typeof src === 'string' && src.trim() !== "" && src !== "null") {
+        return (
+            <img
+                src={src}
+                alt={name}
+                className="rounded-full object-cover border-[1.5px] border-white shrink-0"
+                style={{ width: `${size}px`, height: `${size}px` }}
+            />
+        );
+    }
+    return (
+        <div
+            className="rounded-full bg-white/10 text-white flex items-center justify-center shrink-0 border-[1.5px] border-white"
+            style={{ width: `${size}px`, height: `${size}px` }}
+            aria-label={name}
+        >
+            <i className="fa-solid fa-user" style={{ fontSize: size * 0.45 }} />
+        </div>
+    );
+}
+
 export default function AdminSidebar({
     active   = "dashboard",
     userName = "Administrator",
     userRole = "Administrator",
-    avatar   = "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&q=80&w=120",
+    avatar   = null, // Changed default to null
 }) {
     const [collapsed, setCollapsed]       = useState(false);
     const [mobileOpen, setMobileOpen]     = useState(false);
@@ -225,12 +248,7 @@ export default function AdminSidebar({
                 style={{ padding: "14px 14px", boxSizing: "border-box" }}
             >
                 <div className={`flex items-center gap-3 min-w-0 flex-1 ${collapsed ? "md:hidden" : ""}`}>
-                    <img
-                        src={avatar}
-                        alt={userName}
-                        className="rounded-full object-cover border-[1.5px] border-white shrink-0"
-                        style={{ width: "34px", height: "34px" }}
-                    />
+                    <SidebarAvatar src={avatar} name={userName} size={34} />
                     <div className="min-w-0 flex-1">
                         <h4 className="font-bold text-white leading-tight truncate" style={{ fontSize: "13px" }}>
                             {userName}
@@ -241,7 +259,7 @@ export default function AdminSidebar({
                     </div>
                 </div>
 
-                {/* Single logout button (hidden on mobile when expanded, hidden on mobile when collapsed) */}
+                {/* Single logout button */}
                 <button
                     type="button"
                     onClick={logout}

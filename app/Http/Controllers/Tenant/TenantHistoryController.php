@@ -16,7 +16,17 @@ use Illuminate\Support\Facades\Auth;
 class TenantHistoryController extends Controller
 {
     /**
-     * Display the tenant's activity history (real data, tenant-scoped).
+     * Display the tenant's activity history.
+     *
+     * ONLY finalized states are surfaced here:
+     *   Payments        → Paid | Rejected
+     *   Reservations    → Approved | Rejected | Expired
+     *   Maintenance     → Completed | Cancelled
+     *   Room Changes    → Approved | Rejected
+     *   Stay Extensions → Approved | Rejected
+     *
+     * In-flight states (Pending, Partial, Unpaid, Overdue, etc.)
+     * are excluded from history — those live on their own pages.
      */
     public function index(Request $request)
     {
@@ -28,7 +38,6 @@ class TenantHistoryController extends Controller
             ->first();
 
         if (!$tenant) {
-            // No tenant record yet — show empty page
             return view('tenants.history', [
                 'historyItems' => [],
                 'metrics'      => [
@@ -40,9 +49,6 @@ class TenantHistoryController extends Controller
             ]);
         }
 
-        // ============================================================
-        // Build the unified history feed
-        // ============================================================
         $items = collect()
             ->merge($this->payments($tenant))
             ->merge($this->paidReservations($tenant, $user->id))
@@ -53,17 +59,19 @@ class TenantHistoryController extends Controller
             ->sortByDesc('timestamp')
             ->values();
 
-        // Convert to keyed map for React modal
         $historyItems = $items->mapWithKeys(function ($item) {
             return [$item['key'] => $item];
         })->toArray();
 
-        // ============================================================
-        // Metrics
-        // ============================================================
-        $paidInvoices      = $items->where('cat', 'payments')->where('status', 'paid');
-        $pastReservations  = $items->where('cat', 'reservation');
-        $serviceRequests   = $items->where('cat', 'maintenance')->where('status', 'completed');
+        // ── Metrics ─────────────────────────────────────────────
+        // Only Paid invoices (not Partial / Pending / Unpaid)
+        $paidInvoices = $items
+            ->where('cat', 'payments')
+            ->where('status', 'paid')
+            ->filter(fn ($i) => ($i['payment_state'] ?? null) === 'Paid');
+
+        $pastReservations = $items->where('cat', 'reservation');
+        $serviceRequests  = $items->where('cat', 'maintenance')->where('status', 'completed');
 
         $metrics = [
             'total_paid'        => (float) $paidInvoices->sum(fn ($i) => $this->numericAmount($i['amount'] ?? 0)),
@@ -76,61 +84,45 @@ class TenantHistoryController extends Controller
     }
 
     // ============================================================
-    // SOURCES
+    // PAYMENTS — only Paid and Rejected
     // ============================================================
-
-    /**
-     * Every invoice that has any money attached:
-     *  - Paid    → fully paid (a payment happened)
-     *  - Partial → some money was paid, some remains
-     *  - Pending → tenant submitted proof, admin hasn't verified yet
-     */
     private function payments(Tenant $tenant)
     {
         return Invoice::where('tenant_id', $tenant->id)
-            ->whereIn('status', ['Paid', 'Partial', 'Pending'])
+            ->whereIn('status', ['Paid', 'Rejected'])
             ->latest()
             ->get()
             ->map(function (Invoice $inv) {
-                $isPaid     = $inv->status === 'Paid';
-                $isPending  = $inv->status === 'Pending';
+                $statusMap = [
+                    'Paid'     => ['paid',     'green'],
+                    'Rejected' => ['rejected', 'red'],
+                ];
+
+                [$historyStatus, $color] = $statusMap[$inv->status] ?? ['paid', 'green'];
 
                 $methodLabel = $inv->payment_method ?? 'Not Set';
                 $paidAmount  = (float) $inv->amount_paid;
                 $amountLabel = '₱' . number_format($paidAmount, 0);
 
-                if ($isPaid) {
-                    $status = 'paid';
-                    $color  = 'green';
-                } elseif ($isPending) {
-                    $status = 'pending';
-                    $color  = 'blue';
-                } else {
-                    $status = 'paid';
-                    $color  = 'green';
-                }
-
-                $desc = match (true) {
-                    $isPaid    => 'Payment of ' . $amountLabel . ' via ' . strtolower($methodLabel),
-                    $isPending => 'Payment proof submitted — awaiting verification',
-                    default    => 'Partial payment of ' . $amountLabel . ' via ' . strtolower($methodLabel)
-                                  . ' — remaining ₱' . number_format((float) $inv->balance, 0),
-                };
+                $desc = $inv->status === 'Paid'
+                    ? 'Payment of ' . $amountLabel . ' via ' . strtolower($methodLabel)
+                    : 'Payment rejected — ' . ($inv->receipt_no ? 'ref ' . $inv->receipt_no : 'no reference');
 
                 return [
-                    'key'      => 'pay-' . $inv->id,
-                    'cat'      => 'payments',
-                    'icon'     => 'fa-solid fa-peso-sign',
-                    'color'    => $color,
-                    'title'    => $inv->description,
-                    'desc'     => $desc,
-                    'date'     => $inv->date_paid?->format('M d, Y')
-                                  ?? $inv->updated_at?->format('M d, Y · h:i A')
-                                  ?? $inv->created_at?->format('M d, Y · h:i A'),
-                    'timestamp'=> $inv->date_paid ?? $inv->updated_at ?? $inv->created_at,
-                    'amount'   => $isPaid ? $amountLabel : null,
-                    'status'   => $status,
-                    'details'  => [
+                    'key'           => 'pay-' . $inv->id,
+                    'cat'           => 'payments',
+                    'icon'          => 'fa-solid fa-peso-sign',
+                    'color'         => $color,
+                    'title'         => $inv->description,
+                    'desc'          => $desc,
+                    'date'          => $inv->date_paid?->format('M d, Y')
+                                       ?? $inv->updated_at?->format('M d, Y · h:i A')
+                                       ?? $inv->created_at?->format('M d, Y · h:i A'),
+                    'timestamp'     => $inv->date_paid ?? $inv->updated_at ?? $inv->created_at,
+                    'amount'        => $inv->status === 'Paid' ? $amountLabel : null,
+                    'status'        => $historyStatus,
+                    'payment_state' => $inv->status,
+                    'details'       => [
                         ['Invoice ID',       $inv->transaction_no],
                         ['Unit',             $inv->room_number],
                         ['Total Amount',     '₱' . number_format((float) $inv->total_amount, 2)],
@@ -141,7 +133,7 @@ class TenantHistoryController extends Controller
                         ['Status',           strtoupper($inv->status)],
                         ['Paid Date',        $inv->date_paid?->format('M d, Y') ?? '—'],
                     ],
-                    'receipt' => $isPaid ? [
+                    'receipt' => $inv->status === 'Paid' ? [
                         'reference'   => $inv->receipt_no ?? $inv->transaction_no,
                         'unit'        => $inv->room_number,
                         'description' => $inv->description,
@@ -154,12 +146,9 @@ class TenantHistoryController extends Controller
             });
     }
 
-    /**
-     * Paid reservation down-payments — SHOW them as paid history even
-     * though they don't live in the invoices table.
-     *
-     * Only Approved reservations with a verified proof of payment.
-     */
+    // ============================================================
+    // PAID RESERVATION DOWN-PAYMENTS (historical)
+    // ============================================================
     private function paidReservations(Tenant $tenant, int $userId)
     {
         return Reservation::where(function ($q) use ($tenant, $userId) {
@@ -175,19 +164,20 @@ class TenantHistoryController extends Controller
                 $amountLabel = '₱' . number_format($fee, 0);
 
                 return [
-                    'key'      => 'rsv-paid-' . $r->id,
-                    'cat'      => 'payments',
-                    'icon'     => 'fa-solid fa-peso-sign',
-                    'color'    => 'green',
-                    'title'    => 'Reservation Down-Payment — ' . $r->reference_no,
-                    'desc'     => 'Paid ' . $amountLabel . ' reservation fee for unit ' . $r->desired_room,
-                    'date'     => $r->processed_at?->format('M d, Y · h:i A')
-                                  ?? $r->updated_at?->format('M d, Y · h:i A')
-                                  ?? $r->created_at?->format('M d, Y · h:i A'),
-                    'timestamp'=> $r->processed_at ?? $r->updated_at ?? $r->created_at,
-                    'amount'   => $amountLabel,
-                    'status'   => 'paid',
-                    'details'  => [
+                    'key'           => 'rsv-paid-' . $r->id,
+                    'cat'           => 'payments',
+                    'icon'          => 'fa-solid fa-peso-sign',
+                    'color'         => 'green',
+                    'title'         => 'Reservation Down-Payment — ' . $r->reference_no,
+                    'desc'          => 'Paid ' . $amountLabel . ' reservation fee for unit ' . $r->desired_room,
+                    'date'          => $r->processed_at?->format('M d, Y · h:i A')
+                                       ?? $r->updated_at?->format('M d, Y · h:i A')
+                                       ?? $r->created_at?->format('M d, Y · h:i A'),
+                    'timestamp'     => $r->processed_at ?? $r->updated_at ?? $r->created_at,
+                    'amount'        => $amountLabel,
+                    'status'        => 'paid',
+                    'payment_state' => 'Paid',
+                    'details'       => [
                         ['Reservation ID',   $r->reference_no],
                         ['Reservation No.',  $r->reservation_number],
                         ['Unit',             $r->desired_room],
@@ -210,23 +200,19 @@ class TenantHistoryController extends Controller
             });
     }
 
+    // ============================================================
+    // MAINTENANCE — only Completed and Cancelled
+    // ============================================================
     private function maintenance(Tenant $tenant)
     {
         return MaintenanceRequest::with('room')
             ->where('tenant_id', $tenant->id)
+            ->whereIn('status', ['Completed', 'Cancelled'])
             ->latest()
             ->get()
             ->map(function (MaintenanceRequest $m) {
-                $status = match ($m->status) {
-                    'Completed' => 'completed',
-                    'Cancelled' => 'cancelled',
-                    default     => 'pending',
-                };
-                $color = match ($status) {
-                    'completed' => 'green',
-                    'cancelled' => 'red',
-                    default     => 'yellow',
-                };
+                $status = $m->status === 'Completed' ? 'completed' : 'cancelled';
+                $color  = $m->status === 'Completed' ? 'green' : 'red';
 
                 return [
                     'key'       => 'mt-' . $m->id,
@@ -236,7 +222,7 @@ class TenantHistoryController extends Controller
                     'title'     => $m->title,
                     'desc'      => $m->description,
                     'date'      => $m->created_at?->format('M d, Y · h:i A'),
-                    'timestamp' => $m->completed_at ?? $m->created_at,
+                    'timestamp' => $m->completed_at ?? $m->updated_at ?? $m->created_at,
                     'amount'    => null,
                     'status'    => $status,
                     'details'   => [
@@ -251,22 +237,18 @@ class TenantHistoryController extends Controller
             });
     }
 
+    // ============================================================
+    // ROOM CHANGES — only Approved and Rejected
+    // ============================================================
     private function roomChanges(Tenant $tenant)
     {
         return RoomChangeRequest::where('tenant_id', $tenant->id)
+            ->whereIn('status', ['Approved', 'Rejected'])
             ->latest()
             ->get()
             ->map(function (RoomChangeRequest $r) {
-                $status = match ($r->status) {
-                    'Approved' => 'approved',
-                    'Rejected' => 'rejected',
-                    default     => 'pending',
-                };
-                $color = match ($status) {
-                    'approved' => 'blue',
-                    'rejected' => 'red',
-                    default     => 'yellow',
-                };
+                $status = $r->status === 'Approved' ? 'approved' : 'rejected';
+                $color  = $r->status === 'Approved' ? 'blue' : 'red';
 
                 return [
                     'key'       => 'rc-' . $r->id,
@@ -291,23 +273,19 @@ class TenantHistoryController extends Controller
             });
     }
 
+    // ============================================================
+    // STAY EXTENSIONS — only Approved and Rejected
+    // ============================================================
     private function stayExtensions(Tenant $tenant)
     {
         return StayExtensionRequest::with('room')
             ->where('tenant_id', $tenant->id)
+            ->whereIn('status', ['Approved', 'Rejected'])
             ->latest()
             ->get()
             ->map(function (StayExtensionRequest $s) {
-                $status = match ($s->status) {
-                    'Approved' => 'approved',
-                    'Rejected' => 'rejected',
-                    default     => 'pending',
-                };
-                $color = match ($status) {
-                    'approved' => 'blue',
-                    'rejected' => 'red',
-                    default     => 'yellow',
-                };
+                $status = $s->status === 'Approved' ? 'approved' : 'rejected';
+                $color  = $s->status === 'Approved' ? 'blue' : 'red';
 
                 return [
                     'key'       => 'se-' . $s->id,
@@ -332,13 +310,16 @@ class TenantHistoryController extends Controller
             });
     }
 
+    // ============================================================
+    // RESERVATIONS — only Approved, Rejected, Expired
+    // ============================================================
     private function reservations(Tenant $tenant, int $userId)
     {
-        // Show reservations that belong to the user OR match their name
         return Reservation::where(function ($q) use ($tenant, $userId) {
                 $q->where('user_id', $userId)
                   ->orWhere('tenant_name', $tenant->user->name ?? '');
             })
+            ->whereIn('status', ['Approved', 'Rejected', 'Expired'])
             ->latest()
             ->get()
             ->map(function (Reservation $r) {
@@ -346,13 +327,13 @@ class TenantHistoryController extends Controller
                     'Approved' => 'approved',
                     'Rejected' => 'rejected',
                     'Expired'  => 'expired',
-                    default     => 'pending',
+                    default     => 'expired',
                 };
                 $color = match ($status) {
                     'approved' => 'blue',
                     'rejected' => 'red',
                     'expired'  => 'yellow',
-                    default     => 'blue',
+                    default     => 'yellow',
                 };
 
                 return [
@@ -384,7 +365,6 @@ class TenantHistoryController extends Controller
     // ============================================================
     // HELPERS
     // ============================================================
-
     private function numericAmount($str): float
     {
         if (!$str) return 0;

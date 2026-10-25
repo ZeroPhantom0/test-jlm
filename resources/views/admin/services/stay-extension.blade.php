@@ -2,6 +2,13 @@
 @section('title', 'Stay Extension Requests')
 
 @section('content')
+@php
+    // Hide finalized statuses (Approved & Rejected)
+    $activeRequests = $requests->filter(function ($req) {
+        return $req->status === 'Pending';
+    })->values();
+@endphp
+
 <div class="p-4 md:p-8 max-w-[1400px] mx-auto space-y-5">
 
     {{-- Page Title --}}
@@ -11,7 +18,7 @@
         </div>
         <div>
             <h2 class="text-[22px] font-extrabold text-slate-900">Stay Extension Requests</h2>
-            <p class="text-[13px] text-slate-500 mt-0.5">Manage tenant lease extension applications</p>
+            <p class="text-[13px] text-slate-500 mt-0.5">Manage pending tenant lease extension applications</p>
         </div>
     </div>
 
@@ -56,7 +63,7 @@
                     </tr>
                 </thead>
                 <tbody>
-                    @forelse($requests as $req)
+                    @forelse($activeRequests as $req)
                     <tr class="border-b border-slate-50 last:border-0">
                         <td class="py-4 px-5">
                             <div class="text-sm font-bold text-slate-900">{{ $req->tenant->user->name ?? 'Unknown' }}</div>
@@ -82,13 +89,21 @@
                         </td>
                         <td class="py-4 px-5">
                             <div class="flex items-center justify-end gap-3 text-slate-400 text-sm">
-                                @if($req->status === 'Pending')
-                                <i class="fa-regular fa-circle-check text-emerald-500 cursor-pointer hover:text-emerald-600"></i>
-                                <i class="fa-regular fa-circle-xmark text-rose-500 cursor-pointer hover:text-rose-600"></i>
-                                @endif
+                                {{-- Approve & Reject are always visible since only Pending is shown --}}
+                                <i
+                                    class="fa-regular fa-circle-check text-emerald-500 cursor-pointer hover:text-emerald-600 row-approve-btn"
+                                    data-request-id="{{ $req->id }}"
+                                    title="Approve"
+                                ></i>
+                                <i
+                                    class="fa-regular fa-circle-xmark text-rose-500 cursor-pointer hover:text-rose-600 row-reject-btn"
+                                    data-request-id="{{ $req->id }}"
+                                    title="Reject"
+                                ></i>
                                 <i
                                     class="fa-regular fa-eye cursor-pointer hover:text-slate-700 open-details-btn"
                                     data-request-id="{{ $req->id }}"
+                                    title="View Details"
                                 ></i>
                             </div>
                         </td>
@@ -97,7 +112,7 @@
                     <tr>
                         <td colspan="6" class="text-center py-12 text-slate-400">
                             <i class="fa-solid fa-inbox text-4xl mb-3"></i>
-                            <p class="text-sm">No stay extension requests found.</p>
+                            <p class="text-sm">No pending stay extension requests found.</p>
                         </td>
                     </tr>
                     @endforelse
