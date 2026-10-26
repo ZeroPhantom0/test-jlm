@@ -3,6 +3,8 @@
 
 namespace App\Http\Controllers\Tenant;
 
+use App\Events\InvoiceUpdated;
+use App\Events\ReservationUpdated;
 use App\Http\Controllers\Controller;
 use App\Models\Invoice;
 use App\Models\Reservation;
@@ -28,7 +30,70 @@ class TenantReservationController extends Controller
             ->latest()
             ->get();
 
-        $reservationCards = $myReservations->map(function ($r) {
+        $reservationCards = $this->buildReservationCards($myReservations);
+        $rooms            = $this->buildRoomCards($myReservations);
+
+        $myReservationsForReact = $myReservations->mapWithKeys(function ($r) {
+            return [
+                $r->reference_no => [
+                    'id'      => $r->id,
+                    'key'     => $r->reference_no,
+                    'status'  => $r->status,
+                    'room'    => $r->desired_room,
+                    'deposit' => $r->formatted_fee,
+                ],
+            ];
+        })->toArray();
+
+        return view('tenants.reservations', [
+            'tenant'         => $tenant,
+            'myReservations' => $reservationCards,
+            'reservations'   => $myReservationsForReact,
+            'rooms'          => $rooms,
+        ]);
+    }
+
+    /**
+     * Live data endpoint for polling / Echo refresh on the tenant reservations page.
+     * GET /tenants/reservations/data
+     */
+    public function data()
+    {
+        $user   = Auth::user();
+        $tenant = Tenant::where('user_id', $user->id)->first();
+
+        $myReservations = Reservation::where(function ($q) use ($user, $tenant) {
+            $q->where('user_id', $user->id)
+                ->orWhere('tenant_name', $user->name);
+        })
+            ->latest()
+            ->get();
+
+        $reservationCards = $this->buildReservationCards($myReservations);
+        $rooms            = $this->buildRoomCards($myReservations);
+
+        $myReservationsForReact = $myReservations->mapWithKeys(function ($r) {
+            return [
+                $r->reference_no => [
+                    'id'      => $r->id,
+                    'key'     => $r->reference_no,
+                    'status'  => $r->status,
+                    'room'    => $r->desired_room,
+                    'deposit' => $r->formatted_fee,
+                ],
+            ];
+        })->toArray();
+
+        return response()->json([
+            'myReservations' => $reservationCards,
+            'rooms'          => $rooms,
+            'reservations'   => $myReservationsForReact,
+        ]);
+    }
+
+    private function buildReservationCards($myReservations)
+    {
+        return $myReservations->map(function ($r) {
             $statusClass = match ($r->status) {
                 'Approved' => 'bg-emerald-100 text-emerald-600',
                 'Rejected' => 'bg-rose-100 text-rose-600',
@@ -55,9 +120,12 @@ class TenantReservationController extends Controller
                 'deposit'     => number_format((float) $r->reservation_fee, 2),
                 'note'        => $r->admin_notes,
             ];
-        });
+        })->values();
+    }
 
-        $rooms = Room::with([
+    private function buildRoomCards($myReservations)
+    {
+        return Room::with([
             'virtualTour' => fn($q) => $q->where('status', 'Published'),
             'tenants'     => fn($q) => $q->where('status', 'active')->with('approvedReservation'),
         ])
@@ -66,19 +134,16 @@ class TenantReservationController extends Controller
             ->get()
             ->map(function (Room $room) use ($myReservations) {
                 $bedSlots = $this->buildBedSlots($room);
-                
-                // Calculate actual empty beds
-                $occupiedSlots = collect($bedSlots)->where('status', 'Occupied')->count();
-                $totalBeds = (int) $room->total_beds;
-                $emptyBeds = max(0, $totalBeds - $occupiedSlots);
 
-                // Check if this user already has an active/pending reservation for this room
+                $occupiedSlots = collect($bedSlots)->where('status', 'Occupied')->count();
+                $totalBeds     = (int) $room->total_beds;
+                $emptyBeds     = max(0, $totalBeds - $occupiedSlots);
+
                 $existingReservation = $myReservations->first(function ($res) use ($room) {
                     return $res->room_id === $room->id && in_array($res->status, ['Pending', 'Approved']);
                 });
                 $hasReserved = (bool) $existingReservation;
 
-                // Room is bookable if it has empty beds AND user hasn't reserved it
                 $isBookable = ($emptyBeds > 0 || $room->status === 'Available') && !$hasReserved;
 
                 return [
@@ -110,26 +175,7 @@ class TenantReservationController extends Controller
                     'is_female_only' => str_contains($room->room_type, 'All Girls'),
                     'is_male_only'   => str_contains($room->room_type, 'All Boys'),
                 ];
-            });
-
-        $myReservationsForReact = $myReservations->mapWithKeys(function ($r) {
-            return [
-                $r->reference_no => [
-                    'id'      => $r->id,
-                    'key'     => $r->reference_no,
-                    'status'  => $r->status,
-                    'room'    => $r->desired_room,
-                    'deposit' => $r->formatted_fee,
-                ],
-            ];
-        })->toArray();
-
-        return view('tenants.reservations', [
-            'tenant'         => $tenant,
-            'myReservations' => $reservationCards,
-            'reservations'   => $myReservationsForReact,
-            'rooms'          => $rooms,
-        ]);
+            })->values();
     }
 
     private function buildBedSlots(Room $room): array
@@ -234,7 +280,6 @@ class TenantReservationController extends Controller
             ], 422);
         }
 
-        // Prevent double booking by checking if they already have a reservation
         $existing = Reservation::where('user_id', $user->id)
             ->where('room_id', $validated['room_id'])
             ->whereIn('status', ['Pending', 'Approved'])
@@ -402,6 +447,9 @@ class TenantReservationController extends Controller
                 return $reservation;
             });
 
+            event(new ReservationUpdated('created', $reservation->id));
+            event(new InvoiceUpdated('created', null));
+
             return response()->json([
                 'success' => true,
                 'message' => 'Reservation submitted. Awaiting admin approval.',
@@ -452,6 +500,9 @@ class TenantReservationController extends Controller
                     'date_paid'    => null,
                 ]);
         });
+
+        event(new ReservationUpdated('cancelled', $reservation->id));
+        event(new InvoiceUpdated('updated', null));
 
         return response()->json([
             'success' => true,

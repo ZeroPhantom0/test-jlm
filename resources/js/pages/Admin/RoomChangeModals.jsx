@@ -22,18 +22,52 @@ export default function RoomChangeModals() {
     const [rejectNotes, setRejectNotes] = useState('');
 
     // ============================================================
-    // Read requests data from the DOM (passed by Blade)
+    // LIVE DATA — read once, then listen for polling/Echo updates
     // ============================================================
-    useEffect(() => {
+    const readRequestsFromDom = () => {
         const el = document.getElementById('admin-room-change-modals');
-        if (el?.dataset?.requests) {
-            try {
-                setRequestsData(JSON.parse(el.dataset.requests));
-            } catch (e) {
-                console.error('Invalid requests JSON', e);
+        if (!el?.dataset?.requests) return;
+        try {
+            const parsed = JSON.parse(el.dataset.requests);
+            if (parsed && typeof parsed === 'object') setRequestsData(parsed);
+        } catch (e) {
+            console.error('Invalid requests JSON', e);
+        }
+    };
+
+    useEffect(() => {
+        readRequestsFromDom();
+
+        const handler = (e) => {
+            const fresh = e?.detail;
+            if (fresh && typeof fresh === 'object') {
+                setRequestsData(fresh);
+            } else {
+                readRequestsFromDom();
+            }
+        };
+
+        window.addEventListener('room-change:data-updated', handler);
+        return () => window.removeEventListener('room-change:data-updated', handler);
+    }, []);
+
+    // Sync open request with fresh data
+    useEffect(() => {
+        if (!request) return;
+        const fresh = requestsData[request.id];
+        if (!fresh) return;
+        if (
+            fresh.status !== request.status ||
+            fresh.admin_notes !== request.admin_notes ||
+            fresh.current_room !== request.current_room ||
+            fresh.requested_room !== request.requested_room
+        ) {
+            setRequest(fresh);
+            if (fresh.admin_notes !== undefined && !saving) {
+                setAdminNotes(fresh.admin_notes || '');
             }
         }
-    }, []);
+    }, [requestsData]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // ============================================================
     // Event delegation for row actions

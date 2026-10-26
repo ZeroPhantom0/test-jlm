@@ -9,7 +9,7 @@
         <div class="w-10 h-10 rounded-lg bg-emerald-100 text-emerald-500 flex items-center justify-center text-lg">
             <i class="fa-regular fa-calendar-plus"></i>
         </div>
-        <div>
+        <div class="flex-1">
             <h2 class="text-xl font-bold">Reserve a Room</h2>
             <p class="text-[13px] text-slate-500">Browse rooms with virtual tours and submit a reservation request</p>
         </div>
@@ -33,45 +33,48 @@
                 My Reservations
             </h3>
         </div>
-
-        @forelse($myReservations as $res)
-            <div class="px-6 py-4 flex items-center justify-between flex-wrap gap-3 border-b border-slate-200 last:border-b-0">
-                <div class="flex flex-col gap-1.5">
-                    <div class="flex items-center gap-3 flex-wrap">
-                        <h4 class="text-[14.5px] font-bold text-slate-900">{{ $res['room'] }}</h4>
-                        <span class="text-[11px] font-bold px-2.5 py-[3px] rounded-full inline-flex items-center gap-1 {{ $res['statusClass'] }}">
-                            <i class="{{ $res['statusIcon'] }}"></i> {{ $res['status'] }}
-                        </span>
-                    </div>
-                    <div class="text-[12px] text-slate-500">
-                        Move-in: {{ $res['move_in'] }} · Submitted: {{ $res['submitted'] }}
-                    </div>
-                    @if(!empty($res['note']))
-                        <div class="bg-green-50 text-green-800 text-[11px] px-2.5 py-1 rounded-md inline-block mt-1 font-medium">
-                            {{ $res['note'] }}
+        
+        {{-- Rendered via JS --}}
+        <div id="my-reservations-list">
+            @forelse($myReservations as $res)
+                <div class="px-6 py-4 flex items-center justify-between flex-wrap gap-3 border-b border-slate-200 last:border-b-0">
+                    <div class="flex flex-col gap-1.5">
+                        <div class="flex items-center gap-3 flex-wrap">
+                            <h4 class="text-[14.5px] font-bold text-slate-900">{{ $res['room'] }}</h4>
+                            <span class="text-[11px] font-bold px-2.5 py-[3px] rounded-full inline-flex items-center gap-1 {{ $res['statusClass'] }}">
+                                <i class="{{ $res['statusIcon'] }}"></i> {{ $res['status'] }}
+                            </span>
                         </div>
-                    @endif
+                        <div class="text-[12px] text-slate-500">
+                            Move-in: {{ $res['move_in'] }} · Submitted: {{ $res['submitted'] }}
+                        </div>
+                        @if(!empty($res['note']))
+                            <div class="bg-green-50 text-green-800 text-[11px] px-2.5 py-1 rounded-md inline-block mt-1 font-medium">
+                                {{ $res['note'] }}
+                            </div>
+                        @endif
+                    </div>
+                    <div class="text-right flex flex-col items-end gap-0.5">
+                        <div class="text-base font-extrabold text-emerald-500">₱{{ $res['deposit'] }}</div>
+                        <div class="text-[11px] text-slate-500">deposit</div>
+                        @if($res['status'] === 'Pending')
+                            <button
+                                type="button"
+                                class="cancel-reservation-btn text-[11px] font-semibold text-rose-500 hover:text-rose-700 mt-1"
+                                data-res-key="{{ $res['key'] }}"
+                            >
+                                Cancel
+                            </button>
+                        @endif
+                    </div>
                 </div>
-                <div class="text-right flex flex-col items-end gap-0.5">
-                    <div class="text-base font-extrabold text-emerald-500">₱{{ $res['deposit'] }}</div>
-                    <div class="text-[11px] text-slate-500">deposit</div>
-                    @if($res['status'] === 'Pending')
-                        <button
-                            type="button"
-                            class="cancel-reservation-btn text-[11px] font-semibold text-rose-500 hover:text-rose-700 mt-1"
-                            data-res-key="{{ $res['key'] }}"
-                        >
-                            Cancel
-                        </button>
-                    @endif
+            @empty
+                <div class="px-6 py-8 text-center text-[13px] text-slate-400">
+                    <i class="fa-regular fa-calendar-check text-3xl mb-2 block opacity-40"></i>
+                    No reservations yet.
                 </div>
-            </div>
-        @empty
-            <div class="px-6 py-8 text-center text-[13px] text-slate-400">
-                <i class="fa-regular fa-calendar-check text-3xl mb-2 block opacity-40"></i>
-                No reservations yet.
-            </div>
-        @endforelse
+            @endforelse
+        </div>
     </div>
 
     {{-- ============ AVAILABLE ROOMS ============ --}}
@@ -93,7 +96,7 @@
             $fromPath = '/' . ltrim(request()->path(), '/');
         @endphp
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-5 mb-8">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-5 mb-8" id="available-rooms-grid">
             @foreach($rooms as $room)
                 @php
                     $roomData = [
@@ -215,3 +218,161 @@
 {{-- React Modal Mount Point --}}
 <div id="tenant-reservations-modals" data-reservations='@json($reservations ?? [])'></div>
 @endsection
+
+@push('scripts')
+<script>
+    (function () {
+        const fromPath = "{{ '/' . ltrim(request()->path(), '/') }}";
+
+        // --- Fetch & Render Live Data ---
+        async function refreshReservations() {
+            try {
+                const res = await fetch("{{ route('tenants.reservations.data') }}", {
+                    headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                    credentials: 'same-origin'
+                });
+                
+                if (!res.ok) return;
+                const data = await res.json();
+
+                // 1. Update My Reservations List
+                const listContainer = document.getElementById('my-reservations-list');
+                let listHtml = '';
+
+                if (data.myReservations.length > 0) {
+                    data.myReservations.forEach(r => {
+                        listHtml += `
+                            <div class="px-6 py-4 flex items-center justify-between flex-wrap gap-3 border-b border-slate-200 last:border-b-0">
+                                <div class="flex flex-col gap-1.5">
+                                    <div class="flex items-center gap-3 flex-wrap">
+                                        <h4 class="text-[14.5px] font-bold text-slate-900">${r.room}</h4>
+                                        <span class="text-[11px] font-bold px-2.5 py-[3px] rounded-full inline-flex items-center gap-1 ${r.statusClass}">
+                                            <i class="${r.statusIcon}"></i> ${r.status}
+                                        </span>
+                                    </div>
+                                    <div class="text-[12px] text-slate-500">
+                                        Move-in: ${r.move_in} · Submitted: ${r.submitted}
+                                    </div>
+                                    ${r.note ? `
+                                        <div class="bg-green-50 text-green-800 text-[11px] px-2.5 py-1 rounded-md inline-block mt-1 font-medium">
+                                            ${r.note}
+                                        </div>
+                                    ` : ''}
+                                </div>
+                                <div class="text-right flex flex-col items-end gap-0.5">
+                                    <div class="text-base font-extrabold text-emerald-500">₱${r.deposit}</div>
+                                    <div class="text-[11px] text-slate-500">deposit</div>
+                                    ${r.status === 'Pending' ? `
+                                        <button
+                                            type="button"
+                                            class="cancel-reservation-btn text-[11px] font-semibold text-rose-500 hover:text-rose-700 mt-1"
+                                            data-res-key="${r.key}"
+                                        >
+                                            Cancel
+                                        </button>
+                                    ` : ''}
+                                </div>
+                            </div>
+                        `;
+                    });
+                } else {
+                    listHtml = `
+                        <div class="px-6 py-8 text-center text-[13px] text-slate-400">
+                            <i class="fa-regular fa-calendar-check text-3xl mb-2 block opacity-40"></i>
+                            No reservations yet.
+                        </div>
+                    `;
+                }
+                listContainer.innerHTML = listHtml;
+
+                // 2. Update Available Rooms Grid (to reflect newly locked/reserved beds)
+                const roomGrid = document.getElementById('available-rooms-grid');
+                if (roomGrid && data.rooms.length > 0) {
+                    let gridHtml = '';
+                    data.rooms.forEach(room => {
+                        const roomData = {
+                            id: room.id, name: room.name, roomNumber: 'ROOM ' + room.num, floor: room.floor,
+                            status: room.status, is_bookable: room.is_bookable, has_reserved: room.has_reserved,
+                            empty_beds: room.empty_beds, price: room.price, img: room.img, pax: room.pax,
+                            beds: room.beds, total_beds: room.total_beds, bath: room.bath, description: room.desc,
+                            estDate: room.estDate, estApprox: room.estApprox, tourId: room.tourId,
+                            bed_slots: room.bed_slots, is_female_only: room.is_female_only, is_male_only: room.is_male_only
+                        };
+                        const tourUrl = `/tour/${room.tourId}?from=${encodeURIComponent(fromPath)}`;
+                        const displayStatus = room.is_bookable && room.status === 'Occupied' ? 'Available' : room.status;
+                        
+                        const statusBadge = room.has_reserved
+                            ? `<span class="absolute top-3 left-3 text-[11px] font-bold px-3 py-1 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200"><i class="fa-solid fa-check mr-1"></i> Reserved by You</span>`
+                            : `<span class="absolute top-3 left-3 text-[11px] font-bold px-3 py-1 rounded-full 
+                                ${displayStatus === 'Occupied' ? 'bg-rose-200 text-rose-700' : ''} 
+                                ${displayStatus === 'Available' ? 'bg-green-100 text-green-700' : ''} 
+                                ${displayStatus === 'Reserved' ? 'bg-amber-100 text-amber-700' : ''}">${displayStatus}</span>`;
+
+                        let actionHtml = '';
+                        if (room.is_bookable) {
+                            actionHtml = `<button type="button" class="open-reserve-modal-btn bg-[#02122c] hover:bg-[#0d2347] text-white rounded-lg py-2 text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition" data-room='${JSON.stringify(roomData)}'><i class="fa-regular fa-calendar-check"></i> Reserve</button>`;
+                        } else if (room.has_reserved) {
+                            actionHtml = `<button disabled class="bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg py-2 text-xs font-semibold cursor-not-allowed text-center inline-flex items-center justify-center gap-1.5"><i class="fa-solid fa-check"></i> Reserved</button>`;
+                        } else {
+                            actionHtml = `<button disabled class="bg-slate-100 text-slate-400 rounded-lg py-2 text-xs font-semibold cursor-not-allowed text-center">Not Available</button>`;
+                        }
+
+                        gridHtml += `
+                            <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden flex flex-col shadow-sm">
+                                <a href="${tourUrl}" class="relative h-52 block group cursor-pointer">
+                                    <img src="${room.img}" alt="Room ${room.num}" class="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105">
+                                    ${statusBadge}
+                                    <span class="absolute top-3 right-3 bg-black/60 text-white text-[10px] font-semibold px-2.5 py-1 rounded-full backdrop-blur opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none"><i class="fa-solid fa-camera mr-1"></i> View 360° Tour</span>
+                                    <span class="absolute bottom-3 left-3 bg-blue-50 text-blue-600 text-[10px] font-extrabold uppercase px-2.5 py-1 rounded-md">ROOM ${room.num}</span>
+                                </a>
+                                <div class="p-4 flex flex-col gap-2.5 flex-1">
+                                    <div class="flex justify-between items-center">
+                                        <h4 class="text-[15px] font-bold">${room.name}</h4>
+                                        <div class="text-sm font-extrabold text-emerald-500">₱${Number(room.price).toLocaleString()}<span class="text-[11px] font-normal text-slate-500">/day</span></div>
+                                    </div>
+                                    <div class="flex gap-3.5 text-[11px] text-slate-500">
+                                        <span class="flex items-center gap-1"><i class="fa-solid fa-users"></i> ${room.pax}</span>
+                                        <span class="flex items-center gap-1"><i class="fa-solid fa-bed"></i> ${room.beds}</span>
+                                    </div>
+                                    <div class="grid grid-cols-2 gap-2.5 mt-1.5">
+                                        <button type="button" class="open-room-details-btn bg-white border border-slate-200 rounded-lg py-2 text-xs font-semibold inline-flex items-center justify-center gap-1.5 hover:bg-slate-50 transition" data-room='${JSON.stringify(roomData)}'><i class="fa-regular fa-eye"></i> Details</button>
+                                        ${actionHtml}
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    roomGrid.innerHTML = gridHtml;
+                }
+
+                // 3. Update React Modal Data
+                const modalRoot = document.getElementById('tenant-reservations-modals');
+                if (modalRoot) {
+                    modalRoot.dataset.reservations = JSON.stringify(data.reservations || {});
+                    window.dispatchEvent(new CustomEvent('reservation:data-updated', { detail: data.reservations }));
+                }
+
+            } catch (e) {
+                console.error('Live refresh failed:', e);
+            }
+        }
+
+        // --- Real-time Listeners ---
+        if (window.Echo) {
+            window.Echo.channel('tenant.reservations')
+                .listen('.reservation.updated', () => {
+                    console.log('[Live] Reservation updated, refreshing...');
+                    refreshReservations();
+                });
+        }
+
+        // --- Polling Fallback ---
+        setInterval(() => {
+            if (!window.__liveAvailable) {
+                refreshReservations();
+            }
+        }, 3000);
+
+    })();
+</script>
+@endpush

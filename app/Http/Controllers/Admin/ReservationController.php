@@ -3,6 +3,8 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Events\InvoiceUpdated;
+use App\Events\ReservationUpdated;
 use App\Http\Controllers\Controller;
 use App\Models\Invoice;
 use App\Models\Reservation;
@@ -45,6 +47,58 @@ class ReservationController extends Controller
             'filters',
             'reservationsForReact'
         ));
+    }
+
+    /**
+     * Live data endpoint for polling / Echo refresh.
+     * GET /admin/reservations/data
+     */
+    public function data(Request $request)
+    {
+        $filters = $request->only(['search', 'status']);
+
+        $reservations = Reservation::filter($filters)
+            ->whereNotIn('status', ['Approved', 'Expired'])
+            ->latest()
+            ->get();
+
+        $metrics = [
+            'total'    => Reservation::count(),
+            'pending'  => Reservation::pending()->count(),
+            'approved' => Reservation::approved()->count(),
+            'rejected' => Reservation::rejected()->count(),
+            'expired'  => Reservation::expired()->count(),
+        ];
+
+        $rows = $reservations->map(fn (Reservation $res) => [
+            'id'                  => $res->id,
+            'reference_no'        => $res->reference_no,
+            'tenant_name'         => $res->tenant_name,
+            'tenant_initial'      => $res->tenant_initial,
+            'avatar_bg'           => $res->avatar_bg,
+            'avatar_color'        => $res->avatar_color,
+            'email'               => $res->email,
+            'phone'               => $res->phone,
+            'desired_room'        => $res->desired_room,
+            'formatted_check_in'  => $res->formatted_check_in,
+            'formatted_check_out' => $res->formatted_check_out,
+            'check_out_is_null'   => is_null($res->check_out),
+            'formatted_fee'       => $res->formatted_fee,
+            'created_at'          => $res->created_at?->format('M d, Y'),
+            'status'              => $res->status,
+            'status_class'        => $res->status_class,
+            'status_icon'         => $res->status_icon,
+        ])->values();
+
+        $reactMap = $reservations->mapWithKeys(
+            fn (Reservation $res) => [$res->reference_no => $res->toReactArray()]
+        )->toArray();
+
+        return response()->json([
+            'rows'    => $rows,
+            'metrics' => $metrics,
+            'react'   => $reactMap,
+        ]);
     }
 
     public function store(Request $request)
@@ -93,6 +147,8 @@ class ReservationController extends Controller
             'subject_id'   => $reservation->id,
         ]);
 
+        event(new ReservationUpdated('created', $reservation->id));
+
         return response()->json([
             'success' => true,
             'message' => 'Reservation created successfully.',
@@ -130,6 +186,8 @@ class ReservationController extends Controller
             'subject_type' => Reservation::class,
             'subject_id'   => $reservation->id,
         ]);
+
+        event(new ReservationUpdated('updated', $reservation->id));
 
         return response()->json([
             'success' => true,
@@ -171,7 +229,9 @@ class ReservationController extends Controller
             }
         }
 
-        DB::transaction(function () use ($request, $reservation, $validated) {
+        $invoiceChanged = false;
+
+        DB::transaction(function () use ($request, $reservation, $validated, &$invoiceChanged) {
             $reservation->update([
                 'status'       => 'Approved',
                 'admin_notes'  => $validated['admin_notes'] ?? $reservation->admin_notes,
@@ -196,7 +256,7 @@ class ReservationController extends Controller
                 $reservation->room->syncStatus();
             }
 
-            $this->settleReservationInvoice($reservation, $tenant);
+            $invoiceChanged = $this->settleReservationInvoice($reservation, $tenant);
         });
 
         AuditLogger::log([
@@ -208,6 +268,11 @@ class ReservationController extends Controller
             'subject_type' => Reservation::class,
             'subject_id'   => $reservation->id,
         ]);
+
+        event(new ReservationUpdated('approved', $reservation->id));
+        if ($invoiceChanged) {
+            event(new InvoiceUpdated('created', null));
+        }
 
         return response()->json([
             'success' => true,
@@ -222,7 +287,9 @@ class ReservationController extends Controller
             'admin_notes' => ['nullable', 'string'],
         ]);
 
-        DB::transaction(function () use ($request, $reservation, $validated) {
+        $invoicesDeleted = 0;
+
+        DB::transaction(function () use ($request, $reservation, $validated, &$invoicesDeleted) {
             $reservation->update([
                 'status'       => 'Rejected',
                 'admin_notes'  => $validated['admin_notes'] ?? $reservation->admin_notes,
@@ -234,7 +301,7 @@ class ReservationController extends Controller
                 $reservation->room->syncStatus();
             }
 
-            $this->deleteInvoicesOnRejection($reservation);
+            $invoicesDeleted = $this->deleteInvoicesOnRejection($reservation);
         });
 
         AuditLogger::log([
@@ -247,6 +314,11 @@ class ReservationController extends Controller
             'subject_type' => Reservation::class,
             'subject_id'   => $reservation->id,
         ]);
+
+        event(new ReservationUpdated('rejected', $reservation->id));
+        if ($invoicesDeleted > 0) {
+            event(new InvoiceUpdated('deleted', null));
+        }
 
         return response()->json([
             'success' => true,
@@ -269,6 +341,8 @@ class ReservationController extends Controller
 
         $reservation->delete();
 
+        event(new ReservationUpdated('deleted', $reservation->id));
+
         return response()->json([
             'success' => true,
             'message' => 'Reservation deleted successfully.',
@@ -279,16 +353,6 @@ class ReservationController extends Controller
     // HELPERS
     // ============================================================
 
-    /**
-     * Compute the due date for an invoice based on the stay length.
-     *
-     *   ≤ 1 day         → check_out (same day)
-     *   2 – 6 days      → check_in + 3 days
-     *   7 – 31 days     → check_in + 7 days
-     *   32 – 100 days   → check_in + 1 month
-     *   101 – 364 days  → check_in + 2 months
-     *   ≥ 365 days      → check_in + 3 months
-     */
     private function computeDueDate(?Carbon $checkIn, ?Carbon $checkOut): Carbon
     {
         if (! $checkIn) {
@@ -316,17 +380,19 @@ class ReservationController extends Controller
         return $checkIn->copy()->addMonths(3);
     }
 
-    private function settleReservationInvoice(Reservation $reservation, ?Tenant $tenant): void
+    /**
+     * Returns true if an invoice was created or updated (so callers can broadcast).
+     */
+    private function settleReservationInvoice(Reservation $reservation, ?Tenant $tenant): bool
     {
         $totalCharges = (float) $reservation->total_charges;
         $paidAmount   = (float) $reservation->reservation_fee;
         $remaining    = max(0, $totalCharges - $paidAmount);
 
         [$status, $balance] = match (true) {
-            $paidAmount <= 0            => ['Unpaid',  $totalCharges],
-            $paidAmount + 0.005 >= $totalCharges
-            => ['Paid',    0.0],
-            default                     => ['Partial', $remaining],
+            $paidAmount <= 0                       => ['Unpaid',  $totalCharges],
+            $paidAmount + 0.005 >= $totalCharges   => ['Paid',    0.0],
+            default                                => ['Partial', $remaining],
         };
 
         $alreadyPaid = Invoice::query()
@@ -335,7 +401,7 @@ class ReservationController extends Controller
             ->exists();
 
         if ($alreadyPaid) {
-            return;
+            return false;
         }
 
         $invoice = Invoice::query()
@@ -373,7 +439,7 @@ class ReservationController extends Controller
                 'verified_by'    => $status === 'Paid' ? Auth::id() : null,
                 'verified_at'    => $status === 'Paid' ? now() : null,
             ]);
-            return;
+            return true;
         }
 
         $invoice->update([
@@ -392,20 +458,28 @@ class ReservationController extends Controller
                 ? ($invoice->verified_at ?? now())
                 : null,
         ]);
+
+        return true;
     }
 
-    private function deleteInvoicesOnRejection(Reservation $reservation): void
+    /**
+     * Returns how many invoices were deleted.
+     */
+    private function deleteInvoicesOnRejection(Reservation $reservation): int
     {
         $invoices = Invoice::query()
             ->where('description', 'like', '%' . $reservation->reference_no . '%')
             ->whereIn('status', ['Unpaid', 'Partial', 'Pending'])
             ->get();
 
+        $count = 0;
         foreach ($invoices as $inv) {
             if ($inv->receipt_path && Storage::disk('public')->exists($inv->receipt_path)) {
                 Storage::disk('public')->delete($inv->receipt_path);
             }
             $inv->delete();
+            $count++;
         }
+        return $count;
     }
 }

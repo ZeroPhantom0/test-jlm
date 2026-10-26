@@ -3,6 +3,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Events\MaintenanceUpdated;
 use App\Http\Controllers\Controller;
 use App\Models\MaintenanceRequest;
 use Illuminate\Http\Request;
@@ -45,15 +46,18 @@ class MaintenanceController extends Controller
             'tenant_id'      => ['nullable', 'exists:tenants,id'],
         ]);
 
-        $request = MaintenanceRequest::create([
+        $maintenanceRequest = MaintenanceRequest::create([
             ...$validated,
             'status' => 'Pending',
         ]);
 
+        // Notify tenant + refresh admin page
+        event(new MaintenanceUpdated('created', $maintenanceRequest->id));
+
         return response()->json([
             'success' => true,
             'message' => 'Maintenance request created successfully.',
-            'data'    => $request,
+            'data'    => $maintenanceRequest,
         ]);
     }
 
@@ -94,6 +98,9 @@ class MaintenanceController extends Controller
 
         $maintenanceRequest->update($validated);
 
+        // Broadcast so tenant bell / pages refresh in real time
+        event(new MaintenanceUpdated('updated', $maintenanceRequest->id));
+
         return response()->json([
             'success' => true,
             'message' => 'Maintenance request updated successfully.',
@@ -102,11 +109,50 @@ class MaintenanceController extends Controller
     }
 
     /**
+     * Fetch maintenance requests data for DataTables or similar.
+     */
+    public function data()
+    {
+        $requests = MaintenanceRequest::with(['tenant.user', 'room'])->latest()->get();
+
+        $metrics = [
+            'total'       => MaintenanceRequest::count(),
+            'pending'     => MaintenanceRequest::pending()->count(),
+            'in_progress' => MaintenanceRequest::inProgress()->count(),
+            'completed'   => MaintenanceRequest::completed()->count(),
+        ];
+
+        $rows = $requests->map(function ($req) {
+            return [
+                'id'             => $req->id,
+                'title'          => $req->title,
+                'priority'       => $req->priority,
+                'priority_class' => $req->priority_class,
+                'category'       => $req->category,
+                'room_number'    => $req->room?->room_number
+                    ? 'Room ' . $req->room->room_number
+                    : 'N/A',
+                'tenant_name'    => $req->tenant?->user?->name ?? 'Unknown Tenant',
+                'assigned_staff' => $req->assigned_staff,
+                'status'         => $req->status,
+                'status_class'   => $req->status_class,
+                'date'           => $req->created_at->format('M d, Y'),
+                'is_finalized'   => in_array($req->status, ['Completed', 'Cancelled']),
+            ];
+        })->values();
+
+        return response()->json(['rows' => $rows, 'metrics' => $metrics]);
+    }
+
+    /**
      * Remove the specified maintenance request.
      */
     public function destroy(MaintenanceRequest $maintenanceRequest)
     {
+        $id = $maintenanceRequest->id;
         $maintenanceRequest->delete();
+
+        event(new MaintenanceUpdated('deleted', $id));
 
         return response()->json([
             'success' => true,

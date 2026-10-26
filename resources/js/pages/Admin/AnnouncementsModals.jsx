@@ -1,10 +1,17 @@
 // resources/js/pages/Admin/AnnouncementsModals.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Modal from '../../components/Modal';
 
-const csrf = () =>
-    document.querySelector('meta[name="csrf-token"]')?.content ||
-    document.querySelector('input[name="_token"]')?.value;
+const csrf = () => {
+    const meta = document.querySelector('meta[name="csrf-token"]')?.content;
+    if (meta) return meta;
+
+    const input = document.querySelector('input[name="_token"]')?.value;
+    if (input) return input;
+
+    // Last resort — from the app config written by the layout
+    return window.__appConfig?.csrf || '';
+};
 
 const EMPTY_FORM = {
     id:           null,
@@ -15,6 +22,18 @@ const EMPTY_FORM = {
     is_published: true,
 };
 
+/**
+ * Safe JSON reader — never throws on HTML error responses.
+ * Returns { ok, status, data } so callers can branch cleanly.
+ */
+async function readJsonSafe(res) {
+    const text = await res.text();
+    let data = null;
+    try { data = text ? JSON.parse(text) : {}; }
+    catch { data = { message: `Server returned non-JSON (HTTP ${res.status}).` }; }
+    return { ok: res.ok, status: res.status, data };
+}
+
 export default function AnnouncementsModals() {
     const [showForm, setShowForm]       = useState(false);
     const [showDelete, setShowDelete]   = useState(false);
@@ -22,29 +41,64 @@ export default function AnnouncementsModals() {
     const [form, setForm]               = useState(EMPTY_FORM);
     const [deleteTarget, setDeleteTarget] = useState(null);
     const [saving, setSaving]           = useState(false);
+    const [errorBanner, setErrorBanner] = useState('');
     const [announcementsData, setAnnouncementsData] = useState({});
 
+    const savingRef = useRef(false);
+    useEffect(() => { savingRef.current = saving; }, [saving]);
+
     // ============================================================
-    // Read announcements data from the DOM (passed by Blade)
+    // LIVE DATA — read once, then listen for polling/Echo updates
     // ============================================================
-    useEffect(() => {
+    const readAnnouncementsFromDom = () => {
         const el = document.getElementById('admin-announcements-modals');
-        if (el?.dataset?.announcements) {
-            try {
-                setAnnouncementsData(JSON.parse(el.dataset.announcements));
-            } catch (e) {
-                console.error('Invalid announcements JSON', e);
-            }
+        if (!el?.dataset?.announcements) return;
+        try {
+            const parsed = JSON.parse(el.dataset.announcements);
+            if (parsed && typeof parsed === 'object') setAnnouncementsData(parsed);
+        } catch (e) {
+            console.error('Invalid announcements JSON', e);
         }
+    };
+
+    useEffect(() => {
+        readAnnouncementsFromDom();
+
+        const handler = (e) => {
+            const fresh = e?.detail;
+            if (fresh && typeof fresh === 'object') {
+                setAnnouncementsData(fresh);
+            } else {
+                readAnnouncementsFromDom();
+            }
+        };
+
+        window.addEventListener('announcements:data-updated', handler);
+        return () => window.removeEventListener('announcements:data-updated', handler);
     }, []);
+
+    // Sync open delete-modal target with fresh data
+    useEffect(() => {
+        if (!deleteTarget) return;
+        const fresh = announcementsData[deleteTarget.id];
+        if (!fresh) {
+            setShowDelete(false);
+            setDeleteTarget(null);
+            return;
+        }
+        if (fresh.title !== deleteTarget.title) {
+            setDeleteTarget(fresh);
+        }
+    }, [announcementsData]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // ============================================================
     // Event delegation for opening the modal / row actions
     // ============================================================
     useEffect(() => {
-        const handler = (e) => {
+        const handler = async (e) => {
             // "New Announcement" button
             if (e.target.closest('#admin-open-new-ann')) {
+                setErrorBanner('');
                 setForm(EMPTY_FORM);
                 setEditMode(false);
                 setShowForm(true);
@@ -55,22 +109,30 @@ export default function AnnouncementsModals() {
             const pinBtn = e.target.closest('.toggle-pin-btn');
             if (pinBtn) {
                 const id = pinBtn.dataset.annId;
-                if (!id) return;
+                if (!id || savingRef.current) return;
+
                 setSaving(true);
-                fetch(`/admin/announcements/${id}/toggle-pin`, {
-                    method: 'POST',
-                    headers: {
-                        'Accept': 'application/json',
-                        'X-CSRF-TOKEN': csrf(),
-                    },
-                })
-                    .then(async (res) => {
-                        const data = await res.json();
-                        if (!res.ok) throw new Error(data.message || 'Failed to toggle pin.');
-                        window.location.reload();
-                    })
-                    .catch((err) => alert(err.message))
-                    .finally(() => setSaving(false));
+                setErrorBanner('');
+                try {
+                    const res = await fetch(`/admin/announcements/${id}/toggle-pin`, {
+                        method: 'POST',
+                        headers: {
+                            'Accept': 'application/json',
+                            'X-CSRF-TOKEN': csrf(),
+                            'X-Requested-With': 'XMLHttpRequest',
+                        },
+                        credentials: 'same-origin',
+                    });
+                    const { ok, data } = await readJsonSafe(res);
+                    if (!ok) throw new Error(data.message || `Pin failed (HTTP ${res.status}).`);
+
+                    window.dispatchEvent(new CustomEvent('announcements:data-updated'));
+                } catch (err) {
+                    setErrorBanner(err.message);
+                    alert(err.message);
+                } finally {
+                    setSaving(false);
+                }
                 return;
             }
 
@@ -80,6 +142,7 @@ export default function AnnouncementsModals() {
                 const id = editBtn.dataset.annId;
                 const found = announcementsData[id];
                 if (found) {
+                    setErrorBanner('');
                     setForm({
                         id:           found.id,
                         title:        found.title,
@@ -100,6 +163,7 @@ export default function AnnouncementsModals() {
                 const id = delBtn.dataset.annId;
                 const found = announcementsData[id];
                 if (found) {
+                    setErrorBanner('');
                     setDeleteTarget(found);
                     setShowDelete(true);
                 }
@@ -112,15 +176,18 @@ export default function AnnouncementsModals() {
     }, [announcementsData]);
 
     const closeModal = () => {
+        if (saving) return;
         setShowForm(false);
         setEditMode(false);
         setForm(EMPTY_FORM);
+        setErrorBanner('');
     };
 
     const closeDeleteModal = () => {
         if (saving) return;
         setShowDelete(false);
         setDeleteTarget(null);
+        setErrorBanner('');
     };
 
     const updateField = (key, value) => setForm((f) => ({ ...f, [key]: value }));
@@ -129,8 +196,10 @@ export default function AnnouncementsModals() {
     // Submit (create or update)
     // ============================================================
     const handleSubmit = async () => {
+        if (saving) return;
+
         if (!form.title.trim() || !form.content.trim()) {
-            alert('Please fill in both title and content.');
+            setErrorBanner('Please fill in both title and content.');
             return;
         }
 
@@ -149,6 +218,8 @@ export default function AnnouncementsModals() {
         };
 
         setSaving(true);
+        setErrorBanner('');
+
         try {
             const res = await fetch(url, {
                 method,
@@ -156,14 +227,21 @@ export default function AnnouncementsModals() {
                     'Content-Type': 'application/json',
                     'Accept': 'application/json',
                     'X-CSRF-TOKEN': csrf(),
+                    'X-Requested-With': 'XMLHttpRequest',
                 },
+                credentials: 'same-origin',
                 body: JSON.stringify(payload),
             });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.message || 'Failed to save announcement.');
-            closeModal();
-            window.location.reload();
+
+            const { ok, data } = await readJsonSafe(res);
+            if (!ok) throw new Error(data.message || `Save failed (HTTP ${res.status}).`);
+
+            window.dispatchEvent(new CustomEvent('announcements:data-updated'));
+            setShowForm(false);
+            setEditMode(false);
+            setForm(EMPTY_FORM);
         } catch (err) {
+            setErrorBanner(err.message);
             alert(err.message);
         } finally {
             setSaving(false);
@@ -174,23 +252,31 @@ export default function AnnouncementsModals() {
     // Confirm Delete
     // ============================================================
     const confirmDelete = async () => {
-        if (!deleteTarget) return;
+        if (!deleteTarget || saving) return;
+
         setSaving(true);
+        setErrorBanner('');
+
         try {
             const res = await fetch(`/admin/announcements/${deleteTarget.id}`, {
                 method: 'DELETE',
                 headers: {
                     'Accept': 'application/json',
                     'X-CSRF-TOKEN': csrf(),
+                    'X-Requested-With': 'XMLHttpRequest',
                 },
+                credentials: 'same-origin',
             });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.message || 'Failed to delete.');
-            
+
+            const { ok, data } = await readJsonSafe(res);
+            if (!ok) throw new Error(data.message || `Delete failed (HTTP ${res.status}).`);
+
+            window.dispatchEvent(new CustomEvent('announcements:data-updated'));
+
             setShowDelete(false);
             setDeleteTarget(null);
-            window.location.reload();
         } catch (err) {
+            setErrorBanner(err.message);
             alert(err.message);
         } finally {
             setSaving(false);
@@ -205,12 +291,23 @@ export default function AnnouncementsModals() {
                         <h3 className="text-lg font-bold text-slate-900">
                             {editMode ? 'Edit Announcement' : 'New Announcement'}
                         </h3>
-                        <button onClick={closeModal} className="text-slate-400 hover:text-slate-700 text-lg">
+                        <button
+                            onClick={closeModal}
+                            disabled={saving}
+                            className="text-slate-400 hover:text-slate-700 text-lg disabled:opacity-50"
+                        >
                             <i className="fa-solid fa-xmark"></i>
                         </button>
                     </div>
 
                     <div className="p-6 overflow-y-auto flex flex-col gap-4">
+                        {errorBanner && (
+                            <div className="bg-rose-50 border border-rose-200 text-rose-700 text-[12.5px] rounded-lg px-3 py-2 flex items-center gap-2">
+                                <i className="fa-solid fa-circle-exclamation"></i>
+                                {errorBanner}
+                            </div>
+                        )}
+
                         <div>
                             <label className="block text-[13.5px] font-semibold text-slate-700 mb-1.5">Title</label>
                             <input
@@ -259,24 +356,29 @@ export default function AnnouncementsModals() {
                     <div className="p-5 border-t border-slate-100 flex justify-end gap-3">
                         <button
                             onClick={closeModal}
-                            className="text-slate-600 text-[13.5px] font-semibold px-4 py-2"
+                            disabled={saving}
+                            className="text-slate-600 text-[13.5px] font-semibold px-4 py-2 disabled:opacity-50"
                         >
                             Cancel
                         </button>
                         <button
                             onClick={handleSubmit}
                             disabled={saving}
-                            className="bg-[#0b1930] hover:bg-[#162640] disabled:opacity-50 text-white px-5 py-2.5 rounded-[10px] text-[13.5px] font-semibold"
+                            className="bg-[#0b1930] hover:bg-[#162640] disabled:opacity-50 text-white px-5 py-2.5 rounded-[10px] text-[13.5px] font-semibold inline-flex items-center gap-2"
                         >
-                            {saving ? 'Saving…' : (editMode ? 'Save Changes' : 'Post Announcement')}
+                            {saving ? (
+                                <>
+                                    <i className="fa-solid fa-spinner fa-spin"></i>
+                                    Saving…
+                                </>
+                            ) : (
+                                editMode ? 'Save Changes' : 'Post Announcement'
+                            )}
                         </button>
                     </div>
                 </Modal>
             )}
 
-            {/* ============================================================ */}
-            {/* DELETE CONFIRMATION MODAL */}
-            {/* ============================================================ */}
             {showDelete && deleteTarget && (
                 <Modal onClose={closeDeleteModal} maxWidth="max-w-[460px]">
                     <div className="p-5 pb-4 flex items-center justify-between border-b border-slate-100 shrink-0">

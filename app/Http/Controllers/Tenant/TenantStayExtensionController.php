@@ -3,6 +3,7 @@
 
 namespace App\Http\Controllers\Tenant;
 
+use App\Events\ServiceRequestUpdated;
 use App\Http\Controllers\Controller;
 use App\Models\StayExtensionRequest;
 use App\Models\Tenant;
@@ -12,42 +13,32 @@ use Illuminate\Support\Facades\Auth;
 
 class TenantStayExtensionController extends Controller
 {
-    /**
-     * Display the logged-in tenant's stay extension requests.
-     */
     public function index()
     {
         /** @var \App\Models\User $user */
         $user = Auth::user();
 
-        // Tenant record + current room + approved reservation
         $tenant = Tenant::with(['room', 'approvedReservation'])
             ->where('user_id', $user->id)
             ->first();
 
-        // ── CURRENT LEASE END comes from the approved reservation's check_out ──
         $currentCheckOut = $tenant?->approvedReservation?->check_out;
 
         $currentLeaseEnd = $currentCheckOut
             ? $currentCheckOut->format('M j, Y')
             : 'Open-ended';
 
-        // The earliest date the tenant is allowed to pick for the new end date.
-        // Must be strictly AFTER the current checkout.
         $minRequestedDate = $currentCheckOut
             ? $currentCheckOut->copy()->addDay()->toDateString()
             : now()->toDateString();
 
-        // Only this tenant's stay extension requests
         $requests = StayExtensionRequest::with('room')
             ->where('tenant_id', $tenant?->id)
             ->latest()
             ->get();
 
-        // Room number label
         $roomNumber = $tenant?->room?->room_number ?? '—';
 
-        // Pass a normalised map to the React modals
         $requestsForReact = $requests->mapWithKeys(function ($r) {
             return [
                 $r->id => [
@@ -55,8 +46,8 @@ class TenantStayExtensionController extends Controller
                     'ref'                 => $r->reference_no,
                     'tenant'              => $r->tenant->user->name ?? 'Unknown',
                     'room'                => $r->room?->room_number
-                                                ? 'Room ' . $r->room->room_number
-                                                : 'N/A',
+                        ? 'Room ' . $r->room->room_number
+                        : 'N/A',
                     'current_lease_end'   => $r->current_lease_end?->format('M j, Y') ?? '—',
                     'requested_lease_end' => $r->requested_lease_end?->format('M j, Y') ?? '—',
                     'submitted'           => $r->created_at?->format('M j, Y') ?? '—',
@@ -76,9 +67,6 @@ class TenantStayExtensionController extends Controller
         ));
     }
 
-    /**
-     * Store a new stay extension request for the logged-in tenant.
-     */
     public function store(Request $request)
     {
         /** @var \App\Models\User $user */
@@ -94,7 +82,6 @@ class TenantStayExtensionController extends Controller
             ], 422);
         }
 
-        // Server-side guard: requested date must be AFTER the current checkout
         $currentCheckOut = $tenant->approvedReservation?->check_out;
 
         if (!$currentCheckOut) {
@@ -113,11 +100,10 @@ class TenantStayExtensionController extends Controller
             'reason'              => ['required', 'string'],
         ], [
             'requested_lease_end.after' =>
-                'The requested lease end must be after your current check-out date ('
+            'The requested lease end must be after your current check-out date ('
                 . $currentCheckOut->format('M j, Y') . ').',
         ]);
 
-        // Recompute extension days server-side — never trust the client
         $extensionDays = StayExtensionRequest::calculateExtensionDays(
             $currentCheckOut->toDateString(),
             $validated['requested_lease_end']
@@ -140,10 +126,54 @@ class TenantStayExtensionController extends Controller
             'status'              => 'Pending',
         ]);
 
+        // Notify admin bell — new request
+        event(new ServiceRequestUpdated('stay_extension', 'created', $stayExtension->id));
+
         return response()->json([
             'success' => true,
             'message' => 'Stay extension request submitted successfully.',
             'data'    => $stayExtension,
+        ]);
+    }
+
+    public function data()
+    {
+        $user = Auth::user();
+        $tenant = Tenant::with(['room', 'approvedReservation'])->where('user_id', $user->id)->first();
+
+        $requests = StayExtensionRequest::with('room')->where('tenant_id', $tenant?->id)->latest()->get();
+
+        $requestsForReact = $requests->mapWithKeys(function ($r) {
+            return [
+                $r->id => [
+                    'id' => $r->id,
+                    'ref' => $r->reference_no,
+                    'tenant' => $r->tenant->user->name ?? 'Unknown',
+                    'room' => $r->room?->room_number ? 'Room ' . $r->room->room_number : 'N/A',
+                    'current_lease_end' => $r->current_lease_end?->format('M j, Y') ?? '—',
+                    'requested_lease_end' => $r->requested_lease_end?->format('M j, Y') ?? '—',
+                    'submitted' => $r->created_at?->format('M j, Y') ?? '—',
+                    'reason' => $r->reason,
+                    'status' => $r->status,
+                ],
+            ];
+        })->toArray();
+
+        $rows = $requests->map(function ($r) {
+            return [
+                'id' => $r->id,
+                'tenant_name' => $r->tenant->user->name ?? 'Unknown',
+                'room_number' => $r->room?->room_number ? 'Room ' . $r->room->room_number : 'N/A',
+                'current_lease_end' => $r->current_lease_end?->format('M j, Y') ?? '—',
+                'requested_lease_end' => $r->requested_lease_end?->format('M j, Y') ?? '—',
+                'is_pending' => $r->status === 'Pending',
+            ];
+        })->values();
+
+        return response()->json([
+            'rows' => $rows,
+            'react' => $requestsForReact,
+            'has_tenant' => (bool) $tenant,
         ]);
     }
 
@@ -168,7 +198,12 @@ class TenantStayExtensionController extends Controller
 
         $stayExtensionRequest->update([
             'status' => 'Rejected',
+            // NOTE: processed_by is NOT set — that's how the admin bell
+            // distinguishes "tenant cancelled" from "admin rejected".
         ]);
+
+        // Notify admin bell — tenant cancelled stay extension
+        event(new ServiceRequestUpdated('stay_extension', 'cancelled', $stayExtensionRequest->id));
 
         return response()->json([
             'success' => true,

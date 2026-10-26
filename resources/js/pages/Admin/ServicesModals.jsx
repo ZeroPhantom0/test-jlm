@@ -18,6 +18,9 @@ export default function ServicesModals() {
     const [request, setRequest] = useState(null);
     const [saving, setSaving] = useState(false);
 
+    // Live data from Blade mount point
+    const [requestsData, setRequestsData] = useState({});
+
     // Form state for updating
     const [form, setForm] = useState({
         status: '',
@@ -38,6 +41,70 @@ export default function ServicesModals() {
     });
 
     // ============================================================
+    // LIVE DATA — read once, then listen for polling/Echo updates
+    // ============================================================
+    const readRequestsFromDom = () => {
+        const el = document.getElementById('admin-services-modals');
+        if (!el) return;
+        try {
+            const raw = el.dataset.requests;
+            if (!raw) return;
+            const list = JSON.parse(raw);
+            if (Array.isArray(list)) {
+                const map = {};
+                list.forEach((r) => { if (r?.id) map[r.id] = r; });
+                setRequestsData(map);
+            }
+        } catch (e) {
+            console.error('Invalid requests JSON', e);
+        }
+    };
+
+    useEffect(() => {
+        readRequestsFromDom();
+
+        const handler = (e) => {
+            // The polling script dispatches `maintenance:data-updated` with the rows array
+            const rows = e?.detail;
+            if (Array.isArray(rows)) {
+                const map = {};
+                rows.forEach((r) => { if (r?.id) map[r.id] = r; });
+                setRequestsData(map);
+            } else {
+                // Fallback — re-read from the DOM attribute
+                readRequestsFromDom();
+            }
+        };
+
+        window.addEventListener('maintenance:data-updated', handler);
+        return () => window.removeEventListener('maintenance:data-updated', handler);
+    }, []);
+
+    // Keep the currently-open request in sync with fresh data
+    useEffect(() => {
+        if (!request) return;
+        const fresh = requestsData[request.id];
+        if (!fresh) return;
+
+        // Only update if something relevant actually changed
+        if (
+            fresh.status !== request.status ||
+            fresh.priority !== request.priority ||
+            fresh.assigned_staff !== request.assigned_staff ||
+            fresh.scheduled_date !== request.scheduled_date
+        ) {
+            setRequest(fresh);
+            // Don't clobber fields the admin is currently editing
+            setForm((f) => ({
+                status: f.status || fresh.status || 'Pending',
+                priority: f.priority || fresh.priority || 'Medium',
+                assigned_staff: f.assigned_staff ?? fresh.assigned_staff ?? '',
+                scheduled_date: f.scheduled_date ?? fresh.scheduled_date ?? '',
+            }));
+        }
+    }, [requestsData]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // ============================================================
     // Event delegation for opening modals
     // ============================================================
     useEffect(() => {
@@ -45,7 +112,13 @@ export default function ServicesModals() {
             // View details
             const viewBtn = e.target.closest('.admin-view-request-btn');
             if (viewBtn) {
-                const data = JSON.parse(viewBtn.dataset.request || '{}');
+                const id = viewBtn.dataset.requestId;
+                // Prefer live data map, fallback to button payload
+                let data = requestsData[id];
+                if (!data) {
+                    try { data = JSON.parse(viewBtn.dataset.request || '{}'); }
+                    catch { data = {}; }
+                }
                 setRequest(data);
                 setForm({
                     status: data.status || 'Pending',
@@ -73,7 +146,7 @@ export default function ServicesModals() {
         };
         document.addEventListener('click', handler);
         return () => document.removeEventListener('click', handler);
-    }, []);
+    }, [requestsData]);
 
     // ============================================================
     // Update request
@@ -93,8 +166,12 @@ export default function ServicesModals() {
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.message || 'Failed to update request.');
+
             setShowDetails(false);
-            window.location.reload();
+
+            // Refresh the admin list in-place — no full page reload.
+            // The polling script listens for this event and re-fetches.
+            document.dispatchEvent(new CustomEvent('maintenance:refresh'));
         } catch (err) {
             alert(err.message);
         } finally {
@@ -119,8 +196,11 @@ export default function ServicesModals() {
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.message || 'Failed to create request.');
+
             setShowNew(false);
-            window.location.reload();
+
+            // Refresh the admin list in-place — no full page reload.
+            document.dispatchEvent(new CustomEvent('maintenance:refresh'));
         } catch (err) {
             alert(err.message);
         } finally {
@@ -163,10 +243,13 @@ export default function ServicesModals() {
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.message || 'Failed to delete request.');
+
             setShowDelete(false);
             setDeleteTarget(null);
             setShowDetails(false);
-            window.location.reload();
+
+            // Refresh the admin list in-place — no full page reload.
+            document.dispatchEvent(new CustomEvent('maintenance:refresh'));
         } catch (err) {
             alert(err.message);
         } finally {

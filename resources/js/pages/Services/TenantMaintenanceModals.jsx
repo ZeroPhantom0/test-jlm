@@ -24,18 +24,48 @@ export default function TenantMaintenanceModals() {
     });
 
     // ============================================================
-    // Read requests data passed from Blade
+    // LIVE DATA — read once, then listen for polling/Echo updates
     // ============================================================
-    useEffect(() => {
+    const readRequestsFromDom = () => {
         const el = document.getElementById('tenant-maintenance-modals');
-        if (el?.dataset?.requests) {
-            try {
-                setRequestsData(JSON.parse(el.dataset.requests));
-            } catch (e) {
-                console.error('Invalid requests JSON', e);
-            }
+        if (!el?.dataset?.requests) return;
+        try {
+            const parsed = JSON.parse(el.dataset.requests);
+            if (parsed && typeof parsed === 'object') setRequestsData(parsed);
+        } catch (e) {
+            console.error('Invalid requests JSON', e);
         }
+    };
+
+    useEffect(() => {
+        readRequestsFromDom();
+
+        const handler = (e) => {
+            const fresh = e?.detail;
+            if (fresh && typeof fresh === 'object') {
+                setRequestsData(fresh);
+            } else {
+                readRequestsFromDom();
+            }
+        };
+
+        window.addEventListener('maintenance:data-updated', handler);
+        return () => window.removeEventListener('maintenance:data-updated', handler);
     }, []);
+
+    // Sync open request with fresh data
+    useEffect(() => {
+        if (!request) return;
+        const fresh = requestsData[request.id];
+        if (!fresh) return;
+        if (
+            fresh.status !== request.status ||
+            fresh.staff !== request.staff ||
+            fresh.scheduled !== request.scheduled
+        ) {
+            setRequest(fresh);
+        }
+    }, [requestsData]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // ============================================================
     // Event delegation
@@ -120,7 +150,7 @@ export default function TenantMaintenanceModals() {
             setShowDelete(false);
             setDeleteTarget(null);
             setShowDetails(false);
-            window.location.reload();
+            document.dispatchEvent(new CustomEvent('maintenance:refresh'));
         } catch (err) {
             alert(err.message);
         } finally {
@@ -150,7 +180,7 @@ export default function TenantMaintenanceModals() {
             const data = await res.json();
             if (!res.ok) throw new Error(data.message || 'Failed to create request.');
             setShowNew(false);
-            window.location.reload();
+            document.dispatchEvent(new CustomEvent('maintenance:refresh'));
         } catch (err) {
             alert(err.message);
         } finally {

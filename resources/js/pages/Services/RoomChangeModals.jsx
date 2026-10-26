@@ -1,5 +1,5 @@
 // resources/js/pages/Services/RoomChangeModals.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Modal from '../../components/Modal';
 
 const csrf = () =>
@@ -16,25 +16,31 @@ export default function RoomChangeModals() {
     const [requestsData, setRequestsData] = useState({});
     const [currentRoom, setCurrentRoom]   = useState('');
     const [availableRooms, setAvailableRooms] = useState([]);
-    
+
     // State for tracking the selected room's bed slots
     const [selectedRoomData, setSelectedRoomData] = useState(null);
+
+    // Tracks whether the admin is actively typing in the form
+    const savingRef = useRef(false);
+    useEffect(() => { savingRef.current = saving; }, [saving]);
 
     // Form state for submit
     const [form, setForm] = useState({
         requested_room: '',
-        room_bed_id:    '', 
+        room_bed_id:    '',
         reason:         '',
     });
 
     // ============================================================
-    // Read data attributes from the mount element
+    // LIVE DATA — read once, then listen for polling/Echo updates
     // ============================================================
-    useEffect(() => {
+    const readFromDom = () => {
         const el = document.getElementById('services-room-change-root');
         if (!el) return;
 
-        setCurrentRoom(el.dataset.currentRoom || '');
+        if (el.dataset.currentRoom !== undefined) {
+            setCurrentRoom(el.dataset.currentRoom || '');
+        }
 
         if (el.dataset.availableRooms) {
             try {
@@ -46,12 +52,45 @@ export default function RoomChangeModals() {
 
         if (el.dataset.requests) {
             try {
-                setRequestsData(JSON.parse(el.dataset.requests));
+                const parsed = JSON.parse(el.dataset.requests);
+                if (parsed && typeof parsed === 'object') setRequestsData(parsed);
             } catch (e) {
                 console.error('Invalid requests JSON', e);
             }
         }
+    };
+
+    useEffect(() => {
+        readFromDom();
+
+        const handler = (e) => {
+            const fresh = e?.detail;
+            if (fresh && typeof fresh === 'object') {
+                setRequestsData(fresh);
+            } else {
+                readFromDom();
+            }
+        };
+
+        window.addEventListener('room-change:data-updated', handler);
+        return () => window.removeEventListener('room-change:data-updated', handler);
     }, []);
+
+    // Sync open request with fresh data from the server
+    useEffect(() => {
+        if (!request) return;
+        const fresh = requestsData[request.id];
+        if (!fresh) return;
+
+        if (
+            fresh.status !== request.status ||
+            fresh.reason !== request.reason ||
+            fresh.current_room !== request.current_room ||
+            fresh.requested_room !== request.requested_room
+        ) {
+            setRequest(fresh);
+        }
+    }, [requestsData]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // ============================================================
     // Event delegation
@@ -100,7 +139,7 @@ export default function RoomChangeModals() {
     const handleRoomSelect = (e) => {
         const roomId = e.target.value;
         updateField('requested_room', roomId);
-        
+
         // Reset bed selection
         updateField('room_bed_id', '');
 
@@ -114,7 +153,7 @@ export default function RoomChangeModals() {
     // ============================================================
     const handleSubmit = async (e) => {
         e.preventDefault();
-        
+
         if (!form.requested_room) {
             alert('Please select an available room.');
             return;
@@ -149,7 +188,7 @@ export default function RoomChangeModals() {
             const data = await res.json();
             if (!res.ok) throw new Error(data.message || 'Failed to submit request.');
             setShowSubmit(false);
-            window.location.reload();
+            document.dispatchEvent(new CustomEvent('room-change:refresh'));
         } catch (err) {
             alert(err.message);
         } finally {
@@ -185,11 +224,11 @@ export default function RoomChangeModals() {
             });
             const data = await res.json().catch(() => ({}));
             if (!res.ok) throw new Error(data.message || 'Failed to cancel request.');
-            
+
             setShowDelete(false);
             setDeleteTarget(null);
             setShowDetails(false);
-            window.location.reload();
+            document.dispatchEvent(new CustomEvent('room-change:refresh:refresh')); 
         } catch (err) {
             alert(err.message);
         } finally {
@@ -218,7 +257,7 @@ export default function RoomChangeModals() {
                     <form onSubmit={handleSubmit} className="flex flex-col min-h-0">
                         {/* SCROLLABLE BODY */}
                         <div className="p-6 overflow-y-auto max-h-[65vh] flex flex-col gap-4">
-                            
+
                             <div className="bg-blue-50 rounded-lg p-3 flex gap-2.5 text-[13px] text-blue-600 leading-snug">
                                 <i className="fa-regular fa-circle-info mt-0.5"></i>
                                 <span>Request a room change by selecting from the currently available units.</span>
@@ -264,7 +303,7 @@ export default function RoomChangeModals() {
                                         <i className="fa-solid fa-bed"></i>
                                         Select Your Bed Slot <span className="text-rose-500">*</span>
                                     </div>
-                                    
+
                                     <div className="grid grid-cols-2 gap-2">
                                         {selectedRoomData.bed_slots.map((slot) => {
                                             const isSelected = form.room_bed_id === slot.id;

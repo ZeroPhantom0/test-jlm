@@ -1,29 +1,69 @@
 // resources/js/pages/Landing/Index.jsx
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Head, Link, router } from '@inertiajs/react';
-import SplashScreen from '../../components/SplashScreen';
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import { Head, Link, router } from "@inertiajs/react";
+import SplashScreen from "../../components/SplashScreen";
 
 /* ============================================================
    AMENITIES DATA
    ============================================================ */
 const AMENITIES = [
-    { id: 'wifi',    icon: 'bi-wifi',        title: 'High-Speed Wi-Fi',            description: 'Reliable internet connection for work, communication, and entertainment.',           className: 'image-wifi'    },
-    { id: 'aircon',  icon: 'bi-snow',        title: 'Air-Conditioned & Fan Rooms', description: 'Choose room options that fit your comfort and budget.',                               className: 'image-aircon'  },
-    { id: 'netflix', icon: 'bi-tv',          title: 'Netflix Access',              description: 'Enjoy entertainment and streaming access during your stay.',                          className: 'image-netflix' },
-    { id: 'security',icon: 'bi-shield-lock', title: '24/7 Security',               description: 'CCTV-monitored entrances and secure access for peace of mind.',                       className: 'image-security'},
-    { id: 'kitchen', icon: 'bi-cup-hot',     title: 'Shared Kitchen',              description: 'A fully equipped communal kitchen for preparing your own meals.',                     className: 'image-kitchen' },
-    { id: 'laundry', icon: 'bi-basket',      title: 'Laundry Area',                description: 'Designated laundry and drying spaces for tenant use.',                                className: 'image-laundry' },
+    {
+        id: "wifi",
+        icon: "bi-wifi",
+        title: "High-Speed Wi-Fi",
+        description:
+            "Reliable internet connection for work, communication, and entertainment.",
+        image: "/images/amenities/wifi.jpg",
+    },
+    {
+        id: "aircon",
+        icon: "bi-snow",
+        title: "Air-Conditioned & Fan Rooms",
+        description: "Choose room options that fit your comfort and budget.",
+        image: "/images/amenities/aircon.jpg",
+    },
+    {
+        id: "netflix",
+        icon: "bi-tv",
+        title: "Netflix Access",
+        description:
+            "Enjoy entertainment and streaming access during your stay.",
+        image: "/images/amenities/netflix.jpeg",
+    },
+    {
+        id: "security",
+        icon: "bi-shield-lock",
+        title: "24/7 Security",
+        description:
+            "CCTV-monitored entrances and secure access for peace of mind.",
+        image: "/images/amenities/security.PNG",
+    },
+    {
+        id: "kitchen",
+        icon: "bi-cup-hot",
+        title: "Shared Kitchen",
+        description:
+            "A fully equipped communal kitchen for preparing your own meals.",
+        image: "/images/amenities/kitchen.jpg",
+    },
+    {
+        id: "laundry",
+        icon: "bi-basket",
+        title: "Laundry Area",
+        description: "Designated laundry and drying spaces for tenant use.",
+        image: "/images/amenities/laundry.jpg",
+    },
 ];
 
 /* ============================================================
    NAV LINKS
    ============================================================ */
 const NAV_LINKS = [
-    { id: 'home',     label: 'Home'     },
-    { id: 'about',    label: 'About'    },
-    { id: 'services', label: 'Services' },
-    { id: 'rooms',    label: 'Rooms'    },
-    { id: 'contact',  label: 'Contact'  },
+    { id: "home", label: "Home" },
+    { id: "about", label: "About" },
+    { id: "services", label: "Services" },
+    { id: "rooms", label: "Rooms" },
+    { id: "contact", label: "Contact" },
 ];
 
 /* ============================================================
@@ -33,11 +73,15 @@ export default function Index({ rooms = [] }) {
     // If the user lands on /#rooms (e.g. from the tour "Back to Rooms"
     // button), scroll to the Rooms section after mount.
     useEffect(() => {
-        if (window.location.hash === '#rooms') {
-            const el = document.getElementById('rooms');
+        if (window.location.hash === "#rooms") {
+            const el = document.getElementById("rooms");
             if (el) {
                 // Defer to allow layout to settle
-                setTimeout(() => el.scrollIntoView({ behavior: 'auto', block: 'start' }), 50);
+                setTimeout(
+                    () =>
+                        el.scrollIntoView({ behavior: "auto", block: "start" }),
+                    50,
+                );
             }
         }
     }, []);
@@ -61,13 +105,15 @@ export default function Index({ rooms = [] }) {
    HEADER
    ============================================================ */
 function LandingHeader() {
-    const [activeSection, setActiveSection] = useState('home');
+    const [activeSection, setActiveSection] = useState("home");
     const [mobileNavOpen, setMobileNavOpen] = useState(false);
-    const [scrolled, setScrolled]           = useState(false);
-    const [splash, setSplash]               = useState(null);
+    const [scrolled, setScrolled] = useState(false);
+    const [splash, setSplash] = useState(null);
 
     useEffect(() => {
-        const sections = NAV_LINKS.map((l) => document.getElementById(l.id)).filter(Boolean);
+        const sections = NAV_LINKS.map((l) =>
+            document.getElementById(l.id),
+        ).filter(Boolean);
         if (!sections.length) return;
 
         const observer = new IntersectionObserver(
@@ -77,7 +123,10 @@ function LandingHeader() {
                     .sort((a, b) => b.intersectionRatio - a.intersectionRatio);
                 if (visible[0]) setActiveSection(visible[0].target.id);
             },
-            { rootMargin: '-45% 0px -45% 0px', threshold: [0, 0.25, 0.5, 0.75, 1] }
+            {
+                rootMargin: "-45% 0px -45% 0px",
+                threshold: [0, 0.25, 0.5, 0.75, 1],
+            },
         );
 
         sections.forEach((s) => observer.observe(s));
@@ -87,14 +136,14 @@ function LandingHeader() {
     useEffect(() => {
         const onScroll = () => setScrolled(window.scrollY > 40);
         onScroll();
-        window.addEventListener('scroll', onScroll, { passive: true });
-        return () => window.removeEventListener('scroll', onScroll);
+        window.addEventListener("scroll", onScroll, { passive: true });
+        return () => window.removeEventListener("scroll", onScroll);
     }, []);
 
     const handleNavClick = (id) => {
         setMobileNavOpen(false);
         const el = document.getElementById(id);
-        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
     };
 
     const handleAuthNav = (e, target) => {
@@ -113,28 +162,39 @@ function LandingHeader() {
             {splash && (
                 <SplashScreen
                     duration={1800}
-                    message={splash.target === '/login' ? 'Signing you in…' : 'Creating your account…'}
+                    message={
+                        splash.target === "/login"
+                            ? "Signing you in…"
+                            : "Creating your account…"
+                    }
                     onComplete={handleSplashComplete}
                 />
             )}
 
-            <header className={`header ${scrolled ? 'header-solid' : ''}`}>
+            <header className={`header ${scrolled ? "header-solid" : ""}`}>
                 <div className="logo">
                     <img
                         src="/images/jlm-logo.png"
                         alt="JLM Cozy Cabin Logo"
-                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                        onError={(e) => {
+                            e.currentTarget.style.display = "none";
+                        }}
                     />
                     <span>JLM Cozy Cabin</span>
                 </div>
 
-                <nav className={`navigation ${mobileNavOpen ? 'mobile-open' : ''}`}>
+                <nav
+                    className={`navigation ${mobileNavOpen ? "mobile-open" : ""}`}
+                >
                     {NAV_LINKS.map((link) => (
                         <a
                             key={link.id}
                             href={`#${link.id}`}
-                            className={`nav-link ${activeSection === link.id ? 'active' : ''}`}
-                            onClick={(e) => { e.preventDefault(); handleNavClick(link.id); }}
+                            className={`nav-link ${activeSection === link.id ? "active" : ""}`}
+                            onClick={(e) => {
+                                e.preventDefault();
+                                handleNavClick(link.id);
+                            }}
                         >
                             {link.label}
                         </a>
@@ -142,10 +202,18 @@ function LandingHeader() {
                 </nav>
 
                 <div className="header-buttons">
-                    <a href="/login" className="login-btn" onClick={(e) => handleAuthNav(e, '/login')}>
+                    <a
+                        href="/login"
+                        className="login-btn"
+                        onClick={(e) => handleAuthNav(e, "/login")}
+                    >
                         Log In
                     </a>
-                    <a href="/signup" className="signup-btn" onClick={(e) => handleAuthNav(e, '/signup')}>
+                    <a
+                        href="/signup"
+                        className="signup-btn"
+                        onClick={(e) => handleAuthNav(e, "/signup")}
+                    >
                         Get Started
                     </a>
 
@@ -155,7 +223,9 @@ function LandingHeader() {
                         aria-label="Toggle menu"
                         onClick={() => setMobileNavOpen((v) => !v)}
                     >
-                        <i className={`bi ${mobileNavOpen ? 'bi-x-lg' : 'bi-list'}`} />
+                        <i
+                            className={`bi ${mobileNavOpen ? "bi-x-lg" : "bi-list"}`}
+                        />
                     </button>
                 </div>
             </header>
@@ -172,13 +242,14 @@ function HeroSection() {
             <div className="hero-overlay" />
             <div className="hero-content">
                 <h1>
-                    Affordable &amp; Accessible<br />
+                    Affordable &amp; Accessible
+                    <br />
                     <span>Living in Ermita,</span> Manila
                 </h1>
                 <p>
-                    Your clean, comfortable room awaits — anytime, 24/7.
-                    Find the perfect space whether you're a student,
-                    trainee, seafarer, or OFW.
+                    Your clean, comfortable room awaits — anytime, 24/7. Find
+                    the perfect space whether you're a student, trainee,
+                    seafarer, or OFW.
                 </p>
                 <a href="#rooms" className="hero-btn">
                     Find a Room <i className="bi bi-arrow-right" />
@@ -203,36 +274,55 @@ function AboutSection() {
 
             <div className="about-content">
                 <p className="section-label">About Us</p>
-                <h2>More Than Just a Room — <span>A Home</span></h2>
+                <h2>
+                    More Than Just a Room — <span>A Home</span>
+                </h2>
                 <p className="about-description">
                     JLM Cozy Cabin provides affordable and comfortable
                     accommodations in Ermita, Manila — designed for individuals
-                    and groups looking for a clean, secure, and accessible
-                    place to stay. Whether for short-term or long-term stay,
-                    we offer a home-like environment with convenience and comfort.
+                    and groups looking for a clean, secure, and accessible place
+                    to stay. Whether for short-term or long-term stay, we offer
+                    a home-like environment with convenience and comfort.
                 </p>
 
                 <div className="about-feature">
-                    <div className="feature-icon"><i className="bi bi-geo-alt" /></div>
+                    <div className="feature-icon">
+                        <i className="bi bi-geo-alt" />
+                    </div>
                     <div className="feature-text">
                         <h3>Prime Location</h3>
-                        <p>Located at 1517 M.H. Del Pilar St., Ermita Manila corner Salas St. — near major agencies, business centers, hospitals, and transport access.</p>
+                        <p>
+                            Located at 1517 M.H. Del Pilar St., Ermita Manila
+                            corner Salas St. — near major agencies, business
+                            centers, hospitals, and transport access.
+                        </p>
                     </div>
                 </div>
 
                 <div className="about-feature">
-                    <div className="feature-icon"><i className="bi bi-shield-check" /></div>
+                    <div className="feature-icon">
+                        <i className="bi bi-shield-check" />
+                    </div>
                     <div className="feature-text">
                         <h3>Safe &amp; Accessible</h3>
-                        <p>Close to the US Embassy, Manning Agencies, Training Centers, Banks, Hospitals, Robinson Manila, and Manila Bay.</p>
+                        <p>
+                            Close to the US Embassy, Manning Agencies, Training
+                            Centers, Banks, Hospitals, Robinson Manila, and
+                            Manila Bay.
+                        </p>
                     </div>
                 </div>
 
                 <div className="about-feature">
-                    <div className="feature-icon"><i className="bi bi-clock" /></div>
+                    <div className="feature-icon">
+                        <i className="bi bi-clock" />
+                    </div>
                     <div className="feature-text">
                         <h3>24/7 Open</h3>
-                        <p>No check-in time restrictions — guests can check in anytime.</p>
+                        <p>
+                            No check-in time restrictions — guests can check in
+                            anytime.
+                        </p>
                     </div>
                 </div>
 
@@ -248,22 +338,21 @@ function AboutSection() {
    AMENITIES CAROUSEL
    ============================================================ */
 function AmenitiesCarousel() {
-    const [index, setIndex]               = useState(0);
+    const [index, setIndex] = useState(0);
     const [visibleCount, setVisibleCount] = useState(3);
-    const trackRef     = useRef(null);
-    const touchStartX  = useRef(0);
-    const touchDeltaX  = useRef(0);
+    const touchStartX = useRef(0);
+    const touchDeltaX = useRef(0);
 
     useEffect(() => {
         const update = () => {
             const w = window.innerWidth;
-            if (w < 640)      setVisibleCount(1);
+            if (w < 640) setVisibleCount(1);
             else if (w < 1024) setVisibleCount(2);
-            else               setVisibleCount(3);
+            else setVisibleCount(3);
         };
         update();
-        window.addEventListener('resize', update);
-        return () => window.removeEventListener('resize', update);
+        window.addEventListener("resize", update);
+        return () => window.removeEventListener("resize", update);
     }, []);
 
     const maxIndex = Math.max(0, AMENITIES.length - visibleCount);
@@ -272,34 +361,39 @@ function AmenitiesCarousel() {
         if (index > maxIndex) setIndex(maxIndex);
     }, [maxIndex, index]);
 
-    const next = useCallback(() => setIndex((i) => Math.min(i + 1, maxIndex)), [maxIndex]);
+    const next = useCallback(
+        () => setIndex((i) => Math.min(i + 1, maxIndex)),
+        [maxIndex],
+    );
     const prev = useCallback(() => setIndex((i) => Math.max(i - 1, 0)), []);
 
     useEffect(() => {
         const handler = (e) => {
-            if (e.key === 'ArrowRight') next();
-            if (e.key === 'ArrowLeft')  prev();
+            if (e.key === "ArrowRight") next();
+            if (e.key === "ArrowLeft") prev();
         };
-        window.addEventListener('keydown', handler);
-        return () => window.removeEventListener('keydown', handler);
+        window.addEventListener("keydown", handler);
+        return () => window.removeEventListener("keydown", handler);
     }, [next, prev]);
 
     const onTouchStart = (e) => {
         touchStartX.current = e.touches[0].clientX;
         touchDeltaX.current = 0;
     };
-    const onTouchMove  = (e) => {
+    const onTouchMove = (e) => {
         touchDeltaX.current = e.touches[0].clientX - touchStartX.current;
     };
-    const onTouchEnd   = () => {
-        if (touchDeltaX.current > 50)  prev();
+    const onTouchEnd = () => {
+        if (touchDeltaX.current > 50) prev();
         if (touchDeltaX.current < -50) next();
         touchDeltaX.current = 0;
     };
 
-    const trackStyle = { transform: `translateX(-${index * (100 / visibleCount)}%)` };
+    const trackStyle = {
+        transform: `translateX(-${index * (100 / visibleCount)}%)`,
+    };
     const slideStyle = {
-        flex:     `0 0 ${100 / visibleCount}%`,
+        flex: `0 0 ${100 / visibleCount}%`,
         maxWidth: `${100 / visibleCount}%`,
     };
 
@@ -308,9 +402,9 @@ function AmenitiesCarousel() {
             <div className="amenities-header">
                 <h2>Everything You Need, All Included</h2>
                 <p>
-                    From high-speed Wi-Fi and Netflix access to clean, comfortable
-                    rooms — everything is designed to make your stay convenient
-                    and stress-free.
+                    From high-speed Wi-Fi and Netflix access to clean,
+                    comfortable rooms — everything is designed to make your stay
+                    convenient and stress-free.
                 </p>
             </div>
 
@@ -331,11 +425,27 @@ function AmenitiesCarousel() {
                     onTouchMove={onTouchMove}
                     onTouchEnd={onTouchEnd}
                 >
-                    <div className="amenities-track" style={trackStyle} ref={trackRef}>
+                    <div className="amenities-track" style={trackStyle}>
                         {AMENITIES.map((a) => (
-                            <div className="amenity-slide" style={slideStyle} key={a.id}>
+                            <div
+                                className="amenity-slide"
+                                style={slideStyle}
+                                key={a.id}
+                            >
                                 <div className="amenity-card">
-                                    <div className={`amenity-image ${a.className}`}>
+                                    <div
+                                        className={`amenity-image image-${a.id}`}
+                                    >
+                                        <img
+                                            src={a.image}
+                                            alt={a.title}
+                                            className="amenity-img"
+                                            loading="lazy"
+                                            onError={(e) => {
+                                                e.currentTarget.style.display =
+                                                    "none";
+                                            }}
+                                        />
                                         <div className="amenity-icon">
                                             <i className={`bi ${a.icon}`} />
                                         </div>
@@ -366,7 +476,7 @@ function AmenitiesCarousel() {
                     <button
                         key={i}
                         type="button"
-                        className={`carousel-dot ${i === index ? 'active' : ''}`}
+                        className={`carousel-dot ${i === index ? "active" : ""}`}
                         onClick={() => setIndex(i)}
                         aria-label={`Go to slide ${i + 1}`}
                     />
@@ -381,21 +491,30 @@ function AmenitiesCarousel() {
    ============================================================ */
 function RoomsSection({ rooms }) {
     // Group rooms by type
-    const soloRooms     = rooms.filter(r => r.room_type === 'Solo Room');
-    const bedspaceRooms = rooms.filter(r => r.room_type === 'Bedspace');
-    const barkadaRooms  = rooms.filter(r => r.room_type === 'Barkada Room');
+    const soloRooms = rooms.filter((r) => r.room_type === "Solo Room");
+    const bedspaceRooms = rooms.filter((r) => r.room_type === "Bedspace");
+    const barkadaRooms = rooms.filter((r) => r.room_type === "Barkada Room");
 
     return (
         <section className="rooms-section" id="rooms">
             <div className="rooms-header">
                 <h2>Find Your Perfect Room</h2>
-                <p>Browse all available room types and take a virtual tour before you reserve.</p>
+                <p>
+                    Browse all available room types and take a virtual tour
+                    before you reserve.
+                </p>
             </div>
 
             <div className="room-status-legend">
-                <div className="status-item"><span className="status-dot available" /> Available</div>
-                <div className="status-item"><span className="status-dot reserved" /> Reserved</div>
-                <div className="status-item"><span className="status-dot occupied" /> Occupied</div>
+                <div className="status-item">
+                    <span className="status-dot available" /> Available
+                </div>
+                <div className="status-item">
+                    <span className="status-dot reserved" /> Reserved
+                </div>
+                <div className="status-item">
+                    <span className="status-dot occupied" /> Occupied
+                </div>
             </div>
 
             {/* Render categories only if rooms exist */}
@@ -406,7 +525,9 @@ function RoomsSection({ rooms }) {
                         <div className="category-line" />
                     </div>
                     <div className="rooms-grid-3">
-                        {soloRooms.map((room) => <RoomCard key={room.id} room={room} />)}
+                        {soloRooms.map((room) => (
+                            <RoomCard key={room.id} room={room} />
+                        ))}
                     </div>
                 </>
             )}
@@ -418,7 +539,9 @@ function RoomsSection({ rooms }) {
                         <div className="category-line" />
                     </div>
                     <div className="rooms-grid-3">
-                        {bedspaceRooms.map((room) => <RoomCard key={room.id} room={room} />)}
+                        {bedspaceRooms.map((room) => (
+                            <RoomCard key={room.id} room={room} />
+                        ))}
                     </div>
                 </>
             )}
@@ -430,7 +553,9 @@ function RoomsSection({ rooms }) {
                         <div className="category-line" />
                     </div>
                     <div className="rooms-grid-3">
-                        {barkadaRooms.map((room) => <RoomCard key={room.id} room={room} />)}
+                        {barkadaRooms.map((room) => (
+                            <RoomCard key={room.id} room={room} />
+                        ))}
                     </div>
                 </>
             )}
@@ -438,7 +563,10 @@ function RoomsSection({ rooms }) {
             {rooms.length === 0 && (
                 <div className="rooms-empty">
                     <i className="bi bi-door-closed" />
-                    <p>No rooms are available right now. Please check back soon.</p>
+                    <p>
+                        No rooms are available right now. Please check back
+                        soon.
+                    </p>
                 </div>
             )}
         </section>
@@ -446,11 +574,12 @@ function RoomsSection({ rooms }) {
 }
 
 function RoomCard({ room }) {
-    const statusClass = {
-        Available: 'available-status',
-        Reserved:  'reserved-status',
-        Occupied:  'occupied-status',
-    }[room.status] || 'available-status';
+    const statusClass =
+        {
+            Available: "available-status",
+            Reserved: "reserved-status",
+            Occupied: "occupied-status",
+        }[room.status] || "available-status";
 
     const hasTour = !!room.has_tour && !!room.tour_id;
     const tourUrl = hasTour ? `/tour/${room.tour_id}` : null;
@@ -458,15 +587,15 @@ function RoomCard({ room }) {
     // Use a plain <a> (same-tab navigation) so the browser sends the
     // Referer header to /tour/{id}. The tour-viewer uses that Referer
     // to know it should send the user back to /#rooms.
-    const ImageWrapper = hasTour ? 'a' : 'div';
+    const ImageWrapper = hasTour ? "a" : "div";
     const imageProps = hasTour
         ? {
-            href: tourUrl,
-            className: 'room-image clickable',
-            'aria-label': `Open 360° tour for ${room.room_type}`,
-            rel: 'noopener',
+              href: tourUrl,
+              className: "room-image clickable",
+              "aria-label": `Open 360° tour for ${room.room_type}`,
+              rel: "noopener",
           }
-        : { className: 'room-image' };
+        : { className: "room-image" };
 
     return (
         <div className="room-card compact">
@@ -476,7 +605,9 @@ function RoomCard({ room }) {
                         src={room.thumbnail}
                         alt={room.room_type}
                         className="room-thumbnail"
-                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                        onError={(e) => {
+                            e.currentTarget.style.display = "none";
+                        }}
                     />
                 )}
                 <div className={`room-status ${statusClass}`}>
@@ -506,22 +637,31 @@ function RoomCard({ room }) {
 
                 <div className="room-details">
                     <span>
-                        <i className="bi bi-house-door" />{' '}
-                        {room.total_beds} {room.total_beds > 1 ? 'Beds' : 'Bed'}
+                        <i className="bi bi-house-door" /> {room.total_beds}{" "}
+                        {room.total_beds > 1 ? "Beds" : "Bed"}
                     </span>
                 </div>
 
-                <div className={`availability-box ${
-                    room.status === 'Available' ? 'available-box' :
-                    room.status === 'Reserved'  ? 'reserved-box'  : 'occupied-box'
-                }`}>
+                <div
+                    className={`availability-box ${
+                        room.status === "Available"
+                            ? "available-box"
+                            : room.status === "Reserved"
+                              ? "reserved-box"
+                              : "occupied-box"
+                    }`}
+                >
                     <div>
                         <small>
-                            <i className="bi bi-calendar3" />{' '}
-                            {room.status === 'Available' ? 'Available Now' : 'Current Status'}
+                            <i className="bi bi-calendar3" />{" "}
+                            {room.status === "Available"
+                                ? "Available Now"
+                                : "Current Status"}
                         </small>
                         <strong>
-                            {room.status === 'Available' ? 'Ready for Move-in' : room.status}
+                            {room.status === "Available"
+                                ? "Ready for Move-in"
+                                : room.status}
                         </strong>
                     </div>
                 </div>
@@ -545,36 +685,45 @@ function ContactSection() {
                         <span>Let's Talk.</span>
                     </h2>
                     <p className="contact-description">
-                        Have questions about room availability, pricing, or our facilities?
-                        We're happy to help. Reach out through any of the channels below.
+                        Have questions about room availability, pricing, or our
+                        facilities? We're happy to help. Reach out through any
+                        of the channels below.
                     </p>
                 </div>
 
                 {/* RIGHT: Stacked Grid */}
                 <div className="contact-details-grid">
                     <div className="contact-detail">
-                        <div className="contact-icon"><i className="bi bi-telephone" /></div>
+                        <div className="contact-icon">
+                            <i className="bi bi-telephone" />
+                        </div>
                         <div>
                             <small>PHONE</small>
                             <p>+63 912 345 6789</p>
                         </div>
                     </div>
                     <div className="contact-detail">
-                        <div className="contact-icon"><i className="bi bi-envelope" /></div>
+                        <div className="contact-icon">
+                            <i className="bi bi-envelope" />
+                        </div>
                         <div>
                             <small>EMAIL</small>
                             <p>info@jlmcozycabin.com</p>
                         </div>
                     </div>
                     <div className="contact-detail">
-                        <div className="contact-icon"><i className="bi bi-geo-alt" /></div>
+                        <div className="contact-icon">
+                            <i className="bi bi-geo-alt" />
+                        </div>
                         <div>
                             <small>ADDRESS</small>
                             <p>1517 M.H. Del Pilar St., Ermita, Manila</p>
                         </div>
                     </div>
                     <div className="contact-detail">
-                        <div className="contact-icon"><i className="bi bi-clock" /></div>
+                        <div className="contact-icon">
+                            <i className="bi bi-clock" />
+                        </div>
                         <div>
                             <small>OFFICE HOURS</small>
                             <p>Mon–Sat, 8:00 AM – 8:00 PM</p>
@@ -598,7 +747,10 @@ function LandingFooter() {
                         <div className="footer-logo">JLM</div>
                         <h2>JLM Cozy Cabin</h2>
                     </div>
-                    <p>Premium boarding house offering comfortable, affordable, and secure living in Manila.</p>
+                    <p>
+                        Premium boarding house offering comfortable, affordable,
+                        and secure living in Manila.
+                    </p>
                     <div className="footer-socials">
                         <a
                             href="https://www.facebook.com/profile.php?id=100076056182354"

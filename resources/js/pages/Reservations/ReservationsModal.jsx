@@ -113,19 +113,38 @@ export default function ReservationsModal() {
         agreed_to_terms: false,
     });
 
+    // 1. Read default payload on mount AND listen for live updates
     useEffect(() => {
         const el = document.getElementById("tenant-reservations-modals");
-        if (!el) return;
-
-        if (el.dataset.reservations) {
+        
+        // Initial load
+        if (el?.dataset?.reservations) {
             try {
                 setReservationsData(JSON.parse(el.dataset.reservations));
             } catch (e) {
                 console.error("Invalid reservations JSON", e);
             }
         }
+
+        // ── Live update listener (Triggered by your Blade script) ──
+        const handleLiveUpdate = (e) => {
+            if (e.detail) {
+                setReservationsData(e.detail);
+            } else if (el?.dataset?.reservations) {
+                try {
+                    setReservationsData(JSON.parse(el.dataset.reservations));
+                } catch (err) {}
+            }
+        };
+
+        window.addEventListener("reservation:data-updated", handleLiveUpdate);
+
+        return () => {
+            window.removeEventListener("reservation:data-updated", handleLiveUpdate);
+        };
     }, []);
 
+    // 2. Global click listener (Open Details, Open Reserve, Open Cancel)
     useEffect(() => {
         const handler = (e) => {
             const detailsBtn = e.target.closest(".open-room-details-btn");
@@ -332,7 +351,10 @@ export default function ReservationsModal() {
                 );
 
             setShowReserve(false);
-            window.location.reload();
+            // Soft refresh instead of hard reload
+            window.dispatchEvent(new Event("reservation:refresh"));
+            inFlightRef.current = false;
+            setSaving(false);
         } catch (err) {
             alert(err.message);
             inFlightRef.current = false;
@@ -368,7 +390,8 @@ export default function ReservationsModal() {
 
             setShowCancel(false);
             setCancelTarget(null);
-            window.location.reload();
+            // Soft refresh instead of hard reload
+            window.dispatchEvent(new Event("reservation:refresh"));
         } catch (err) {
             alert(err.message);
             cancelInFlightRef.current = false;

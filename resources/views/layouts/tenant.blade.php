@@ -2,7 +2,6 @@
 @php
     $user = auth()->user();
 
-    // Prioritize the uploaded profile picture from personal_information
     $profilePic = $user?->personalInformation?->profile_picture ?? $user?->profile_picture;
 
     $avatarUrl = $profilePic
@@ -11,11 +10,8 @@
             : asset('storage/' . $profilePic))
         : null;
 
-    // True only if an admin has approved this user's reservation
     $isTenant = \App\Models\Tenant::isApproved();
 
-    // History lives under Dashboard (no sidebar entry) — keep Dashboard
-    // highlighted while the user is on the History page.
     $sidebarActive = ($active ?? 'dashboard') === 'history'
         ? 'dashboard'
         : ($active ?? 'dashboard');
@@ -36,6 +32,12 @@
         'avatar'    => $avatarUrl,
         'isTenant'  => $isTenant,
     ]);
+
+    // ── Broadcast config (consumed by app.jsx) ──
+    $broadcastConfig = [
+        'key'     => env('PUSHER_APP_KEY', ''),
+        'cluster' => env('PUSHER_APP_CLUSTER', 'ap1'),
+    ];
 @endphp
 
 <!DOCTYPE html>
@@ -49,6 +51,21 @@
 
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    {{--
+        ── Echo bootstrap config only ──
+        Echo is created in resources/js/app.jsx (single source of truth).
+        Do NOT add <script src=".../pusher.min.js"> or new Echo(...) here.
+    --}}
+    <script>
+        window.__appConfig = {
+            userId:  {{ $user?->id ?? 'null' }},
+            role:    @json($user?->role ?? 'guest'),
+            isTenant: {{ $user?->isTenant() ? 'true' : 'false' }},
+            csrf:    @json(csrf_token()),
+            broadcast: @json($broadcastConfig),
+        };
+    </script>
 
     @viteReactRefresh
     @vite(['resources/css/app.css', 'resources/js/app.jsx'])

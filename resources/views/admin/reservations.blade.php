@@ -5,13 +5,15 @@
     <div class="p-4 md:p-8 max-w-[1400px] mx-auto space-y-6">
 
         {{-- Page Header --}}
-        <div class="flex items-center gap-4">
-            <div class="w-12 h-12 rounded-xl bg-teal-100 text-teal-600 flex items-center justify-center text-xl">
-                <i class="fa-regular fa-calendar-check"></i>
-            </div>
-            <div>
-                <h1 class="text-[22px] font-extrabold text-slate-900">Manage Reservations</h1>
-                <p class="text-[13px] text-slate-500 mt-0.5">Review and approve tenant reservation requests</p>
+        <div class="flex items-center justify-between gap-4">
+            <div class="flex items-center gap-4">
+                <div class="w-12 h-12 rounded-xl bg-teal-100 text-teal-600 flex items-center justify-center text-xl">
+                    <i class="fa-regular fa-calendar-check"></i>
+                </div>
+                <div>
+                    <h1 class="text-[22px] font-extrabold text-slate-900">Manage Reservations</h1>
+                    <p class="text-[13px] text-slate-500 mt-0.5">Review and approve tenant reservation requests</p>
+                </div>
             </div>
         </div>
 
@@ -19,29 +21,29 @@
         <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
             <div class="bg-white rounded-2xl px-5 py-4 border border-slate-100 shadow-sm">
                 <div class="text-[13px] font-semibold text-slate-500">Total</div>
-                <div class="text-[26px] font-extrabold text-slate-900 mt-2">{{ $metrics['total'] }}</div>
+                <div id="metric-total" class="text-[26px] font-extrabold text-slate-900 mt-2">{{ $metrics['total'] }}</div>
             </div>
             <div class="bg-white rounded-2xl px-5 py-4 border border-slate-100 shadow-sm">
                 <div class="text-[13px] font-semibold text-slate-500">Pending</div>
-                <div
+                <div id="metric-pending"
                     class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-yellow-100 text-amber-700 text-base font-extrabold mt-2">
                     {{ $metrics['pending'] }}</div>
             </div>
             <div class="bg-white rounded-2xl px-5 py-4 border border-slate-100 shadow-sm">
                 <div class="text-[13px] font-semibold text-slate-500">Approved</div>
-                <div
+                <div id="metric-approved"
                     class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-green-100 text-green-600 text-base font-extrabold mt-2">
                     {{ $metrics['approved'] }}</div>
             </div>
             <div class="bg-white rounded-2xl px-5 py-4 border border-slate-100 shadow-sm">
                 <div class="text-[13px] font-semibold text-slate-500">Rejected</div>
-                <div
+                <div id="metric-rejected"
                     class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-rose-100 text-rose-600 text-base font-extrabold mt-2">
                     {{ $metrics['rejected'] }}</div>
             </div>
             <div class="bg-white rounded-2xl px-5 py-4 border border-slate-100 shadow-sm">
                 <div class="text-[13px] font-semibold text-slate-500">Expired</div>
-                <div
+                <div id="metric-expired"
                     class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-slate-100 text-slate-500 text-base font-extrabold mt-2">
                     {{ $metrics['expired'] }}</div>
             </div>
@@ -50,7 +52,7 @@
         {{-- Table Card --}}
         <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 space-y-5">
 
-            {{-- Toolbar: search + status filter (client-side, no reload) --}}
+            {{-- Toolbar --}}
             <div class="flex flex-col md:flex-row md:items-center gap-2.5">
                 <div class="relative flex-1">
                     <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-[11px] pointer-events-none"></i>
@@ -85,155 +87,191 @@
                         </tr>
                     </thead>
                     <tbody id="res-tbody">
-                        @forelse($reservations as $res)
-                            @php
-                                $rowSearch = strtolower(trim(
-                                    ($res->tenant_name   ?? '') . ' ' .
-                                    ($res->email         ?? '') . ' ' .
-                                    ($res->phone         ?? '') . ' ' .
-                                    ($res->desired_room  ?? '') . ' ' .
-                                    ($res->reference_no  ?? '')
-                                ));
-                            @endphp
-                            <tr class="res-row border-b border-slate-50 last:border-0"
-                                data-status="{{ $res->status }}"
-                                data-search="{{ $rowSearch }}">
-                                {{-- Resident --}}
-                                <td class="py-4 px-4">
-                                    <div class="flex items-center gap-3">
-                                        <div
-                                            class="w-9 h-9 rounded-full {{ $res->avatar_bg }} {{ $res->avatar_color }} flex items-center justify-center text-[14px] font-bold shrink-0">
-                                            {{ $res->tenant_initial }}
-                                        </div>
-                                        <div>
-                                            <div class="font-bold text-slate-900 text-[13px]">{{ $res->tenant_name }}</div>
-                                            <div class="text-[11px] text-slate-400 mt-0.5">{{ $res->reference_no }}</div>
-                                        </div>
-                                    </div>
-                                </td>
-
-                                {{-- Contact --}}
-                                <td class="py-4 px-4">
-                                    <div class="text-[13px] text-slate-700">{{ $res->email }}</div>
-                                    <div class="text-[11px] text-slate-400 mt-0.5">{{ $res->phone }}</div>
-                                </td>
-
-                                {{-- Desired Room --}}
-                                <td class="py-4 px-4">
-                                    <div class="text-[13px] font-medium text-slate-700">{{ $res->desired_room }}</div>
-                                </td>
-
-                                {{-- Check-in --}}
-                                <td class="py-4 px-4">
-                                    <div class="flex items-center gap-2 text-[13px] text-slate-700">
-                                        <i class="fa-regular fa-calendar text-slate-400 text-[13px]"></i>
-                                        {{ $res->formatted_check_in }}
-                                    </div>
-                                </td>
-
-                                {{-- Check-out --}}
-                                <td class="py-4 px-4">
-                                    <div
-                                        class="flex items-center gap-2 text-[13px] {{ $res->check_out ? 'text-slate-700' : 'text-slate-400 italic' }}">
-                                        <i class="fa-regular fa-calendar-xmark text-slate-400 text-[13px]"></i>
-                                        {{ $res->formatted_check_out }}
-                                    </div>
-                                </td>
-
-                                {{-- Fee --}}
-                                <td class="py-4 px-4">
-                                    <div class="font-extrabold text-emerald-600 text-[13px]">{{ $res->formatted_fee }}
-                                    </div>
-                                </td>
-
-                                {{-- Submitted --}}
-                                <td class="py-4 px-4 text-[13px] text-slate-600 whitespace-nowrap">
-                                    {{ $res->created_at?->format('M d, Y') }}
-                                </td>
-
-                                {{-- Status --}}
-                                <td class="py-4 px-4">
-                                    <span
-                                        class="inline-flex items-center gap-1.5 {{ $res->status_class }} px-3 py-1 rounded-full text-[11px] font-bold whitespace-nowrap">
-                                        <i class="{{ $res->status_icon }}"></i> {{ $res->status }}
-                                    </span>
-                                </td>
-
-                                {{-- Actions --}}
-                                <td class="py-4 px-4">
-                                    <div class="flex items-center justify-end gap-3">
-                                        @if ($res->status === 'Pending')
-                                            <i class="fa-regular fa-circle-check text-emerald-500 text-[15px] cursor-pointer hover:text-emerald-600 transition icon-approve"
-                                                title="Approve" data-res-id="{{ $res->id }}"></i>
-                                            <i class="fa-regular fa-circle-xmark text-rose-500 text-[15px] cursor-pointer hover:text-rose-600 transition icon-reject"
-                                                title="Reject" data-res-id="{{ $res->id }}"></i>
-                                        @endif
-                                        <i class="fa-regular fa-eye text-slate-700 text-[15px] cursor-pointer hover:text-orange-500 transition icon-view"
-                                            title="View Details" data-res-key="{{ $res->reference_no }}"></i>
-                                    </div>
-                                </td>
-                            </tr>
-                        @empty
-                            <tr>
-                                <td colspan="9" class="text-center py-12 text-slate-400">
-                                    <i class="fa-solid fa-inbox text-4xl mb-3"></i>
-                                    <p class="text-sm">No reservations found.</p>
-                                </td>
-                            </tr>
-                        @endforelse
-
-                        <tr id="res-empty-filter" class="hidden">
-                            <td colspan="9" class="text-center py-12 text-slate-400">
-                                <i class="fa-solid fa-magnifying-glass text-4xl mb-3 opacity-50"></i>
-                                <p class="text-sm">No reservations match your current filters.</p>
-                            </td>
-                        </tr>
+                        {{-- Rows rendered by JS --}}
                     </tbody>
                 </table>
+                <div id="res-empty-filter" class="hidden text-center py-12 text-slate-400">
+                    <i class="fa-solid fa-magnifying-glass text-4xl mb-3 opacity-50"></i>
+                    <p class="text-sm">No reservations match your current filters.</p>
+                </div>
             </div>
         </div>
     </div>
 
-    {{-- React Modal Mount Point with data --}}
+    {{-- React Modal Mount Point --}}
     <div id="admin-reservations-modals" data-reservations='@json($reservationsForReact)'></div>
 @endsection
 
 @push('scripts')
 <script>
 (function () {
-    const rows         = Array.from(document.querySelectorAll('.res-row'));
+    const DATA_URL = "{{ route('admin.reservations.data') }}";
+    const tbody    = document.getElementById('res-tbody');
     const searchInput  = document.getElementById('res-search');
     const statusFilter = document.getElementById('res-status-filter');
     const emptyRow     = document.getElementById('res-empty-filter');
+    const modalsEl     = document.getElementById('admin-reservations-modals');
 
-    function applyFilters() {
-        const q      = (searchInput?.value  || '').toLowerCase().trim();
+    let allRows = [];
+    let currentReact = {};
+
+    function escapeHtml(s) {
+        return String(s ?? '').replace(/[&<>"']/g, (c) => (
+            { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+        ));
+    }
+
+    function rowTemplate(r) {
+        const checkoutClass = r.check_out_is_null ? 'text-slate-400 italic' : 'text-slate-700';
+        const checkoutIcon  = r.check_out_is_null ? 'fa-calendar-xmark' : 'fa-calendar-xmark';
+        const actions = r.status === 'Pending'
+            ? `
+                <i class="fa-regular fa-circle-check text-emerald-500 text-[15px] cursor-pointer hover:text-emerald-600 transition icon-approve"
+                    title="Approve" data-res-id="${r.id}"></i>
+                <i class="fa-regular fa-circle-xmark text-rose-500 text-[15px] cursor-pointer hover:text-rose-600 transition icon-reject"
+                    title="Reject" data-res-id="${r.id}"></i>
+            `
+            : '';
+
+        return `
+            <tr class="res-row border-b border-slate-50 last:border-0"
+                data-id="${r.id}"
+                data-status="${escapeHtml(r.status)}"
+                data-search="${escapeHtml([
+                    r.tenant_name, r.email, r.phone, r.desired_room, r.reference_no
+                ].join(' ').toLowerCase())}">
+                <td class="py-4 px-4">
+                    <div class="flex items-center gap-3">
+                        <div class="w-9 h-9 rounded-full ${escapeHtml(r.avatar_bg)} ${escapeHtml(r.avatar_color)} flex items-center justify-center text-[14px] font-bold shrink-0">
+                            ${escapeHtml(r.tenant_initial)}
+                        </div>
+                        <div>
+                            <div class="font-bold text-slate-900 text-[13px]">${escapeHtml(r.tenant_name)}</div>
+                            <div class="text-[11px] text-slate-400 mt-0.5">${escapeHtml(r.reference_no)}</div>
+                        </div>
+                    </div>
+                </td>
+                <td class="py-4 px-4">
+                    <div class="text-[13px] text-slate-700">${escapeHtml(r.email)}</div>
+                    <div class="text-[11px] text-slate-400 mt-0.5">${escapeHtml(r.phone)}</div>
+                </td>
+                <td class="py-4 px-4">
+                    <div class="text-[13px] font-medium text-slate-700">${escapeHtml(r.desired_room)}</div>
+                </td>
+                <td class="py-4 px-4">
+                    <div class="flex items-center gap-2 text-[13px] text-slate-700">
+                        <i class="fa-regular fa-calendar text-slate-400 text-[13px]"></i>
+                        ${escapeHtml(r.formatted_check_in)}
+                    </div>
+                </td>
+                <td class="py-4 px-4">
+                    <div class="flex items-center gap-2 text-[13px] ${checkoutClass}">
+                        <i class="fa-regular ${checkoutIcon} text-slate-400 text-[13px]"></i>
+                        ${escapeHtml(r.formatted_check_out)}
+                    </div>
+                </td>
+                <td class="py-4 px-4">
+                    <div class="font-extrabold text-emerald-600 text-[13px]">${escapeHtml(r.formatted_fee)}</div>
+                </td>
+                <td class="py-4 px-4 text-[13px] text-slate-600 whitespace-nowrap">${escapeHtml(r.created_at ?? '')}</td>
+                <td class="py-4 px-4">
+                    <span class="inline-flex items-center gap-1.5 ${escapeHtml(r.status_class)} px-3 py-1 rounded-full text-[11px] font-bold whitespace-nowrap">
+                        <i class="${escapeHtml(r.status_icon)}"></i> ${escapeHtml(r.status)}
+                    </span>
+                </td>
+                <td class="py-4 px-4">
+                    <div class="flex items-center justify-end gap-3">
+                        ${actions}
+                        <i class="fa-regular fa-eye text-slate-700 text-[15px] cursor-pointer hover:text-orange-500 transition icon-view"
+                            title="View Details" data-res-key="${escapeHtml(r.reference_no)}"></i>
+                    </div>
+                </td>
+            </tr>
+        `;
+    }
+
+    function renderRows() {
+        const q      = (searchInput?.value || '').toLowerCase().trim();
         const status = (statusFilter?.value || '').trim();
 
         let visible = 0;
-        rows.forEach((row) => {
-            const haystack  = row.dataset.search || '';
-            const rowStatus = row.dataset.status || '';
+        const html = allRows.map((r) => {
+            const haystack  = `${r.tenant_name ?? ''} ${r.email ?? ''} ${r.phone ?? ''} ${r.desired_room ?? ''} ${r.reference_no ?? ''}`.toLowerCase();
             const searchMatch = !q || haystack.includes(q);
-            const statusMatch = !status || rowStatus === status;
-            const show = searchMatch && statusMatch;
-            row.style.display = show ? '' : 'none';
-            if (show) visible++;
-        });
+            const statusMatch = !status || r.status === status;
+            if (searchMatch && statusMatch) visible++;
+            return searchMatch && statusMatch ? rowTemplate(r) : '';
+        }).join('');
 
-        if (emptyRow) {
-            emptyRow.classList.toggle('hidden', !(visible === 0 && rows.length > 0));
-        }
+        tbody.innerHTML = html;
+        emptyRow.classList.toggle('hidden', !(visible === 0 && allRows.length > 0));
+        bindRowActions();
     }
 
-    let searchTimer;
-    searchInput?.addEventListener('input', () => {
-        clearTimeout(searchTimer);
-        searchTimer = setTimeout(applyFilters, 120);
+    function bindRowActions() {
+        // Approve/reject/view buttons delegate to the existing React modals
+        tbody.querySelectorAll('.icon-approve').forEach((el) => {
+            el.onclick = () => window.dispatchEvent(new CustomEvent('reservation:approve', { detail: { id: +el.dataset.resId } }));
+        });
+        tbody.querySelectorAll('.icon-reject').forEach((el) => {
+            el.onclick = () => window.dispatchEvent(new CustomEvent('reservation:reject', { detail: { id: +el.dataset.resId } }));
+        });
+        tbody.querySelectorAll('.icon-view').forEach((el) => {
+            el.onclick = () => window.dispatchEvent(new CustomEvent('reservation:view', { detail: { key: el.dataset.resKey } }));
+        });
+    }
+
+    function setMetrics(m) {
+        document.getElementById('metric-total').textContent    = m.total;
+        document.getElementById('metric-pending').textContent  = m.pending;
+        document.getElementById('metric-approved').textContent = m.approved;
+        document.getElementById('metric-rejected').textContent = m.rejected;
+        document.getElementById('metric-expired').textContent  = m.expired;
+    }
+
+    async function refresh() {
+        try {
+            const res = await fetch(DATA_URL, {
+                headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                credentials: 'same-origin',
+            });
+            if (!res.ok) return;
+            const data = await res.json();
+            allRows = data.rows || [];
+            currentReact = data.react || {};
+            setMetrics(data.metrics || {});
+            renderRows();
+
+            // Update React modal data attribute so modals see fresh data
+            if (modalsEl) {
+                modalsEl.dataset.reservations = JSON.stringify(currentReact);
+                window.dispatchEvent(new CustomEvent('reservation:data-updated', { detail: currentReact }));
+            }
+        } catch (e) { /* silent */ }
+    }
+
+    // --- filters ---
+    let t;
+    searchInput?.addEventListener('input', () => { clearTimeout(t); t = setTimeout(renderRows, 120); });
+    statusFilter?.addEventListener('change', renderRows);
+
+    // --- polling fallback (every 15s) ---
+    let pollTimer = setInterval(refresh, 3000);
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) clearInterval(pollTimer);
+        else { refresh(); pollTimer = setInterval(refresh, 3000); }
     });
 
-    statusFilter?.addEventListener('change', applyFilters);
-    applyFilters();
+    // --- Echo real-time ---
+    if (window.Echo) {
+        try {
+            window.Echo.channel('admin.reservations')
+                .listen('.reservation.updated', () => refresh());
+        } catch (e) { /* Echo unavailable → polling covers it */ }
+    }
+
+    // --- initial load ---
+    refresh();
 })();
 </script>
 @endpush

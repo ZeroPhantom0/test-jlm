@@ -9,13 +9,15 @@
 <div class="p-4 md:p-8 max-w-5xl mx-auto">
 
     {{-- Banner --}}
-    <div class="flex items-center gap-4 mb-6">
-        <div class="w-11 h-11 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center text-lg shrink-0">
-            <i class="fa-solid fa-bullhorn"></i>
-        </div>
-        <div class="min-w-0">
-            <h2 class="text-xl font-bold text-slate-900">Announcements</h2>
-            <p class="text-[13px] text-slate-500 mt-0.5">Official notices from building management</p>
+    <div class="flex items-center justify-between gap-4 mb-6 flex-wrap">
+        <div class="flex items-center gap-4">
+            <div class="w-11 h-11 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center text-lg shrink-0">
+                <i class="fa-solid fa-bullhorn"></i>
+            </div>
+            <div class="min-w-0">
+                <h2 class="text-xl font-bold text-slate-900">Announcements</h2>
+                <p class="text-[13px] text-slate-500 mt-0.5">Official notices from building management</p>
+            </div>
         </div>
     </div>
 
@@ -43,7 +45,6 @@
 
     {{-- ============ OFFICIAL HOUSE RULES CARD (static) ============ --}}
     <div class="bg-amber-50 border border-amber-300 rounded-xl mb-8 overflow-hidden shadow-sm">
-        {{-- Header --}}
         <div class="bg-amber-500 text-white px-5 py-3 flex flex-wrap items-center justify-between gap-2">
             <div class="flex items-center gap-2.5 text-[13px] font-bold uppercase tracking-wider">
                 <i class="fa-solid fa-file-contract text-base"></i>
@@ -52,7 +53,6 @@
             <div class="text-[13px] opacity-90">Sep 28, 2026</div>
         </div>
 
-        {{-- Body --}}
         <div class="p-5">
             <h3 class="text-lg font-extrabold text-slate-900 mb-3">
                 JLM Cozy Cabin - House Rules &amp; Boarding Contract
@@ -61,7 +61,6 @@
                 HOUSE RULES &amp; BOARDING CONTRACT JLM Cozy Cabin — Effective: January 2026 1. QUIET HOURS Quiet hours are strictly observed from 10:00 PM to 7:00 AM daily. Loud music, parties, and excessive noise are prohibited during these hours. Violations are subject to warnings and eventual eviction. 2. VISITOR POLICY Visitors are allowed only between 8:00 AM and
             </p>
 
-            {{-- Footer --}}
             <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <div class="flex items-center gap-1.5 text-xs text-slate-500">
                     <i class="fa-regular fa-globe text-sm"></i>
@@ -80,147 +79,160 @@
     </div>
 
     {{-- ============ PINNED ============ --}}
-    @if($pinnedAnnouncements->count() > 0)
+    <div id="pinned-section" class="mb-8 hidden">
         <div class="text-[11px] font-bold tracking-wider text-slate-400 uppercase mb-3 flex items-center gap-1.5">
             <i class="fa-solid fa-thumbtack text-[10px]"></i> Pinned Announcements
         </div>
-
-        <div class="space-y-4 mb-8" id="pinnedList">
-            @foreach($pinnedAnnouncements as $a)
-                @php
-                    $priority = strtolower($a->priority ?? 'normal');
-
-                    $borderClass = match ($a->priority) {
-                        'Urgent'    => 'border-l-rose-500',
-                        'Important' => 'border-l-indigo-500',
-                        default     => 'border-l-slate-300',
-                    };
-                    $badgeBg = match ($a->priority) {
-                        'Urgent'    => 'bg-rose-100 text-rose-700',
-                        'Important' => 'bg-amber-100 text-amber-700',
-                        default     => 'bg-slate-100 text-slate-600',
-                    };
-                    $badgeIcon = $a->priority === 'Normal'
-                        ? 'fa-circle-info'
-                        : 'fa-circle-exclamation';
-                @endphp
-
-                <div class="announcement-card bg-white border border-slate-200 border-l-[5px] {{ $borderClass }} rounded-xl p-5">
-                    <div class="flex flex-wrap justify-between items-center gap-2 mb-3">
-                        <div class="flex flex-wrap gap-2 items-center">
-                            <span class="bg-indigo-100 text-indigo-700 text-[11px] font-semibold px-2 py-1 rounded-full flex items-center gap-1">
-                                <i class="fa-solid fa-thumbtack text-[9px]"></i> Pinned
-                            </span>
-                            <span class="badge-{{ $priority }} text-[11px] font-semibold px-2 py-1 rounded-full uppercase {{ $badgeBg }} flex items-center gap-1">
-                                <i class="fa-solid {{ $badgeIcon }} text-[10px]"></i>
-                                {{ $a->priority }}
-                            </span>
-                        </div>
-                        <span class="text-xs text-slate-400">
-                            {{ $a->created_at?->format('M d, Y') ?? '—' }}
-                        </span>
-                    </div>
-                    <h3 class="card-title text-base font-bold text-slate-900 mb-2">{{ $a->title }}</h3>
-                    <p class="card-desc text-[13px] text-slate-600 leading-relaxed mb-4">{{ $a->content }}</p>
-                    <div class="text-xs text-slate-400 flex items-center gap-1.5">
-                        <i class="fa-regular fa-globe"></i> Posted by {{ $a->author->name ?? 'Administrator' }}
-                    </div>
-                </div>
-            @endforeach
-        </div>
-    @endif
+        <div class="space-y-4" id="pinnedList"></div>
+    </div>
 
     {{-- ============ ALL ANNOUNCEMENTS ============ --}}
     <div class="text-[11px] font-bold tracking-wider text-slate-400 uppercase mb-3">
         All Announcements
     </div>
 
-    @if($regularAnnouncements->count() > 0)
-        <div class="space-y-4" id="regularList">
-            @foreach($regularAnnouncements as $a)
-                @php
-                    $priority = strtolower($a->priority ?? 'normal');
+    <div class="space-y-4" id="regularList"></div>
 
-                    $borderClass = match ($a->priority) {
-                        'Urgent'    => 'border-l-rose-500',
-                        'Important' => 'border-l-indigo-500',
-                        default     => 'border-l-slate-300',
-                    };
-                    $badgeBg = match ($a->priority) {
-                        'Urgent'    => 'bg-rose-100 text-rose-700',
-                        'Important' => 'bg-amber-100 text-amber-700',
-                        default     => 'bg-slate-100 text-slate-600',
-                    };
-                    $badgeIcon = $a->priority === 'Normal'
-                        ? 'fa-circle-info'
-                        : 'fa-circle-exclamation';
-                @endphp
-
-                <div class="announcement-card bg-white border border-slate-200 border-l-[5px] {{ $borderClass }} rounded-xl p-5">
-                    <div class="flex flex-wrap justify-between items-center gap-2 mb-3">
-                        <span class="badge-{{ $priority }} text-[11px] font-semibold px-2 py-1 rounded-full uppercase {{ $badgeBg }} flex items-center gap-1">
-                            <i class="fa-solid {{ $badgeIcon }} text-[10px]"></i>
-                            {{ $a->priority }}
-                        </span>
-                        <span class="text-xs text-slate-400">
-                            {{ $a->created_at?->format('M d, Y') ?? '—' }}
-                        </span>
-                    </div>
-                    <h3 class="card-title text-base font-bold text-slate-900 mb-2">{{ $a->title }}</h3>
-                    <p class="card-desc text-[13px] text-slate-600 leading-relaxed mb-4">{{ $a->content }}</p>
-                    <div class="text-xs text-slate-400 flex items-center gap-1.5">
-                        <i class="fa-regular fa-globe"></i> {{ $a->author->name ?? 'Administrator' }}
-                    </div>
-                </div>
-            @endforeach
-        </div>
-    @else
-        <div class="bg-white border border-slate-200 rounded-xl px-6 py-12 text-center text-slate-400">
-            <i class="fa-regular fa-bell text-3xl mb-2 block"></i>
-            <p class="text-sm">No announcements yet.</p>
-        </div>
-    @endif
+    <div id="tenant-announcements-empty" class="hidden bg-white border border-slate-200 rounded-xl px-6 py-12 text-center text-slate-400">
+        <i class="fa-regular fa-bell text-3xl mb-2 block"></i>
+        <p class="text-sm">No announcements yet.</p>
+    </div>
 </div>
 @endsection
 
 @push('scripts')
 <script>
-    // ============================================================
-    // Search & Priority Filter
-    // ============================================================
-    (function () {
-        const searchInput    = document.getElementById('searchInput');
-        const prioritySelect = document.getElementById('prioritySelect');
-        const cards          = document.querySelectorAll('.announcement-card');
+(function () {
+    const DATA_URL = "{{ route('tenants.announcements.data') }}";
 
-        if (!searchInput || !prioritySelect) return;
+    const pinnedSection = document.getElementById('pinned-section');
+    const pinnedList    = document.getElementById('pinnedList');
+    const regularList   = document.getElementById('regularList');
+    const emptyState    = document.getElementById('tenant-announcements-empty');
+    const searchInput   = document.getElementById('searchInput');
+    const prioritySelect = document.getElementById('prioritySelect');
 
-        function filterAnnouncements() {
-            const term     = searchInput.value.toLowerCase().trim();
-            const priority = prioritySelect.value.toLowerCase();
+    // Seed with initial server rows
+    let allRows = @json($rows);
 
-            cards.forEach((card) => {
-                const title = card.querySelector('.card-title')?.textContent.toLowerCase() || '';
-                const desc  = card.querySelector('.card-desc')?.textContent.toLowerCase() || '';
+    function escapeHtml(s) {
+        return String(s ?? '').replace(/[&<>"']/g, (c) => (
+            { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+        ));
+    }
 
-                const hasImportant = card.querySelector('.badge-important') !== null;
-                const hasUrgent    = card.querySelector('.badge-urgent') !== null;
-                const hasNotice    = card.querySelector('.badge-normal') !== null;
+    function cardTemplate(a, isPinned) {
+        const priority = escapeHtml(a.priority_lc || 'normal');
 
-                const matchesSearch =
-                    !term || title.includes(term) || desc.includes(term);
+        const borderClass = priority === 'urgent'
+            ? 'border-l-rose-500'
+            : priority === 'important'
+            ? 'border-l-indigo-500'
+            : 'border-l-slate-300';
 
-                let matchesPriority = true;
-                if (priority === 'important')   matchesPriority = hasImportant;
-                else if (priority === 'urgent') matchesPriority = hasUrgent;
-                else if (priority === 'notice') matchesPriority = hasNotice;
+        const badgeBg = priority === 'urgent'
+            ? 'bg-rose-100 text-rose-700'
+            : priority === 'important'
+            ? 'bg-amber-100 text-amber-700'
+            : 'bg-slate-100 text-slate-600';
 
-                card.style.display = (matchesSearch && matchesPriority) ? '' : 'none';
+        const badgeIcon = priority === 'normal' ? 'fa-circle-info' : 'fa-circle-exclamation';
+
+        const pinnedBadge = isPinned ? `
+            <span class="bg-indigo-100 text-indigo-700 text-[11px] font-semibold px-2 py-1 rounded-full flex items-center gap-1">
+                <i class="fa-solid fa-thumbtack text-[9px]"></i> Pinned
+            </span>` : '';
+
+        return `
+            <div class="announcement-card bg-white border border-slate-200 border-l-[5px] ${borderClass} rounded-xl p-5"
+                 data-priority="${priority}"
+                 data-search="${escapeHtml((a.title + ' ' + a.content).toLowerCase())}">
+                <div class="flex flex-wrap justify-between items-center gap-2 mb-3">
+                    <div class="flex flex-wrap gap-2 items-center">
+                        ${pinnedBadge}
+                        <span class="badge-${priority} text-[11px] font-semibold px-2 py-1 rounded-full uppercase ${badgeBg} flex items-center gap-1">
+                            <i class="fa-solid ${badgeIcon} text-[10px]"></i>
+                            ${escapeHtml(a.priority)}
+                        </span>
+                    </div>
+                    <span class="text-xs text-slate-400">${escapeHtml(a.created_at || '—')}</span>
+                </div>
+                <h3 class="card-title text-base font-bold text-slate-900 mb-2">${escapeHtml(a.title)}</h3>
+                <p class="card-desc text-[13px] text-slate-600 leading-relaxed mb-4">${escapeHtml(a.content)}</p>
+                <div class="text-xs text-slate-400 flex items-center gap-1.5">
+                    <i class="fa-regular fa-globe"></i> Posted by ${escapeHtml(a.author)}
+                </div>
+            </div>
+        `;
+    }
+
+    function renderRows() {
+        const pinned  = allRows.filter(a => a.is_pinned);
+        const regular = allRows.filter(a => !a.is_pinned);
+
+        pinnedList.innerHTML = pinned.map(a => cardTemplate(a, true)).join('');
+        regularList.innerHTML = regular.map(a => cardTemplate(a, false)).join('');
+
+        pinnedSection.classList.toggle('hidden', pinned.length === 0);
+        emptyState.classList.toggle('hidden', allRows.length > 0);
+
+        applyFilters();
+    }
+
+    function applyFilters() {
+        const term = searchInput.value.toLowerCase().trim();
+        const priority = prioritySelect.value.toLowerCase();
+        const cards = document.querySelectorAll('.announcement-card');
+
+        cards.forEach((card) => {
+            const haystack = card.dataset.search || '';
+            const cardPriority = card.dataset.priority || 'normal';
+
+            const matchesSearch = !term || haystack.includes(term);
+
+            let matchesPriority = true;
+            if (priority === 'important')   matchesPriority = cardPriority === 'important';
+            else if (priority === 'urgent') matchesPriority = cardPriority === 'urgent';
+            else if (priority === 'notice') matchesPriority = cardPriority === 'normal';
+
+            card.style.display = (matchesSearch && matchesPriority) ? '' : 'none';
+        });
+    }
+
+    async function refresh() {
+        try {
+            const res = await fetch(DATA_URL, {
+                headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                credentials: 'same-origin',
             });
-        }
+            if (!res.ok) return;
+            const data = await res.json();
+            allRows = data.rows || [];
+            renderRows();
+        } catch (e) { /* silent */ }
+    }
 
-        searchInput.addEventListener('input', filterAnnouncements);
-        prioritySelect.addEventListener('change', filterAnnouncements);
-    })();
+    // Wire filters
+    searchInput.addEventListener('input', applyFilters);
+    prioritySelect.addEventListener('change', applyFilters);
+
+    // Initial render
+    renderRows();
+
+    // Polling fallback
+    let pollTimer = setInterval(refresh, 3000);
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) clearInterval(pollTimer);
+        else { refresh(); pollTimer = setInterval(refresh, 3000); }
+    });
+
+    // Echo real-time
+    if (window.Echo) {
+        try {
+            window.Echo.channel('tenant.announcements')
+                .listen('.announcement.updated', () => refresh());
+        } catch (e) { /* Echo unavailable → polling covers it */ }
+    }
+})();
 </script>
 @endpush

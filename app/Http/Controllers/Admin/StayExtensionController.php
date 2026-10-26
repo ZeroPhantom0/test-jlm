@@ -3,20 +3,18 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Events\InvoiceUpdated;
+use App\Events\ReservationUpdated;
+use App\Events\ServiceRequestUpdated;
 use App\Http\Controllers\Controller;
 use App\Models\Invoice;
 use App\Models\StayExtensionRequest;
-use App\Models\Tenant;
-use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 class StayExtensionController extends Controller
 {
-    /**
-     * Display the stay extension requests list.
-     */
     public function index()
     {
         $requests = StayExtensionRequest::with(['tenant.user', 'room'])
@@ -37,9 +35,6 @@ class StayExtensionController extends Controller
         return view('admin.services.stay-extension', compact('requests', 'metrics', 'requestsForReact'));
     }
 
-    /**
-     * Store a newly created stay extension request (admin-side).
-     */
     public function store(Request $request)
     {
         $validated = $request->validate([
@@ -61,6 +56,8 @@ class StayExtensionController extends Controller
             'extension_days' => $extensionDays,
             'status'         => 'Pending',
         ]);
+
+        event(new ServiceRequestUpdated('stay_extension', 'created', $stayExtension->id));
 
         return response()->json([
             'success' => true,
@@ -93,6 +90,8 @@ class StayExtensionController extends Controller
 
         $stayExtensionRequest->update($validated);
 
+        event(new ServiceRequestUpdated('stay_extension', 'updated', $stayExtensionRequest->id));
+
         return response()->json([
             'success' => true,
             'message' => 'Stay extension request updated successfully.',
@@ -100,19 +99,12 @@ class StayExtensionController extends Controller
         ]);
     }
 
-    /**
-     * Approve a stay extension request.
-     *
-     *  1. Extend the tenant's approved reservation check_out.
-     *  2. Create an invoice for the extra days at the tenant's room rate.
-     */
     public function approve(Request $request, StayExtensionRequest $stayExtensionRequest)
     {
         $validated = $request->validate([
             'admin_notes' => ['nullable', 'string'],
         ]);
 
-        // Guard: already processed
         if ($stayExtensionRequest->status !== 'Pending') {
             return response()->json([
                 'message' => 'This request has already been processed.',
@@ -124,17 +116,14 @@ class StayExtensionController extends Controller
             $tenant      = $stayExtensionRequest->tenant;
             $reservation = $tenant?->approvedReservation;
 
-            // ── 1. Extend the source reservation's check_out ──
             if ($reservation) {
                 $reservation->update([
                     'check_out' => $stayExtensionRequest->requested_lease_end,
                 ]);
             }
 
-            // ── 2. Create a billing invoice for the extra days ──
             $invoice = $this->createExtensionInvoice($stayExtensionRequest, $reservation);
 
-            // ── 3. Mark the request approved ──
             $stayExtensionRequest->update([
                 'status'       => 'Approved',
                 'admin_notes'  => $validated['admin_notes'] ?? $stayExtensionRequest->admin_notes,
@@ -143,6 +132,12 @@ class StayExtensionController extends Controller
             ]);
 
             DB::commit();
+
+            if ($invoice) {
+                event(new InvoiceUpdated('created', $invoice->id));
+            }
+            event(new ReservationUpdated('updated', $reservation?->id));
+            event(new ServiceRequestUpdated('stay_extension', 'approved', $stayExtensionRequest->id));
 
             return response()->json([
                 'success' => true,
@@ -173,6 +168,8 @@ class StayExtensionController extends Controller
             'processed_at' => now(),
         ]);
 
+        event(new ServiceRequestUpdated('stay_extension', 'rejected', $stayExtensionRequest->id));
+
         return response()->json([
             'success' => true,
             'message' => 'Stay extension request rejected.',
@@ -180,9 +177,40 @@ class StayExtensionController extends Controller
         ]);
     }
 
+    public function data()
+    {
+        $requests = StayExtensionRequest::with(['tenant.user', 'room'])->latest()->get();
+
+        $metrics = [
+            'total'    => StayExtensionRequest::count(),
+            'pending'  => StayExtensionRequest::pending()->count(),
+            'approved' => StayExtensionRequest::approved()->count(),
+            'rejected' => StayExtensionRequest::rejected()->count(),
+        ];
+
+        $rows = $requests->map(function ($req) {
+            return [
+                'id'                  => $req->id,
+                'tenant_name'         => $req->tenant->user->name ?? 'Unknown',
+                'room_number'         => $req->room?->room_number ? 'Room ' . $req->room->room_number : 'N/A',
+                'current_lease_end'   => $req->current_lease_end?->format('M d, Y'),
+                'requested_lease_end' => $req->requested_lease_end?->format('M d, Y'),
+                'extension_label'     => $req->extension_label,
+                'status'              => $req->status,
+                'status_class'        => $req->status_class,
+                'is_pending'          => $req->status === 'Pending',
+            ];
+        })->values();
+
+        return response()->json(['rows' => $rows, 'metrics' => $metrics]);
+    }
+
     public function destroy(StayExtensionRequest $stayExtensionRequest)
     {
+        $id = $stayExtensionRequest->id;
         $stayExtensionRequest->delete();
+
+        event(new ServiceRequestUpdated('stay_extension', 'deleted', $id));
 
         return response()->json([
             'success' => true,
@@ -194,10 +222,6 @@ class StayExtensionController extends Controller
     // HELPERS
     // ============================================================
 
-    /**
-     * Create an invoice for the extension days at the tenant's room rate.
-     * Idempotent — returns existing invoice if one already exists for this ref.
-     */
     private function createExtensionInvoice(
         StayExtensionRequest $request,
         ?\App\Models\Reservation $reservation
@@ -208,7 +232,6 @@ class StayExtensionController extends Controller
             return null;
         }
 
-        // Idempotency: skip if an extension invoice for this reference already exists
         $existing = Invoice::where('description', 'like', '%' . $request->reference_no . '%')
             ->where('description', 'like', '%Extension%')
             ->first();
@@ -217,19 +240,16 @@ class StayExtensionController extends Controller
             return $existing;
         }
 
-        // Rate: tenant's rent rate, falling back to the room's daily_rent
-        $room = $tenant->room;
+        $room       = $tenant->room;
         $ratePerDay = (float) ($tenant->rent_rate ?: ($room?->daily_rent ?? 0));
 
-        // Fall back to the reservation's rate if still zero
         if ($ratePerDay <= 0 && $reservation && $reservation->room) {
             $ratePerDay = (float) $reservation->room->daily_rent;
         }
 
-        $days         = max(1, (int) $request->extension_days);
-        $totalAmount  = round($ratePerDay * $days, 2);
+        $days        = max(1, (int) $request->extension_days);
+        $totalAmount = round($ratePerDay * $days, 2);
 
-        // Invoice dates
         $checkIn  = $request->current_lease_end ?? now();
         $checkOut = $request->requested_lease_end ?? now()->addDays($days);
 
@@ -237,7 +257,7 @@ class StayExtensionController extends Controller
             ?? $reservation?->desired_room
             ?? 'N/A';
 
-        $invoice = Invoice::create([
+        return Invoice::create([
             'transaction_no' => Invoice::generateTransactionNo(),
             'tenant_id'      => $tenant->id,
             'room_id'        => $tenant->room_id,
@@ -257,7 +277,5 @@ class StayExtensionController extends Controller
             'payment_method' => 'Not Set',
             'status'         => 'Unpaid',
         ]);
-
-        return $invoice;
     }
 }

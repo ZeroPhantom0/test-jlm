@@ -3,6 +3,8 @@
 
 namespace App\Http\Controllers\Tenant;
 
+use App\Events\InvoiceUpdated;
+use App\Events\ReservationUpdated;
 use App\Http\Controllers\Controller;
 use App\Models\Invoice;
 use App\Models\Reservation;
@@ -15,6 +17,21 @@ use Illuminate\Support\Facades\Storage;
 class TenantBillingController extends Controller
 {
     public function index()
+    {
+        $payload = $this->buildPayload();
+        return view('tenants.billing', $payload);
+    }
+
+    /**
+     * Live data endpoint for polling / Echo refresh on the tenant billing page.
+     * GET /tenants/billing/data
+     */
+    public function data()
+    {
+        return response()->json($this->buildPayload());
+    }
+
+    private function buildPayload(): array
     {
         $user   = Auth::user();
         $tenant = Tenant::where('user_id', $user->id)->firstOrFail();
@@ -46,8 +63,8 @@ class TenantBillingController extends Controller
                 return $inv;
             });
 
-        $reservationDue      = null;
-        $unbilledRemaining   = 0.0;
+        $reservationDue    = null;
+        $unbilledRemaining = 0.0;
 
         $approvedReservation = Reservation::where('user_id', $user->id)
             ->where('status', 'Approved')
@@ -109,14 +126,14 @@ class TenantBillingController extends Controller
             'gcash_number' => '0917-123-4567',
         ] : null;
 
-        return view('tenants.billing', compact(
+        return compact(
             'summary',
             'pendingInvoices',
             'verifyingInvoices',
             'paidInvoices',
             'reservationDue',
             'paymentPayload'
-        ));
+        );
     }
 
     public function pay(Request $request)
@@ -173,15 +190,14 @@ class TenantBillingController extends Controller
             }
 
             if ($invoice) {
-                // Add the current balance to the amount_paid
                 $newAmountPaid = (float) $invoice->amount_paid + (float) $invoice->balance;
-                
+
                 $invoice->update([
                     'payment_method' => $method,
                     'receipt_no'     => $validated['reference_number'] ?? $invoice->receipt_no,
                     'receipt_path'   => $receiptPath ?? $invoice->receipt_path,
                     'status'         => 'Pending',
-                    'amount_paid'    => $newAmountPaid, 
+                    'amount_paid'    => $newAmountPaid,
                 ]);
             } else {
                 $invoice = Invoice::create([
@@ -207,6 +223,8 @@ class TenantBillingController extends Controller
             }
 
             DB::commit();
+
+            event(new InvoiceUpdated('submitted', $invoice->id));
 
             return response()->json([
                 'message' => 'Payment submitted. Awaiting admin verification.',
@@ -243,11 +261,8 @@ class TenantBillingController extends Controller
             Storage::disk('public')->delete($invoice->receipt_path);
         }
 
-        // Revert the amount_paid back by subtracting the current balance
         $revertedAmount = max(0, (float) $invoice->amount_paid - (float) $invoice->balance);
-        
-        // Determine if it should go back to Partial or Unpaid
-        $revertStatus = $revertedAmount > 0 ? 'Partial' : 'Unpaid';
+        $revertStatus   = $revertedAmount > 0 ? 'Partial' : 'Unpaid';
 
         $invoice->update([
             'status'       => $revertStatus,
@@ -255,6 +270,8 @@ class TenantBillingController extends Controller
             'receipt_no'   => null,
             'amount_paid'  => $revertedAmount,
         ]);
+
+        event(new InvoiceUpdated('cancelled', $invoice->id));
 
         return back()->with('success', 'Submission cancelled. You can pay again.');
     }

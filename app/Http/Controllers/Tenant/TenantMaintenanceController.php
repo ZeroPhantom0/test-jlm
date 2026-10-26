@@ -3,6 +3,7 @@
 
 namespace App\Http\Controllers\Tenant;
 
+use App\Events\MaintenanceUpdated;
 use App\Http\Controllers\Controller;
 use App\Models\MaintenanceRequest;
 use App\Models\Tenant;
@@ -20,18 +21,15 @@ class TenantMaintenanceController extends Controller
         /** @var \App\Models\User $user */
         $user = Auth::user();
 
-        // Tenant record for the logged-in user
         $tenant = Tenant::with('room')
             ->where('user_id', $user->id)
             ->first();
 
-        // Only this tenant's requests
         $requests = MaintenanceRequest::with('room')
             ->where('tenant_id', $tenant?->id)
             ->latest()
             ->get();
 
-        // Pass a normalised map to the React modals
         $requestsForReact = $requests->mapWithKeys(function ($r) {
             return [
                 $r->id => [
@@ -45,8 +43,8 @@ class TenantMaintenanceController extends Controller
                     'staff'      => $r->assigned_staff,
                     'scheduled'  => $r->scheduled_date?->format('M d, Y'),
                     'unit'       => $r->room?->room_number
-                                        ? 'Room ' . $r->room->room_number
-                                        : 'N/A',
+                        ? 'Room ' . $r->room->room_number
+                        : 'N/A',
                     'status'     => $r->status,
                 ],
             ];
@@ -91,6 +89,9 @@ class TenantMaintenanceController extends Controller
             'status'    => 'Pending',
         ]);
 
+        // Notify admin bell + refresh admin page
+        event(new MaintenanceUpdated('created', $maintenanceRequest->id));
+
         return response()->json([
             'success' => true,
             'message' => 'Maintenance request submitted successfully.',
@@ -122,9 +123,68 @@ class TenantMaintenanceController extends Controller
             'status' => 'Cancelled',
         ]);
 
+        // Notify admin bell — admin sees "tenant cancelled maintenance request"
+        event(new MaintenanceUpdated('cancelled', $maintenanceRequest->id));
+
         return response()->json([
             'success' => true,
             'message' => 'Maintenance request cancelled.',
+        ]);
+    }
+
+    public function data()
+    {
+        $user = Auth::user();
+        $tenant = Tenant::with('room')->where('user_id', $user->id)->first();
+
+        $requests = MaintenanceRequest::with('room')->where('tenant_id', $tenant?->id)->latest()->get();
+
+        $requestsForReact = $requests->mapWithKeys(function ($r) {
+            return [
+                $r->id => [
+                    'id' => $r->id,
+                    'ref' => 'sr-' . $r->id,
+                    'title' => $r->title,
+                    'desc' => $r->description,
+                    'category' => $r->category,
+                    'priority' => strtoupper($r->priority ?? 'MEDIUM'),
+                    'submitted' => $r->created_at?->format('M d, Y') ?? '—',
+                    'staff' => $r->assigned_staff,
+                    'scheduled' => $r->scheduled_date?->format('M d, Y'),
+                    'unit' => $r->room?->room_number ? 'Room ' . $r->room->room_number : 'N/A',
+                    'status' => $r->status,
+                ],
+            ];
+        })->toArray();
+
+        $rows = $requests->map(function ($r) {
+            $statusClasses = match ($r->status) {
+                'Pending' => 'bg-amber-100 text-amber-700',
+                'In Progress' => 'bg-blue-100 text-blue-600',
+                default => 'bg-slate-100 text-slate-500',
+            };
+            $statusIcon = match ($r->status) {
+                'Pending' => 'fa-regular fa-clock',
+                'In Progress' => 'fa-solid fa-spinner',
+                default => 'fa-regular fa-circle',
+            };
+            return [
+                'id' => $r->id,
+                'title' => $r->title,
+                'description' => $r->description,
+                'assigned_staff' => $r->assigned_staff,
+                'status' => $r->status,
+                'status_classes' => $statusClasses,
+                'status_icon' => $statusIcon,
+                'is_finalized' => in_array($r->status, ['Completed', 'Cancelled']),
+                'is_pending' => $r->status === 'Pending',
+            ];
+        })->values();
+
+        return response()->json([
+            'rows' => $rows,
+            'react' => $requestsForReact,
+            'has_tenant' => (bool) $tenant,
         ]);
     }
 }

@@ -26,9 +26,9 @@ export default function StayExtensionModals() {
     });
 
     // ============================================================
-    // Read data attributes from mount element
+    // LIVE DATA — read once, then listen for polling/Echo updates
     // ============================================================
-    useEffect(() => {
+    const readFromDom = () => {
         const el = document.getElementById('services-stay-extension-root');
         if (!el) return;
 
@@ -38,12 +38,45 @@ export default function StayExtensionModals() {
 
         if (el.dataset.requests) {
             try {
-                setRequestsData(JSON.parse(el.dataset.requests));
+                const parsed = JSON.parse(el.dataset.requests);
+                if (parsed && typeof parsed === 'object') setRequestsData(parsed);
             } catch (e) {
                 console.error('Invalid requests JSON', e);
             }
         }
+    };
+
+    useEffect(() => {
+        readFromDom();
+
+        const handler = (e) => {
+            const fresh = e?.detail;
+            if (fresh && typeof fresh === 'object') {
+                setRequestsData(fresh);
+            } else {
+                readFromDom();
+            }
+        };
+
+        window.addEventListener('stay-extension:data-updated', handler);
+        return () => window.removeEventListener('stay-extension:data-updated', handler);
     }, []);
+
+    // Sync open request with fresh data from the server
+    useEffect(() => {
+        if (!request) return;
+        const fresh = requestsData[request.id];
+        if (!fresh) return;
+
+        if (
+            fresh.status !== request.status ||
+            fresh.reason !== request.reason ||
+            fresh.current_lease_end !== request.current_lease_end ||
+            fresh.requested_lease_end !== request.requested_lease_end
+        ) {
+            setRequest(fresh);
+        }
+    }, [requestsData]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // ============================================================
     // Event delegation
@@ -127,7 +160,7 @@ export default function StayExtensionModals() {
             const data = await res.json();
             if (!res.ok) throw new Error(data.message || 'Failed to submit request.');
             setShowSubmit(false);
-            window.location.reload();
+            document.dispatchEvent(new CustomEvent('stay-extension:refresh'));
         } catch (err) {
             alert(err.message);
         } finally {
@@ -170,7 +203,7 @@ export default function StayExtensionModals() {
             setShowDelete(false);
             setDeleteTarget(null);
             setShowDetails(false);
-            window.location.reload();
+            document.dispatchEvent(new CustomEvent('stay-extension:refresh'));
         } catch (err) {
             alert(err.message);
         } finally {

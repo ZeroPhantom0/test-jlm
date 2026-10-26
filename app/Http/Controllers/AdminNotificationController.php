@@ -159,7 +159,33 @@ class AdminNotificationController extends Controller
             ];
         }
 
-        // 4a) Pending room change requests
+        // 4a) Tenant-cancelled maintenance requests
+        //     Maintenance has no `processed_by` column, so we filter by
+        //     status=Cancelled AND tenant_id IS NOT NULL AND updated_at
+        //     within the last 30 days to keep it fresh.
+        $tenantCancelledMaintenance = DB::table('maintenance_requests')
+            ->where('status', 'Cancelled')
+            ->whereNotNull('tenant_id')
+            ->where('updated_at', '>=', now()->subDays(30))
+            ->orderByDesc('updated_at')
+            ->limit(10)
+            ->get();
+
+        foreach ($tenantCancelledMaintenance as $mr) {
+            $notifications[] = [
+                'id'          => 'mnt-cancel-' . $mr->id,
+                'type'        => 'maintenance',
+                'icon'        => 'fa-regular fa-circle-xmark',
+                'color'       => 'text-slate-600 bg-slate-100',
+                'title'       => 'Maintenance request cancelled',
+                'description' => $mr->title,
+                'time'        => $mr->updated_at ?? $mr->created_at,
+                'unread'      => true,
+                'link'        => '/admin/services/maintenance',
+            ];
+        }
+
+        // 4b) Pending room change requests
         $pendingRoomChanges = DB::table('room_change_requests')
             ->where('status', 'Pending')
             ->orderByDesc('created_at')
@@ -180,7 +206,30 @@ class AdminNotificationController extends Controller
             ];
         }
 
-        // 4b) Pending stay extension requests
+        // 4c) Tenant-cancelled room change requests
+        //     Admin reject always sets `processed_by`; tenant cancel does NOT.
+        $tenantCancelledRoomChanges = DB::table('room_change_requests')
+            ->where('status', 'Rejected')
+            ->whereNull('processed_by')
+            ->orderByDesc(DB::raw('COALESCE(processed_at, updated_at, created_at)'))
+            ->limit(10)
+            ->get();
+
+        foreach ($tenantCancelledRoomChanges as $rc) {
+            $notifications[] = [
+                'id'          => 'rc-cancel-' . $rc->id,
+                'type'        => 'room-change',
+                'icon'        => 'fa-regular fa-circle-xmark',
+                'color'       => 'text-amber-600 bg-amber-50',
+                'title'       => 'Room change cancelled by tenant',
+                'description' => $rc->current_room . ' → ' . $rc->requested_room,
+                'time'        => $rc->processed_at ?? $rc->updated_at ?? $rc->created_at,
+                'unread'      => true,
+                'link'        => '/admin/services/room-change',
+            ];
+        }
+
+        // 4d) Pending stay extension requests
         $pendingStayExtensions = DB::table('stay_extension_requests')
             ->where('status', 'Pending')
             ->orderByDesc('created_at')
@@ -196,6 +245,28 @@ class AdminNotificationController extends Controller
                 'title'       => 'Stay extension request',
                 'description' => '+' . $se->extension_days . ' day(s) · ' . $se->reference_no,
                 'time'        => $se->created_at,
+                'unread'      => true,
+                'link'        => '/admin/services/stay-extension',
+            ];
+        }
+
+        // 4e) Tenant-cancelled stay extension requests
+        $tenantCancelledStayExtensions = DB::table('stay_extension_requests')
+            ->where('status', 'Rejected')
+            ->whereNull('processed_by')
+            ->orderByDesc(DB::raw('COALESCE(processed_at, updated_at, created_at)'))
+            ->limit(10)
+            ->get();
+
+        foreach ($tenantCancelledStayExtensions as $se) {
+            $notifications[] = [
+                'id'          => 'se-cancel-' . $se->id,
+                'type'        => 'stay-extension',
+                'icon'        => 'fa-regular fa-circle-xmark',
+                'color'       => 'text-amber-600 bg-amber-50',
+                'title'       => 'Stay extension cancelled by tenant',
+                'description' => '+' . $se->extension_days . ' day(s) · ' . $se->reference_no,
+                'time'        => $se->processed_at ?? $se->updated_at ?? $se->created_at,
                 'unread'      => true,
                 'link'        => '/admin/services/stay-extension',
             ];

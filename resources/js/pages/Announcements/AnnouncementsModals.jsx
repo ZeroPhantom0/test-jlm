@@ -92,20 +92,33 @@ export default function AnnouncementsModals() {
     const [rules, setRules]         = useState(DEFAULT_RULES);
 
     // ============================================================
-    // Read rules data from mount element (optional override from Blade)
+    // LIVE DATA — read once, then listen for polling/Echo updates
     // ============================================================
-    useEffect(() => {
+    const readRulesFromDom = () => {
         const el = document.getElementById('tenant-announcements-modals');
-        if (!el) return;
-
-        if (el.dataset.rules) {
-            try {
-                const parsed = JSON.parse(el.dataset.rules);
-                setRules({ ...DEFAULT_RULES, ...parsed });
-            } catch (e) {
-                console.error('Invalid rules JSON', e);
-            }
+        if (!el?.dataset?.rules) return;
+        try {
+            const parsed = JSON.parse(el.dataset.rules);
+            setRules({ ...DEFAULT_RULES, ...parsed });
+        } catch (e) {
+            console.error('Invalid rules JSON', e);
         }
+    };
+
+    useEffect(() => {
+        readRulesFromDom();
+
+        const handler = (e) => {
+            const fresh = e?.detail;
+            if (fresh && typeof fresh === 'object' && fresh.sections) {
+                setRules({ ...DEFAULT_RULES, ...fresh });
+            } else {
+                readRulesFromDom();
+            }
+        };
+
+        window.addEventListener('announcements:data-updated', handler);
+        return () => window.removeEventListener('announcements:data-updated', handler);
     }, []);
 
     // ============================================================

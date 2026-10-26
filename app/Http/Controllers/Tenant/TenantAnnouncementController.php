@@ -9,10 +9,21 @@ use Illuminate\Http\Request;
 
 class TenantAnnouncementController extends Controller
 {
-    /**
-     * Display the tenant's announcements page.
-     */
     public function index(Request $request)
+    {
+        return view('tenants.announcements', $this->buildPayload($request));
+    }
+
+    /**
+     * Live data endpoint for polling / Echo refresh.
+     * GET /tenants/announcements/data
+     */
+    public function data(Request $request)
+    {
+        return response()->json($this->buildPayload($request));
+    }
+
+    private function buildPayload(Request $request): array
     {
         $filters = $request->only(['search', 'priority']);
 
@@ -23,11 +34,9 @@ class TenantAnnouncementController extends Controller
             ->latest()
             ->get();
 
-        // Split pinned vs regular for the UI
         $pinnedAnnouncements  = $announcements->where('is_pinned', true)->values();
         $regularAnnouncements = $announcements->where('is_pinned', false)->values();
 
-        // Metrics
         $metrics = [
             'total'     => $announcements->count(),
             'pinned'    => $pinnedAnnouncements->count(),
@@ -35,12 +44,25 @@ class TenantAnnouncementController extends Controller
             'urgent'    => $announcements->where('priority', 'Urgent')->count(),
         ];
 
-        return view('tenants.announcements', compact(
+        // Structured rows the JS renderer uses
+        $rows = $announcements->map(fn (Announcement $a) => [
+            'id'             => $a->id,
+            'title'          => $a->title,
+            'content'        => $a->content,
+            'priority'       => $a->priority,
+            'priority_lc'    => strtolower($a->priority ?? 'normal'),
+            'is_pinned'      => (bool) $a->is_pinned,
+            'author'         => $a->author->name ?? 'Administrator',
+            'created_at'     => $a->created_at?->format('M d, Y'),
+        ])->values();
+
+        return compact(
             'announcements',
             'pinnedAnnouncements',
             'regularAnnouncements',
             'metrics',
-            'filters'
-        ));
+            'filters',
+            'rows'
+        );
     }
 }

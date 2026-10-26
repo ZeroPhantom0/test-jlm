@@ -1,57 +1,38 @@
 @php
     // ---------------------------------------------------------------
     // Resolve the "Back to Rooms" destination.
-    //
-    // Accepts ?from= as either:
-    //   - A path:           "/tenants/reservations"
-    //   - A full same-origin URL: "https://host/tenants/reservations"
-    //   - A relative path:  "tenants/reservations"
-    //
-    // The returned URL is always built against the CURRENT request host
-    // (not config('app.url')), so it works behind any host / port /
-    // subfolder setup.
     // ---------------------------------------------------------------
-    $host      = request()->getSchemeAndHttpHost();  // e.g. http://localhost:8080
-    $basePath  = rtrim(request()->getBaseUrl(), '/'); // e.g. /jlm-cozy-cabin/public
-    $fallback  = $host . $basePath . '/#rooms';
-    $backUrl   = $fallback;
+    $host = request()->getSchemeAndHttpHost();
+    $basePath = rtrim(request()->getBaseUrl(), '/');
+    $fallback = $host . $basePath . '/#rooms';
+    $backUrl = $fallback;
 
-    // ── 1) Explicit ?from= param ──────────────────────────────
     $from = request()->query('from');
 
     if ($from) {
         $refHost = parse_url($from, PHP_URL_HOST);
         $refPath = parse_url($from, PHP_URL_PATH) ?? '';
-        $refQuery = parse_url($from, PHP_URL_QUERY);
-
-        // Accept relative paths (no host) OR same-host URLs.
-        // Reject the tour viewer itself (would cause a loop).
         $isLoop = str_starts_with($refPath, '/tour/') || str_starts_with($refPath, $basePath . '/tour/');
 
-        if (! $isLoop) {
+        if (!$isLoop) {
             if ($refHost === null) {
-                // Relative path — prefix with current host + base path
-                $path    = '/' . ltrim($from, '/');
+                $path = '/' . ltrim($from, '/');
                 $backUrl = $host . $path;
             } elseif ($refHost === request()->getHost()) {
-                // Same host — use as-is
                 $backUrl = $from;
             } else {
-                // Different host — reject (fallback stays)
                 $backUrl = $fallback;
             }
         }
     } else {
-        // ── 2) Fallback to Referer if ?from= isn't present ─────
         $referer = request()->headers->get('referer');
         if ($referer) {
             $refHost = parse_url($referer, PHP_URL_HOST);
             $refPath = parse_url($referer, PHP_URL_PATH) ?? '';
-            $isLoop  = str_starts_with($refPath, '/tour/');
-            $isHome  = $refPath === '/' || $refPath === '' || $refPath === $basePath
-                    || $refPath === $basePath . '/';
+            $isLoop = str_starts_with($refPath, '/tour/');
+            $isHome = $refPath === '/' || $refPath === '' || $refPath === $basePath || $refPath === $basePath . '/';
 
-            if ($refHost === request()->getHost() && ! $isLoop) {
+            if ($refHost === request()->getHost() && !$isLoop) {
                 $backUrl = $isHome ? $fallback : $referer;
             }
         }
@@ -59,6 +40,7 @@
 @endphp
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -70,10 +52,16 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.css">
 
     <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
 
-        html, body {
-            height: 100%; width: 100%;
+        html,
+        body {
+            height: 100%;
+            width: 100%;
             overflow: hidden;
             font-family: 'Inter', sans-serif;
             background: #000;
@@ -84,33 +72,50 @@
             width: 100vw;
             height: 100vh;
             position: relative;
+            background: #000;
+            /* Forces a black background during the 10ms swap */
+        }
+
+        /* 🚫 HIDE PANNELLUM LOADING TEXT & SPINNER */
+        .pnlm-load-box,
+        .pnlm-loading-text,
+        .pnlm-loading-indicator {
+            display: none !important;
+            opacity: 0 !important;
+            visibility: hidden !important;
         }
 
         /* ---------- Top Overlay Bar ---------- */
         .tour-top-bar {
             position: absolute;
-            top: 0; left: 0; right: 0;
+            top: 0;
+            left: 0;
+            right: 0;
             padding: 16px 24px;
             display: flex;
             justify-content: space-between;
             align-items: center;
             z-index: 100;
-            background: linear-gradient(180deg, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.4) 60%, transparent 100%);
+            background: linear-gradient(180deg, rgba(0, 0, 0, 0.85) 0%, rgba(0, 0, 0, 0.4) 60%, transparent 100%);
             pointer-events: none;
         }
-        .tour-top-bar > * { pointer-events: auto; }
+
+        .tour-top-bar>* {
+            pointer-events: auto;
+        }
 
         .tour-top-left {
             display: flex;
             align-items: center;
             gap: 16px;
         }
+
         .back-btn {
             display: inline-flex;
             align-items: center;
             gap: 8px;
-            background: rgba(255,255,255,0.12);
-            border: 1px solid rgba(255,255,255,0.25);
+            background: rgba(255, 255, 255, 0.12);
+            border: 1px solid rgba(255, 255, 255, 0.25);
             color: #fff;
             padding: 8px 14px;
             border-radius: 10px;
@@ -120,20 +125,33 @@
             backdrop-filter: blur(8px);
             transition: background 0.15s;
         }
-        .back-btn:hover { background: rgba(255,255,255,0.22); }
 
-        .tour-title { font-size: 18px; font-weight: 700; }
-        .tour-subtitle { font-size: 12px; color: rgba(255,255,255,0.7); margin-top: 2px; }
+        .back-btn:hover {
+            background: rgba(255, 255, 255, 0.22);
+        }
+
+        .tour-title {
+            font-size: 18px;
+            font-weight: 700;
+        }
+
+        .tour-subtitle {
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.7);
+            margin-top: 2px;
+        }
 
         .tour-top-right {
             display: flex;
             align-items: center;
             gap: 10px;
         }
+
         .icon-btn {
-            width: 40px; height: 40px;
-            background: rgba(255,255,255,0.12);
-            border: 1px solid rgba(255,255,255,0.25);
+            width: 40px;
+            height: 40px;
+            background: rgba(255, 255, 255, 0.12);
+            border: 1px solid rgba(255, 255, 255, 0.25);
             color: #fff;
             border-radius: 10px;
             display: flex;
@@ -144,13 +162,16 @@
             backdrop-filter: blur(8px);
             transition: background 0.15s;
         }
-        .icon-btn:hover { background: rgba(255,255,255,0.22); }
+
+        .icon-btn:hover {
+            background: rgba(255, 255, 255, 0.22);
+        }
 
         /* ---------- Info Popup Modal ---------- */
         .info-modal-backdrop {
             position: fixed;
             inset: 0;
-            background: rgba(0,0,0,0.7);
+            background: rgba(0, 0, 0, 0.7);
             backdrop-filter: blur(6px);
             display: none;
             align-items: center;
@@ -158,7 +179,11 @@
             z-index: 200;
             padding: 20px;
         }
-        .info-modal-backdrop.active { display: flex; }
+
+        .info-modal-backdrop.active {
+            display: flex;
+        }
+
         .info-modal {
             background: #fff;
             color: #0f172a;
@@ -167,8 +192,9 @@
             width: 100%;
             max-height: 80vh;
             overflow-y: auto;
-            box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
         }
+
         .info-modal-header {
             padding: 18px 22px;
             border-bottom: 1px solid #f1f5f9;
@@ -176,7 +202,12 @@
             justify-content: space-between;
             align-items: center;
         }
-        .info-modal-header h3 { font-size: 16px; font-weight: 700; }
+
+        .info-modal-header h3 {
+            font-size: 16px;
+            font-weight: 700;
+        }
+
         .info-modal-close {
             background: none;
             border: none;
@@ -184,42 +215,99 @@
             color: #94a3b8;
             cursor: pointer;
         }
-        .info-modal-close:hover { color: #0f172a; }
-        .info-modal-body { padding: 22px; font-size: 14px; line-height: 1.6; }
-        .info-modal-body img,
-        .info-modal-body iframe { width: 100%; border-radius: 10px; }
 
-        /* ---------- Custom Hotspot ---------- */
+        .info-modal-close:hover {
+            color: #0f172a;
+        }
+
+        .info-modal-body {
+            padding: 22px;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        /* ============================================================
+           CUSTOM HOTSPOT MARKERS (Matches Admin Builder Layout)
+           ============================================================ */
+
         .custom-hotspot {
-            display: flex !important;
+            cursor: pointer;
+        }
+
+        .custom-hotspot .hotspot-wrapper {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .custom-hotspot .hotspot-icon {
+            display: flex;
             align-items: center;
             justify-content: center;
             width: 40px;
             height: 40px;
-            background: rgba(79, 70, 229, 0.95);
-            color: #fff;
+            color: #ffffff;
             border-radius: 50%;
-            border: 2px solid #fff;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+            border: 2px solid #ffffff;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.35);
             font-size: 16px;
-            cursor: pointer;
             transition: transform 0.15s;
+            box-sizing: border-box;
         }
-        .custom-hotspot:hover { transform: scale(1.15); }
+
+        .custom-hotspot:hover .hotspot-icon {
+            transform: scale(1.15);
+        }
+
+        .custom-hotspot.type-navigation .hotspot-icon {
+            background: rgba(79, 70, 229, 0.95);
+        }
+
+        .custom-hotspot.type-info .hotspot-icon {
+            background: rgba(245, 158, 11, 0.95);
+        }
+
+        .custom-hotspot .hotspot-name-label {
+            background: #ffffff;
+            color: #78350f;
+            border: 1px solid #fde68a;
+            border-radius: 999px;
+            font-size: 11px;
+            font-weight: 700;
+            padding: 2px 9px;
+            line-height: 1.4;
+            white-space: nowrap;
+            max-width: 160px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+            pointer-events: none;
+            position: relative;
+        }
 
         @media (max-width: 640px) {
-            .tour-title { font-size: 14px; }
-            .tour-subtitle { display: none; }
-            .back-btn span { display: none; }
+            .tour-title {
+                font-size: 14px;
+            }
+
+            .tour-subtitle {
+                display: none;
+            }
+
+            .back-btn span {
+                display: none;
+            }
         }
     </style>
 </head>
+
 <body>
 
     {{-- Top Overlay Bar --}}
     <div class="tour-top-bar">
         <div class="tour-top-left">
-            {{-- FIXED: Resolved $backUrl from ?from= or Referer, sanitized --}}
             <a href="{{ $backUrl }}" class="back-btn">
                 <i class="fa-solid fa-arrow-left"></i>
                 <span>Back to Rooms</span>
@@ -228,7 +316,7 @@
                 <div class="tour-title">{{ $tour->title }}</div>
                 <div class="tour-subtitle">
                     Room {{ $tour->room->room_number ?? '' }}
-                    @if($tour->room && $tour->room->room_type)
+                    @if ($tour->room && $tour->room->room_type)
                         • {{ $tour->room->room_type }}
                     @endif
                 </div>
@@ -266,7 +354,17 @@
         let sceneAutoAudioText = '';
         let isMuted = false;
 
-        const SCENES_URL = '{{ url("tour-scene-data") }}';
+        const SCENES_URL = '{{ url('tour-scene-data') }}';
+
+        function escapeHtml(str) {
+            return String(str ?? '').replace(/[&<>"']/g, c => ({
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#39;'
+            } [c]));
+        }
 
         // ------------------------------------------------------------
         // Load a scene
@@ -277,7 +375,11 @@
             fetch(`${SCENES_URL}/${sceneId}`)
                 .then(res => res.json())
                 .then(data => {
-                    if (viewer) viewer.destroy();
+                    // 1. CLEAN SLATE: Completely destroy the old viewer to prevent overlapping
+                    if (viewer) {
+                        viewer.destroy();
+                        viewer = null;
+                    }
 
                     sceneAutoAudioText = data.scene.auto_audio_text || '';
 
@@ -286,8 +388,8 @@
                         panorama: '/storage/scenes/' + data.scene.image_path,
                         autoLoad: true,
                         pitch: parseFloat(data.scene.default_pitch || 0),
-                        yaw:   parseFloat(data.scene.default_yaw || 0),
-                        hfov:  parseFloat(data.scene.default_fov || 100),
+                        yaw: parseFloat(data.scene.default_yaw || 0),
+                        hfov: parseFloat(data.scene.default_fov || 100),
                         showControls: true,
                         hotSpots: [],
                     };
@@ -296,7 +398,7 @@
                         const hsConfig = {
                             id: hs.id,
                             pitch: parseFloat(hs.pitch),
-                            yaw:   parseFloat(hs.yaw),
+                            yaw: parseFloat(hs.yaw),
                             createTooltipArgs: hs,
                             createTooltipFunc: renderHotspot,
                             clickHandlerArgs: hs,
@@ -305,16 +407,9 @@
                         if (hs.type === 'navigation') {
                             hsConfig.clickHandlerFunc = (e, args) => {
                                 window.speechSynthesis.cancel();
-                                if (args.nav_audio && !isMuted) {
-                                    speak(args.nav_audio, () => args.target_scene_id && loadScene(args.target_scene_id));
-                                } else if (args.target_scene_id) {
+                                if (args.target_scene_id) {
                                     loadScene(args.target_scene_id);
                                 }
-                            };
-                        } else if (hs.type === 'audio') {
-                            hsConfig.clickHandlerFunc = (e, args) => {
-                                window.speechSynthesis.cancel();
-                                if (!isMuted) speak(args.content_text || args.content || '');
                             };
                         } else {
                             hsConfig.clickHandlerFunc = (e, args) => showInfoModal(args);
@@ -323,6 +418,7 @@
                         config.hotSpots.push(hsConfig);
                     });
 
+                    // 2. CREATE NEW VIEWER
                     viewer = pannellum.viewer('panorama-viewer', config);
 
                     viewer.on('load', () => {
@@ -340,38 +436,32 @@
         // Hotspot rendering
         // ------------------------------------------------------------
         function renderHotspot(div, args) {
+            const isNavigation = args.type === 'navigation';
+
             div.classList.add('custom-hotspot');
-            let icon = 'fa-circle-info';
-            if (args.icon) {
-                icon = args.icon;
-            } else {
-                if (args.type === 'navigation') icon = 'fa-arrow-up';
-                if (args.type === 'audio')      icon = 'fa-volume-high';
-                if (args.type === 'image')      icon = 'fa-image';
-                if (args.type === 'video')      icon = 'fa-play';
-                if (args.type === 'link')       icon = 'fa-link';
-            }
-            div.innerHTML = `<i class="fa-solid ${icon}"></i>`;
+            div.classList.add(isNavigation ? 'type-navigation' : 'type-info');
+
+            const icon = isNavigation ? 'fa-arrow-up' : 'fa-circle-info';
+            const name = String(args.tooltip || '').trim();
+
+            const label = (!isNavigation && name) ?
+                `<span class="hotspot-name-label" title="${escapeHtml(name)}">${escapeHtml(name)}</span>` :
+                '';
+
+            div.innerHTML = `
+                <div class="hotspot-wrapper">
+                    ${label}
+                    <i class="fa-solid ${icon} hotspot-icon"></i>
+                </div>
+            `;
         }
 
         function showInfoModal(hs) {
             document.getElementById('info-modal-title').textContent = hs.tooltip || 'Information';
-            let content = '';
 
-            if (hs.type === 'info') {
-                content = `<p>${hs.content_text || ''}</p>`;
-            } else if (hs.type === 'image') {
-                content = `<img src="${hs.media_url}" alt="">`;
-            } else if (hs.type === 'video') {
-                content = `<div style="position:relative;padding-top:56.25%;">
-                              <iframe src="${hs.media_url}" style="position:absolute;inset:0;width:100%;height:100%;border:0;" allowfullscreen></iframe>
-                           </div>`;
-            } else if (hs.type === 'link') {
-                content = `<a href="${hs.media_url}" target="_blank" 
-                              style="display:inline-block;padding:10px 20px;background:#0b1930;color:#fff;border-radius:8px;text-decoration:none;font-weight:600;">
-                              Open Link <i class="fa-solid fa-external-link-alt"></i>
-                           </a>`;
-            }
+            const content = hs.content_text ?
+                `<p>${escapeHtml(hs.content_text).replace(/\n/g, '<br>')}</p>` :
+                `<p style="color:#94a3b8;">No details provided.</p>`;
 
             document.getElementById('info-modal-body').innerHTML = content;
             document.getElementById('info-modal-backdrop').classList.add('active');
@@ -381,9 +471,6 @@
             document.getElementById('info-modal-backdrop').classList.remove('active');
         }
 
-        // ------------------------------------------------------------
-        // Text-to-speech
-        // ------------------------------------------------------------
         function speak(text, onEnd) {
             if (!text || !('speechSynthesis' in window)) {
                 if (onEnd) onEnd();
@@ -393,14 +480,11 @@
             u.rate = 0.95;
             u.pitch = 1;
             u.lang = 'en-US';
-            u.onend   = () => onEnd && onEnd();
+            u.onend = () => onEnd && onEnd();
             u.onerror = () => onEnd && onEnd();
             window.speechSynthesis.speak(u);
         }
 
-        // ------------------------------------------------------------
-        // Mute toggle
-        // ------------------------------------------------------------
         function toggleMute() {
             isMuted = !isMuted;
             const icon = document.getElementById('audio-icon');
@@ -413,9 +497,6 @@
             }
         }
 
-        // ------------------------------------------------------------
-        // Fullscreen
-        // ------------------------------------------------------------
         function toggleFullscreen() {
             if (!document.fullscreenElement) {
                 document.documentElement.requestFullscreen();
@@ -424,12 +505,10 @@
             }
         }
 
-        // ------------------------------------------------------------
-        // Init with the starting scene
-        // ------------------------------------------------------------
-        @if($startScene)
+        @if ($startScene)
             loadScene({{ $startScene->id }});
         @endif
     </script>
 </body>
+
 </html>

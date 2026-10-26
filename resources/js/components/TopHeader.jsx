@@ -107,7 +107,7 @@ export default function TopHeader({
 
     useEffect(() => {
         fetchNotifications();
-        const id = setInterval(fetchNotifications, 30000);
+        const id = setInterval(fetchNotifications, 3000);
         return () => clearInterval(id);
     }, []);
 

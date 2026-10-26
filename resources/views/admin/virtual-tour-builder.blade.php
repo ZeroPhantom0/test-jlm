@@ -42,7 +42,6 @@
     {{-- ============ CONTENT BODY ============ --}}
     <div class="builder-content-body">
 
-        {{-- REDUNDANT BACK BUTTON REMOVED HERE --}}
         <div class="hotspot-header-bar">
             <div class="hotspot-title-left">
                 <div class="hotspot-title-text">
@@ -57,7 +56,6 @@
         </div>
 
         @if($virtualTour->scenes->isEmpty())
-            {{-- Empty state --}}
             <div class="text-center py-20 bg-white rounded-2xl border border-dashed border-slate-200">
                 <i class="fa-solid fa-cubes text-5xl text-slate-300 mb-4"></i>
                 <h3 class="text-lg font-bold text-slate-700">No scenes yet</h3>
@@ -125,21 +123,15 @@
 
                     <div class="form-field-group">
                         <label class="field-label">Hotspot Name</label>
-                        <div class="formatting-toolbar-box">
-                            <div class="formatting-toolbar-header">
-                                <span class="tool-btn" title="Bold"><i class="fa-solid fa-bold"></i></span>
-                                <span class="tool-btn" title="Italic"><i class="fa-solid fa-italic"></i></span>
-                                <span class="tool-btn" title="Underline"><i class="fa-solid fa-underline"></i></span>
-                                <div class="separator"></div>
-                                <span class="tool-btn" title="Text Color"><i class="fa-solid fa-font"></i></span>
-                                <span class="tool-btn" title="Highlight"><i class="fa-solid fa-highlighter"></i></span>
-                                <div class="separator"></div>
-                                <span class="font-size-display">12px</span>
-                            </div>
-                            <div class="formatting-toolbar-body">
-                                <textarea id="hs-name-input" rows="3" placeholder="Enter text here..."></textarea>
-                            </div>
-                        </div>
+                        <input
+                            type="text"
+                            id="hs-name-input"
+                            class="input-box"
+                            placeholder="e.g. Go to Bedroom or Level 2"
+                        />
+                        <p class="field-hint" id="name-hint">
+                            For <strong>Info</strong> hotspots, this name is displayed above the marker.
+                        </p>
                     </div>
 
                     <div class="form-field-group">
@@ -147,9 +139,6 @@
                         <select id="hs-type" class="scene-selector-dropdown" style="width:100%;">
                             <option value="navigation">Scene Navigation</option>
                             <option value="info">Info Tooltip</option>
-                            <option value="audio">Voice / Audio (Text-to-Speech)</option>
-                            <option value="image">Image Popup</option>
-                            <option value="link">External Link</option>
                         </select>
                     </div>
 
@@ -162,71 +151,10 @@
                         </select>
                     </div>
 
-                    <div class="form-field-group" id="nav-audio-group">
-                        <label class="field-label">Navigation Audio (Optional)</label>
-                        <textarea id="hs-nav-audio" class="textarea-box" rows="2"
-                                  placeholder="Text to speak when navigating..."></textarea>
-                    </div>
-
-                    <div class="form-field-group" id="audio-text-group" style="display:none;">
-                        <label class="field-label">Speech Text</label>
-                        <textarea id="hs-audio-text" class="textarea-box" rows="3"
-                                  placeholder="Enter text that will be spoken aloud when clicked..."></textarea>
-                    </div>
-
                     <div class="form-field-group" id="content-text-group" style="display:none;">
-                        <label class="field-label">Popup Text Content</label>
+                        <label class="field-label">Info Content</label>
                         <textarea id="hs-content-text" class="textarea-box" rows="3"
-                                  placeholder="Enter details..."></textarea>
-                    </div>
-
-                    <div class="form-field-group" id="media-url-group" style="display:none;">
-                        <label class="field-label">Media / External URL</label>
-                        <input type="url" id="hs-media-url" class="textarea-box"
-                               placeholder="https://..." style="min-height:auto;">
-                    </div>
-
-                    <div class="form-field-group">
-                        <label class="field-label">Hotspot Icon</label>
-                        <div class="icon-selector-grid" id="icon-selector">
-                            <div class="icon-option-btn" data-icon="fa-door-open"><i class="fa-solid fa-door-open"></i></div>
-                            <div class="icon-option-btn" data-icon="fa-bed"><i class="fa-solid fa-bed"></i></div>
-                            <div class="icon-option-btn" data-icon="fa-bath"><i class="fa-solid fa-bath"></i></div>
-                            <div class="icon-option-btn" data-icon="fa-tv"><i class="fa-solid fa-tv"></i></div>
-                            <div class="icon-option-btn" data-icon="fa-star"><i class="fa-solid fa-star"></i></div>
-                            <div class="icon-option-btn active" data-icon="fa-circle"><i class="fa-regular fa-circle"></i></div>
-                        </div>
-                    </div>
-
-                    <div class="form-field-group">
-                        <label class="field-label">Action</label>
-                        <label class="radio-option-item">
-                            <input type="radio" name="hotspotAction" value="none" checked>
-                            No Action
-                        </label>
-                        <label class="radio-option-item">
-                            <input type="radio" name="hotspotAction" value="goto">
-                            Go to another post
-                        </label>
-                        <div class="radio-hint">
-                            Select what happens when user clicks or taps on the hotspot.
-                        </div>
-                    </div>
-
-                    <div class="form-field-group">
-                        <label class="field-label">Description</label>
-                        <textarea id="hs-description" class="textarea-box" rows="3"
-                                  placeholder="e.g. This room has a single bed with a comfortable mattress and pillow."
-                                  maxlength="50"></textarea>
-                        <div class="char-counter"><span id="desc-counter">0</span>/50</div>
-                    </div>
-
-                    <div class="switch-toggle-row">
-                        <span class="switch-label">Voice Assistant</span>
-                        <label class="switch">
-                            <input type="checkbox" id="hs-voice-assistant">
-                            <span class="slider"></span>
-                        </label>
+                                  placeholder="Text shown when the info hotspot is clicked..."></textarea>
                     </div>
 
                     <div class="hotspot-form-actions">
@@ -402,6 +330,7 @@
 
 .form-field-group { display: flex; flex-direction: column; gap: 8px; }
 .field-label { font-size: 13px; font-weight: 600; color: #334155; }
+.field-hint { font-size: 11.5px; color: #94a3b8; margin-top: 2px; line-height: 1.4; }
 
 .manage-scenes-btn {
     display: flex; align-items: center; gap: 12px;
@@ -421,58 +350,16 @@
 }
 .manage-scenes-btn:hover .arrow-icon { transform: translateX(3px); opacity: 1; }
 
-.formatting-toolbar-box {
+/* Simple text input (replaces formatting-toolbar-box) */
+.input-box {
+    width: 100%; padding: 12px 14px;
     border: 1px solid var(--border-color); border-radius: 10px;
-    overflow: hidden; background: #ffffff;
+    font-size: 13.5px; outline: none; color: #0f172a;
+    font-family: "Inter", sans-serif;
+    background: #ffffff;
 }
-.formatting-toolbar-header {
-    display: flex; align-items: center; gap: 2px;
-    padding: 8px 12px; background: #ffffff;
-    border-bottom: 1px solid var(--border-color);
-    color: #475569; font-size: 13px; user-select: none;
-}
-.formatting-toolbar-header span.tool-btn {
-    display: flex; align-items: center; justify-content: center;
-    width: 30px; height: 30px; border-radius: 6px;
-    cursor: pointer; transition: background 0.15s; color: #64748b;
-}
-.formatting-toolbar-header span.tool-btn:hover { background: #f1f5f9; color: #0f172a; }
-.formatting-toolbar-header .separator {
-    width: 1px; height: 18px; background: #e2e8f0; margin: 0 6px;
-}
-.formatting-toolbar-header .font-size-display {
-    font-size: 12px; font-weight: 600; color: #334155;
-    padding: 0 8px; cursor: default;
-}
-.formatting-toolbar-body { padding: 10px 14px; min-height: 100px; }
-.formatting-toolbar-body textarea {
-    width: 100%; border: none; outline: none; resize: none;
-    font-size: 13.5px; color: #0f172a;
-    font-family: "Inter", sans-serif; min-height: 80px;
-}
-.formatting-toolbar-body textarea::placeholder { color: #94a3b8; }
-
-.icon-selector-grid { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.icon-option-btn {
-    width: 40px; height: 40px; border-radius: 10px;
-    border: 1px solid var(--border-color); background: #ffffff;
-    display: flex; align-items: center; justify-content: center;
-    color: #64748b; cursor: pointer; font-size: 15px;
-    transition: all 0.15s;
-}
-.icon-option-btn:hover { border-color: #94a3b8; color: #0f172a; }
-.icon-option-btn.active {
-    border-color: var(--navy-blue); background: var(--navy-blue); color: #ffffff;
-}
-
-.radio-option-item {
-    display: flex; align-items: center; gap: 10px;
-    font-size: 13.5px; color: #334155; cursor: pointer; padding: 4px 0;
-}
-.radio-option-item input[type="radio"] {
-    width: 16px; height: 16px; accent-color: #2563eb; cursor: pointer;
-}
-.radio-hint { font-size: 12px; color: #94a3b8; margin-top: 2px; line-height: 1.4; }
+.input-box:focus { border-color: #94a3b8; }
+.input-box::placeholder { color: #94a3b8; }
 
 .textarea-box {
     width: 100%; padding: 12px 14px;
@@ -482,31 +369,6 @@
     min-height: 90px; background: #ffffff;
 }
 .textarea-box:focus { border-color: #94a3b8; }
-.char-counter { font-size: 11.5px; color: #94a3b8; text-align: right; }
-
-.switch-toggle-row {
-    display: flex; align-items: center; justify-content: space-between;
-    padding-top: 12px; border-top: 1px solid #f1f5f9;
-}
-.switch-toggle-row .switch-label {
-    font-size: 13.5px; font-weight: 600; color: #334155;
-}
-.switch {
-    position: relative; display: inline-block; width: 44px; height: 24px;
-}
-.switch input { opacity: 0; width: 0; height: 0; }
-.slider {
-    position: absolute; cursor: pointer;
-    top: 0; left: 0; right: 0; bottom: 0;
-    background-color: #cbd5e1; transition: .2s; border-radius: 24px;
-}
-.slider:before {
-    position: absolute; content: "";
-    height: 18px; width: 18px; left: 3px; bottom: 3px;
-    background-color: white; transition: .2s; border-radius: 50%;
-}
-input:checked + .slider { background-color: #10b981; }
-input:checked + .slider:before { transform: translateX(20px); }
 
 .hotspot-form-actions {
     display: flex; align-items: center; justify-content: flex-end;
@@ -566,22 +428,56 @@ input:checked + .slider:before { transform: translateX(20px); }
 }
 .edit-mode-banner .btn-exit-edit:hover { background: #fffbeb; }
 
+/* ============ CUSTOM HOTSPOT MARKERS ============ */
 .custom-hotspot { cursor: pointer; }
-.custom-hotspot .hotspot-wrapper { position: relative; display: inline-block; }
+.custom-hotspot .hotspot-wrapper {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+
 .custom-hotspot .hotspot-icon {
     display: flex; align-items: center; justify-content: center;
     width: 38px; height: 38px;
-    background: rgba(79, 70, 229, 0.95);
     color: #ffffff; border-radius: 50%;
     border: 2px solid #ffffff;
     box-shadow: 0 4px 10px rgba(0,0,0,0.35);
     font-size: 15px; transition: transform 0.15s;
 }
+/* Navigation hotspot = indigo arrow */
+.custom-hotspot.type-navigation .hotspot-icon {
+    background: rgba(79, 70, 229, 0.95);
+}
+/* Info hotspot = amber info */
+.custom-hotspot.type-info .hotspot-icon {
+    background: rgba(245, 158, 11, 0.95);
+}
+
 .custom-hotspot:hover .hotspot-icon { transform: scale(1.15); }
 .custom-hotspot.is-editing .hotspot-icon {
     background: #f59e0b;
     box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.35), 0 4px 10px rgba(0,0,0,0.35);
 }
+
+/* Label badge above the info icon — uses the hotspot's own name (tooltip) */
+.custom-hotspot .hotspot-name-label {
+    background: #ffffff;
+    color: #78350f;
+    border: 1px solid #fde68a;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 9px;
+    line-height: 1.4;
+    white-space: nowrap;
+    max-width: 160px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+}
+
 .custom-hotspot .delete-hs-btn {
     position: absolute; top: -6px; right: -6px;
     width: 18px; height: 18px;
@@ -615,9 +511,6 @@ input:checked + .slider:before { transform: translateX(20px); }
 
 const CSRF = document.querySelector('meta[name="csrf-token"]')?.content || '';
 
-// ------------------------------------------------------------
-// ROUTES — use placeholders for hotspot ID
-// ------------------------------------------------------------
 const ROUTES = {
     getTourData:   '{{ route("admin.virtual-tour.builder.data", $virtualTour->id) }}',
     saveHotspot:   '{{ route("admin.virtual-tour.builder.save-hotspot", $virtualTour->id) }}',
@@ -625,17 +518,10 @@ const ROUTES = {
     deleteHotspot: '{{ route("admin.virtual-tour.builder.delete-hotspot", [$virtualTour->id, 0]) }}',
 };
 
-/**
- * Replace the placeholder `0` in a route template with the real hotspot ID.
- * Example:
- *   hotspotUrl('/admin/virtual-tour/2/builder/hotspots/0', 42)
- *   → '/admin/virtual-tour/2/builder/hotspots/42'
- */
 function hotspotUrl(template, hotspotId) {
     return template.replace(/\/0(\/|$)/, '/' + hotspotId + '$1');
 }
 
-// Scene titles map
 const sceneTitles = @json($virtualTour->scenes->pluck('title', 'id'));
 
 let viewer = null;
@@ -645,7 +531,6 @@ let isSceneAudioPlaying = false;
 
 let pendingPitch = null;
 let pendingYaw = null;
-let selectedIcon = 'fa-circle';
 
 let editingHotspotId = null;
 let currentHotspots = [];
@@ -740,21 +625,27 @@ function switchScene(sceneId, thumbEl) {
 
 /* ============ CUSTOM HOTSPOT MARKER ============ */
 function customHotspotElement(hotSpotDiv, args) {
+    const isNavigation = args.type === 'navigation';
+
     hotSpotDiv.classList.add('custom-hotspot');
+    hotSpotDiv.classList.add(isNavigation ? 'type-navigation' : 'type-info');
     hotSpotDiv.setAttribute('data-hotspot-id', args.id);
 
-    let icon = args.icon || 'fa-circle-info';
-    if (!args.icon) {
-        if (args.type === 'navigation') icon = 'fa-arrow-up';
-        if (args.type === 'audio') icon = 'fa-volume-high';
-        if (args.type === 'image') icon = 'fa-image';
-        if (args.type === 'video') icon = 'fa-play';
-        if (args.type === 'link') icon = 'fa-link';
-    }
+    // Navigation hotspots → arrow icon (scene pointer)
+    // Info hotspots → info circle icon
+    const icon = isNavigation ? 'fa-arrow-up' : 'fa-circle-info';
+
+    // Info hotspots show their name (from `tooltip`) as a label ABOVE the icon.
+    // Navigation hotspots only show the arrow icon.
+    const name = String(args.tooltip || '').trim();
+    const label = (!isNavigation && name)
+        ? `<span class="hotspot-name-label" title="${escapeHtml(name)}">${escapeHtml(name)}</span>`
+        : '';
 
     hotSpotDiv.innerHTML = `
         <div class="hotspot-wrapper">
-            <i class="fa-solid ${icon} hotspot-icon" title="Click to edit"></i>
+            ${label}
+            <i class="fa-solid ${icon} hotspot-icon" title="${isNavigation ? 'Click to edit' : escapeHtml(name || 'Info hotspot')}"></i>
             <button class="delete-hs-btn" title="Delete Hotspot" onclick="deleteHotspot(event, ${args.id})">
                 <i class="fa-solid fa-xmark"></i>
             </button>
@@ -768,6 +659,12 @@ function customHotspotElement(hotSpotDiv, args) {
     };
 }
 
+function escapeHtml(str) {
+    return String(str ?? '').replace(/[&<>"']/g, c => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[c]));
+}
+
 /* ============ START EDITING ============ */
 function startEditingHotspot(hotspotId) {
     const hs = currentHotspots.find(h => parseInt(h.id) === parseInt(hotspotId));
@@ -775,21 +672,10 @@ function startEditingHotspot(hotspotId) {
 
     editingHotspotId = hs.id;
 
-    document.getElementById('hs-name-input').value       = hs.tooltip || '';
-    document.getElementById('hs-type').value              = hs.type || 'navigation';
-    document.getElementById('hs-target-scene').value      = hs.target_scene_id || currentSceneId;
-    document.getElementById('hs-nav-audio').value         = hs.nav_audio || '';
-    document.getElementById('hs-audio-text').value        = hs.content_text || hs.content || '';
-    document.getElementById('hs-content-text').value      = hs.content_text || '';
-    document.getElementById('hs-media-url').value         = hs.media_url || '';
-    document.getElementById('hs-description').value       = hs.description || hs.content_text || '';
-    document.getElementById('desc-counter').textContent   = (hs.description || hs.content_text || '').length;
-    document.getElementById('hs-voice-assistant').checked = (hs.voice_assistant === '1' || hs.voice_assistant === 1);
-
-    selectedIcon = hs.icon || 'fa-circle';
-    document.querySelectorAll('#icon-selector .icon-option-btn').forEach(b => {
-        b.classList.toggle('active', b.dataset.icon === selectedIcon);
-    });
+    document.getElementById('hs-name-input').value   = hs.tooltip || '';
+    document.getElementById('hs-type').value          = hs.type || 'navigation';
+    document.getElementById('hs-target-scene').value  = hs.target_scene_id || currentSceneId;
+    document.getElementById('hs-content-text').value  = hs.content_text || '';
 
     pendingPitch = parseFloat(hs.pitch);
     pendingYaw = parseFloat(hs.yaw);
@@ -845,21 +731,10 @@ function resetFormFields() {
     pendingYaw = null;
     updateCoordsPill();
 
-    document.getElementById('hs-name-input').value = '';
-    document.getElementById('hs-type').value = 'navigation';
+    document.getElementById('hs-name-input').value  = '';
+    document.getElementById('hs-type').value         = 'navigation';
     document.getElementById('hs-target-scene').value = currentSceneId;
-    document.getElementById('hs-nav-audio').value = '';
-    document.getElementById('hs-audio-text').value = '';
     document.getElementById('hs-content-text').value = '';
-    document.getElementById('hs-media-url').value = '';
-    document.getElementById('hs-description').value = '';
-    document.getElementById('desc-counter').textContent = '0';
-    document.getElementById('hs-voice-assistant').checked = false;
-
-    selectedIcon = 'fa-circle';
-    document.querySelectorAll('#icon-selector .icon-option-btn').forEach(b => {
-        b.classList.toggle('active', b.dataset.icon === 'fa-circle');
-    });
 
     toggleDynamicGroups('navigation');
     document.getElementById('hs-save-btn').disabled = true;
@@ -874,29 +749,22 @@ function resetSidebarForm() {
 
 /* ============ DYNAMIC FIELD VISIBILITY ============ */
 function toggleDynamicGroups(type) {
-    document.getElementById('target-scene-group').style.display = (type === 'navigation') ? 'flex' : 'none';
-    document.getElementById('nav-audio-group').style.display    = (type === 'navigation') ? 'flex' : 'none';
-    document.getElementById('audio-text-group').style.display   = (type === 'audio')      ? 'flex' : 'none';
-    document.getElementById('content-text-group').style.display = (type === 'info')       ? 'flex' : 'none';
-    document.getElementById('media-url-group').style.display    = (['image','video','link'].includes(type)) ? 'flex' : 'none';
+    const isNav = type === 'navigation';
+
+    document.getElementById('target-scene-group').style.display = isNav ? 'flex' : 'none';
+    document.getElementById('content-text-group').style.display = isNav ? 'none' : 'flex';
+
+    // Update hint text under the name field
+    const hint = document.getElementById('name-hint');
+    if (hint) {
+        hint.innerHTML = isNav
+            ? 'Used as the tooltip when hovering the navigation arrow.'
+            : 'For <strong>Info</strong> hotspots, this name is displayed above the marker.';
+    }
 }
 
 document.getElementById('hs-type').addEventListener('change', function() {
     toggleDynamicGroups(this.value);
-});
-
-/* ============ ICON PICKER ============ */
-document.querySelectorAll('#icon-selector .icon-option-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-        document.querySelectorAll('#icon-selector .icon-option-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        selectedIcon = btn.dataset.icon;
-    });
-});
-
-/* ============ DESCRIPTION COUNTER ============ */
-document.getElementById('hs-description').addEventListener('input', function() {
-    document.getElementById('desc-counter').textContent = this.value.length;
 });
 
 /* ============ SAVE HOTSPOT (create or update) ============ */
@@ -924,30 +792,13 @@ function saveHotspotFromSidebar() {
 
     if (type === 'navigation') {
         formData.append('target_scene_id', document.getElementById('hs-target-scene').value);
-        formData.append('nav_audio', document.getElementById('hs-nav-audio').value);
-        formData.append('content', name);
-    } else if (type === 'audio') {
-        formData.append('content', document.getElementById('hs-audio-text').value);
-        formData.append('content_text', document.getElementById('hs-audio-text').value);
-    } else if (type === 'info') {
+    } else {
         formData.append('content_text', document.getElementById('hs-content-text').value);
-    } else if (['image', 'video', 'link'].includes(type)) {
-        formData.append('media_url', document.getElementById('hs-media-url').value);
-        formData.append('content_text', document.getElementById('hs-description').value);
     }
 
-    const desc = document.getElementById('hs-description').value;
-    if (desc && !formData.has('content_text')) {
-        formData.append('content_text', desc);
-    }
-    formData.append('description', desc);
-    formData.append('icon', selectedIcon);
-    formData.append('voice_assistant', document.getElementById('hs-voice-assistant').checked ? '1' : '0');
-
-    // ---------- Determine endpoint ----------
     let endpoint = ROUTES.saveHotspot;
     if (editingHotspotId) {
-        formData.append('_method', 'PUT');   // ← method spoofing for update
+        formData.append('_method', 'PUT');
         endpoint = hotspotUrl(ROUTES.updateHotspot, editingHotspotId);
     }
 
@@ -998,7 +849,7 @@ function deleteHotspot(event, hotspotId) {
     }
 
     const formData = new FormData();
-    formData.append('_method', 'DELETE');    // ← method spoofing
+    formData.append('_method', 'DELETE');
     formData.append('_token', CSRF);
 
     fetch(hotspotUrl(ROUTES.deleteHotspot, hotspotId), {

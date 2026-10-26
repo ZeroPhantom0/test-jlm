@@ -3,6 +3,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Events\AnnouncementUpdated;
 use App\Http\Controllers\Controller;
 use App\Models\Announcement;
 use Illuminate\Http\Request;
@@ -10,10 +11,21 @@ use Illuminate\Validation\Rule;
 
 class AnnouncementController extends Controller
 {
-    /**
-     * Display the announcements list.
-     */
     public function index(Request $request)
+    {
+        return view('admin.announcements', $this->buildPayload($request));
+    }
+
+    /**
+     * Live data endpoint for polling / Echo refresh.
+     * GET /admin/announcements/data
+     */
+    public function data(Request $request)
+    {
+        return response()->json($this->buildPayload($request));
+    }
+
+    private function buildPayload(Request $request): array
     {
         $filters = $request->only(['search', 'priority']);
 
@@ -30,17 +42,34 @@ class AnnouncementController extends Controller
             'urgent'    => Announcement::ofPriority('Urgent')->count(),
         ];
 
-        // Pass data for React modals
         $announcementsForReact = $announcements->mapWithKeys(function ($a) {
             return [$a->id => $a->toReactArray()];
         })->toArray();
 
-        return view('admin.announcements', compact('announcements', 'metrics', 'filters', 'announcementsForReact'));
+        // Structured rows for JS re-rendering
+        $rows = $announcements->map(fn (Announcement $a) => [
+            'id'             => $a->id,
+            'title'          => $a->title,
+            'content'        => $a->content,
+            'priority'       => $a->priority,
+            'priority_class' => $a->priority_class,
+            'priority_icon'  => $a->priority_icon,
+            'icon_bg'        => $a->icon_bg,
+            'box_class'      => $a->box_class,
+            'is_pinned'      => (bool) $a->is_pinned,
+            'author'         => $a->author->name ?? 'Unknown',
+            'created_at'     => $a->created_at?->format('M d, Y'),
+        ])->values();
+
+        return compact(
+            'announcements',
+            'metrics',
+            'filters',
+            'announcementsForReact',
+            'rows'
+        );
     }
 
-    /**
-     * Store a newly created announcement.
-     */
     public function store(Request $request)
     {
         $validated = $request->validate([
@@ -60,6 +89,8 @@ class AnnouncementController extends Controller
             'published_at' => now(),
         ]);
 
+        event(new AnnouncementUpdated('created', $announcement->id));
+
         return response()->json([
             'success' => true,
             'message' => 'Announcement posted successfully.',
@@ -67,9 +98,6 @@ class AnnouncementController extends Controller
         ]);
     }
 
-    /**
-     * Display the specified announcement.
-     */
     public function show(Announcement $announcement)
     {
         return response()->json([
@@ -78,9 +106,6 @@ class AnnouncementController extends Controller
         ]);
     }
 
-    /**
-     * Update the specified announcement.
-     */
     public function update(Request $request, Announcement $announcement)
     {
         $validated = $request->validate([
@@ -93,6 +118,8 @@ class AnnouncementController extends Controller
 
         $announcement->update($validated);
 
+        event(new AnnouncementUpdated('updated', $announcement->id));
+
         return response()->json([
             'success' => true,
             'message' => 'Announcement updated successfully.',
@@ -100,14 +127,13 @@ class AnnouncementController extends Controller
         ]);
     }
 
-    /**
-     * Toggle the pinned state of an announcement.
-     */
     public function togglePin(Announcement $announcement)
     {
         $announcement->update([
             'is_pinned' => ! $announcement->is_pinned,
         ]);
+
+        event(new AnnouncementUpdated('pinned', $announcement->id));
 
         return response()->json([
             'success' => true,
@@ -118,12 +144,12 @@ class AnnouncementController extends Controller
         ]);
     }
 
-    /**
-     * Remove the specified announcement.
-     */
     public function destroy(Announcement $announcement)
     {
+        $id = $announcement->id;
         $announcement->delete();
+
+        event(new AnnouncementUpdated('deleted', $id));
 
         return response()->json([
             'success' => true,

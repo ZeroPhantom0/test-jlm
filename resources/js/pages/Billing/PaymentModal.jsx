@@ -26,15 +26,37 @@ export default function PaymentModal() {
     const [referenceNumber, setReferenceNumber] = useState('');
     const [receipt, setReceipt]                 = useState(null);
 
-    // 1. Read default payload on mount (optional)
+    // 1. Read default payload on mount AND listen for live updates
     useEffect(() => {
         const el = document.getElementById('payment-modal-root');
-        if (!el?.dataset?.invoice) return;
-        try {
-            setInvoice(JSON.parse(el.dataset.invoice));
-        } catch (e) {
-            console.error('Invalid default invoice JSON', e);
+        
+        // Initial load
+        if (el?.dataset?.invoice) {
+            try {
+                setInvoice(JSON.parse(el.dataset.invoice));
+            } catch (e) {
+                console.error('Invalid default invoice JSON', e);
+            }
         }
+
+        // ── Live update listener (Triggered by your Blade script) ──
+        const handleLiveUpdate = (e) => {
+            // e.detail contains the fresh payload from the controller
+            if (e.detail) {
+                setInvoice(e.detail);
+            } else if (el?.dataset?.invoice) {
+                // Fallback: read from the DOM if detail is empty
+                try {
+                    setInvoice(JSON.parse(el.dataset.invoice));
+                } catch (err) {}
+            }
+        };
+
+        window.addEventListener('billing:data-updated', handleLiveUpdate);
+
+        return () => {
+            window.removeEventListener('billing:data-updated', handleLiveUpdate);
+        };
     }, []);
 
     // 2. Global click listener
@@ -117,6 +139,7 @@ export default function PaymentModal() {
                 throw new Error(data.message || `Request failed (HTTP ${res.status}).`);
             }
             close();
+            // Note: window.location.reload() is still here to ensure the full page syncs
             window.location.reload();
         } catch (err) {
             setError(err.message);

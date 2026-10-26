@@ -78,14 +78,14 @@ class TenantNotificationController extends Controller
                 'type'        => 'invoice',
                 'icon'        => 'fa-solid fa-credit-card',
                 'color'       => $isOverdue
-                                    ? 'text-rose-600 bg-rose-50'
-                                    : 'text-orange-600 bg-orange-50',
+                    ? 'text-rose-600 bg-rose-50'
+                    : 'text-orange-600 bg-orange-50',
                 'title'       => $isOverdue ? 'Overdue invoice' : 'Outstanding balance',
                 'description' => $i->description . ' — ₱'
-                                 . number_format((float) $i->balance, 2),
+                    . number_format((float) $i->balance, 2),
                 'time'        => $i->due_date
-                                    ? $i->due_date . ' 00:00:00'
-                                    : $i->created_at,
+                    ? $i->due_date . ' 00:00:00'
+                    : $i->created_at,
                 'unread'      => true,
                 'link'        => '/tenants/billing',
             ];
@@ -105,7 +105,7 @@ class TenantNotificationController extends Controller
             $isPaid = $inv->status === 'Paid';
 
             $notifications[] = [
-                'id'          => 'invok-' . $inv->id,
+                'id'          => 'invok-' . $inv->id . '-' . Str::slug($inv->status),
                 'type'        => 'invoice',
                 'icon'        => $isPaid
                     ? 'fa-solid fa-circle-check'
@@ -148,15 +148,15 @@ class TenantNotificationController extends Controller
             ];
         }
 
-        // 3) Reservation status updates
+        // 3) Reservation status updates (admin-driven only)
         $reservations = DB::table('reservations')
             ->where('user_id', $user->id)
             ->where(function ($q) {
                 $q->whereIn('status', ['Approved', 'Expired'])
-                  ->orWhere(function ($q2) {
-                      $q2->where('status', 'Rejected')
-                         ->whereNotNull('processed_by');
-                  });
+                    ->orWhere(function ($q2) {
+                        $q2->where('status', 'Rejected')
+                            ->whereNotNull('processed_by'); // only admin rejections
+                    });
             })
             ->orderByDesc(DB::raw('COALESCE(processed_at, updated_at, created_at)'))
             ->limit(10)
@@ -177,7 +177,7 @@ class TenantNotificationController extends Controller
             };
 
             $notifications[] = [
-                'id'          => 'res-' . $r->id,
+                'id'          => 'res-' . $r->id . '-' . Str::slug($r->status),
                 'type'        => 'reservation',
                 'icon'        => $icon,
                 'color'       => $color,
@@ -189,56 +189,74 @@ class TenantNotificationController extends Controller
             ];
         }
 
-        // 4) Maintenance requests
+        // =========================================================
+        // 4) MAINTENANCE REQUESTS
+        //    Only show In Progress and Completed.
+        //    Cancelled is deliberately excluded — if the tenant cancelled
+        //    their own request, we shouldn't show it back to them.
+        // =========================================================
         $maintenance = DB::table('maintenance_requests')
             ->where('tenant_id', $tenant->id)
-            ->whereIn('status', ['In Progress', 'Completed', 'Cancelled'])
+            ->whereIn('status', ['In Progress', 'Completed'])
             ->orderByDesc('updated_at')
             ->limit(10)
             ->get();
 
         foreach ($maintenance as $m) {
+            $statusSlug = Str::slug($m->status);
+
             $color = match ($m->status) {
                 'Completed'   => 'text-emerald-600 bg-emerald-50',
-                'Cancelled'   => 'text-slate-600 bg-slate-100',
                 'In Progress' => 'text-blue-600 bg-blue-50',
                 default       => 'text-slate-600 bg-slate-100',
             };
 
+            $icon = match ($m->status) {
+                'Completed'   => 'fa-regular fa-circle-check',
+                'In Progress' => 'fa-solid fa-spinner',
+                default       => 'fa-regular fa-circle',
+            };
+
             $notifications[] = [
-                'id'          => 'mnt-' . $m->id,
+                'id'          => 'mnt-' . $m->id . '-' . $statusSlug,
                 'type'        => 'maintenance',
-                'icon'        => 'fa-solid fa-wrench',
+                'icon'        => $icon,
                 'color'       => $color,
                 'title'       => 'Maintenance ' . $m->status,
-                'description' => $m->title,
-                'time'        => $m->updated_at ?? $m->completed_at ?? $m->created_at,
+                'description' => $m->title
+                    . ($m->assigned_staff ? ' · ' . $m->assigned_staff : ''),
+                'time'        => $m->completed_at ?? $m->updated_at ?? $m->created_at,
                 'unread'      => true,
                 'link'        => '/tenants/services/maintenance',
             ];
         }
 
-        // 5) Room change requests
+        // =========================================================
+        // 5) ROOM CHANGE REQUESTS
+        //    Only admin-driven decisions (processed_by NOT NULL).
+        //    Tenant self-cancellations (no processed_by) are excluded.
+        // =========================================================
         $roomChanges = DB::table('room_change_requests')
             ->where('tenant_id', $tenant->id)
             ->whereIn('status', ['Approved', 'Rejected'])
+            ->whereNotNull('processed_by')
             ->orderByDesc(DB::raw('COALESCE(processed_at, updated_at, created_at)'))
             ->limit(10)
             ->get();
 
         foreach ($roomChanges as $rc) {
-            $color = $rc->status === 'Approved'
-                ? 'text-emerald-600 bg-emerald-50'
-                : 'text-rose-600 bg-rose-50';
-            $icon = $rc->status === 'Approved'
-                ? 'fa-regular fa-circle-check'
-                : 'fa-regular fa-circle-xmark';
+            $statusSlug = Str::slug($rc->status);
+            $isApproved = $rc->status === 'Approved';
 
             $notifications[] = [
-                'id'          => 'rc-' . $rc->id,
+                'id'          => 'rc-' . $rc->id . '-' . $statusSlug,
                 'type'        => 'room-change',
-                'icon'        => $icon,
-                'color'       => $color,
+                'icon'        => $isApproved
+                    ? 'fa-regular fa-circle-check'
+                    : 'fa-regular fa-circle-xmark',
+                'color'       => $isApproved
+                    ? 'text-emerald-600 bg-emerald-50'
+                    : 'text-rose-600 bg-rose-50',
                 'title'       => 'Room change ' . $rc->status,
                 'description' => $rc->current_room . ' → ' . $rc->requested_room,
                 'time'        => $rc->processed_at ?? $rc->updated_at ?? $rc->created_at,
@@ -247,27 +265,32 @@ class TenantNotificationController extends Controller
             ];
         }
 
-        // 6) Stay extension requests
+        // =========================================================
+        // 6) STAY EXTENSION REQUESTS
+        //    Only admin-driven decisions (processed_by NOT NULL).
+        //    Tenant self-cancellations (no processed_by) are excluded.
+        // =========================================================
         $stayExtensions = DB::table('stay_extension_requests')
             ->where('tenant_id', $tenant->id)
             ->whereIn('status', ['Approved', 'Rejected'])
+            ->whereNotNull('processed_by')
             ->orderByDesc(DB::raw('COALESCE(processed_at, updated_at, created_at)'))
             ->limit(10)
             ->get();
 
         foreach ($stayExtensions as $se) {
-            $color = $se->status === 'Approved'
-                ? 'text-emerald-600 bg-emerald-50'
-                : 'text-rose-600 bg-rose-50';
-            $icon = $se->status === 'Approved'
-                ? 'fa-regular fa-circle-check'
-                : 'fa-regular fa-circle-xmark';
+            $statusSlug = Str::slug($se->status);
+            $isApproved = $se->status === 'Approved';
 
             $notifications[] = [
-                'id'          => 'se-' . $se->id,
+                'id'          => 'se-' . $se->id . '-' . $statusSlug,
                 'type'        => 'stay-extension',
-                'icon'        => $icon,
-                'color'       => $color,
+                'icon'        => $isApproved
+                    ? 'fa-regular fa-circle-check'
+                    : 'fa-regular fa-circle-xmark',
+                'color'       => $isApproved
+                    ? 'text-emerald-600 bg-emerald-50'
+                    : 'text-rose-600 bg-rose-50',
                 'title'       => 'Stay extension ' . $se->status,
                 'description' => '+' . $se->extension_days . ' day(s) · ' . $se->reference_no,
                 'time'        => $se->processed_at ?? $se->updated_at ?? $se->created_at,
@@ -299,7 +322,7 @@ class TenantNotificationController extends Controller
         }
 
         // Sort newest first
-        usort($notifications, fn ($x, $y) => strtotime($y['time']) <=> strtotime($x['time']));
+        usort($notifications, fn($x, $y) => strtotime($y['time']) <=> strtotime($x['time']));
 
         $unreadCount = collect($notifications)->where('unread', true)->count();
 

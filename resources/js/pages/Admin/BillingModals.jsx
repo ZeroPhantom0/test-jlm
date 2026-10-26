@@ -7,7 +7,7 @@ const csrf = () =>
     document.querySelector('input[name="_token"]')?.value;
 
 const FALLBACK = {
-    tn: "tn-000",
+    tn: "", // Changed from "tn-000" to empty string to prevent false matches
     description: "No description",
     tenant: "Unknown",
     room: "N/A",
@@ -27,14 +27,12 @@ const FALLBACK = {
     receipt_no: "-",
 };
 
-// Parse "₱1,234" or "₱ 1,234.56" → 1234 (or 1234.56)
 const parseMoney = (str) => {
     if (str === null || str === undefined) return 0;
     const n = parseFloat(String(str).replace(/[^\d.]/g, ""));
     return Number.isFinite(n) ? n : 0;
 };
 
-// Decide whether verifying this payment leaves the invoice Partial.
 const willBePartial = (invoice) => {
     if (!invoice) return false;
     const total = parseMoney(invoice.total);
@@ -70,33 +68,56 @@ export default function BillingModals() {
                 console.error("Invalid invoices JSON", e);
             }
         }
-    }, []);
 
-    useEffect(() => {
-        const handleClick = (e) => {
-            const btn = e.target.closest(
-                ".icon-edit, .icon-view, .icon-payment, .icon-receipt, .icon-remind, .icon-verify, .icon-reject",
-            );
-            if (!btn) return;
-
-            const row = btn.closest("tr");
-            const tn = row?.dataset?.tn;
-            const data = invoicesData[tn] || FALLBACK;
-            setInvoice(data);
-
-            if (btn.classList.contains("icon-edit")) return setShowEdit(true);
-            if (btn.classList.contains("icon-view")) return setShowSummary(true);
-            if (btn.classList.contains("icon-payment") || btn.classList.contains("icon-receipt")) return setShowReceipt(true);
-            if (btn.classList.contains("icon-remind")) return handleSendReminder(data);
-            if (btn.classList.contains("icon-verify")) return setShowVerify(true);
-            if (btn.classList.contains("icon-reject")) {
-                setRejectNotes("");
-                return setShowReject(true);
-            }
+        const handleLiveUpdate = (e) => {
+            setInvoicesData(e.detail || {});
         };
-        document.addEventListener("click", handleClick);
-        return () => document.removeEventListener("click", handleClick);
-    }, [invoicesData]);
+
+        const handleAction = (e, type) => {
+            const tn = e.detail.tn;
+            
+            setInvoicesData(prev => {
+                const data = prev[tn] || FALLBACK;
+                setInvoice(data);
+
+                if (type === 'edit')   setShowEdit(true);
+                if (type === 'view')   setShowSummary(true);
+                if (type === 'view-payment') setShowReceipt(true);
+                if (type === 'remind') handleSendReminder(data);
+                if (type === 'verify') setShowVerify(true);
+                if (type === 'reject') {
+                    setRejectNotes("");
+                    setShowReject(true);
+                }
+                return prev;
+            });
+        };
+
+        const handleEdit   = (e) => handleAction(e, 'edit');
+        const handleView   = (e) => handleAction(e, 'view');
+        const handlePay    = (e) => handleAction(e, 'view-payment');
+        const handleRemind = (e) => handleAction(e, 'remind');
+        const handleVerify = (e) => handleAction(e, 'verify');
+        const handleReject = (e) => handleAction(e, 'reject');
+
+        window.addEventListener("billing:data-updated", handleLiveUpdate);
+        window.addEventListener("billing:edit", handleEdit);
+        window.addEventListener("billing:view", handleView);
+        window.addEventListener("billing:payment", handlePay);
+        window.addEventListener("billing:remind", handleRemind);
+        window.addEventListener("billing:verify", handleVerify);
+        window.addEventListener("billing:reject", handleReject);
+
+        return () => {
+            window.removeEventListener("billing:data-updated", handleLiveUpdate);
+            window.removeEventListener("billing:edit", handleEdit);
+            window.removeEventListener("billing:view", handleView);
+            window.removeEventListener("billing:payment", handlePay);
+            window.removeEventListener("billing:remind", handleRemind);
+            window.removeEventListener("billing:verify", handleVerify);
+            window.removeEventListener("billing:reject", handleReject);
+        };
+    }, []);
 
     const closeAll = () => {
         setShowEdit(false);
@@ -109,6 +130,7 @@ export default function BillingModals() {
     };
 
     const handleSendReminder = async (data) => {
+        if (!data.tn) return;
         if (!confirm(`Send payment reminder to ${data.tenant}?`)) return;
         try {
             const res = await fetch(`/admin/billing/${data.tn}/remind`, {
@@ -124,9 +146,15 @@ export default function BillingModals() {
     };
 
     const handleSaveEdit = async (formData) => {
-        if (!invoice) return;
+        if (!invoice || !invoice.tn) return;
         setSaving(true);
         try {
+            // CRITICAL FIX: Pass the transaction_no in the body so Laravel can bind the model
+            const payload = {
+                ...formData,
+                transaction_no: invoice.tn 
+            };
+
             const res = await fetch(`/admin/billing/${invoice.tn}`, {
                 method: "PUT",
                 headers: {
@@ -134,7 +162,7 @@ export default function BillingModals() {
                     Accept: "application/json",
                     "X-CSRF-TOKEN": csrf(),
                 },
-                body: JSON.stringify(formData),
+                body: JSON.stringify(payload),
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.message || "Failed to update.");
@@ -148,7 +176,7 @@ export default function BillingModals() {
     };
 
     const confirmVerify = async () => {
-        if (!invoice) return;
+        if (!invoice || !invoice.tn) return;
         setSaving(true);
         try {
             const res = await fetch(`/admin/billing/${invoice.tn}/verify-payment`, {
@@ -161,8 +189,6 @@ export default function BillingModals() {
             const result = await res.json();
             
             if (!res.ok) {
-                // If the backend blocks it because it's no longer pending,
-                // tell the user and reload so they see the true state.
                 if (res.status === 422 && result.message.includes("not pending")) {
                     alert(result.message + "\n\nThe page will now refresh to show the latest status.");
                     window.location.reload();
@@ -206,7 +232,7 @@ export default function BillingModals() {
     };
 
     const confirmReject = async () => {
-        if (!invoice) return;
+        if (!invoice || !invoice.tn) return;
         if (!rejectNotes.trim()) {
             alert("Please provide a reason for rejection.");
             return;

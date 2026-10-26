@@ -12,13 +12,13 @@ export default function ReservationsModals() {
     const [saving, setSaving]                     = useState(false);
     const [reservationsData, setReservationsData] = useState({});
 
-    // Confirmation modals state
     const [showApprove, setShowApprove]           = useState(false);
     const [showReject, setShowReject]             = useState(false);
     const [rejectNotes, setRejectNotes]           = useState('');
     const [actionTarget, setActionTarget]         = useState(null);
 
     useEffect(() => {
+        // Initial load
         const el = document.getElementById('admin-reservations-modals');
         if (el?.dataset?.reservations) {
             try {
@@ -27,8 +27,64 @@ export default function ReservationsModals() {
                 console.error('Invalid reservations JSON', e);
             }
         }
+
+        // ── Live Event Handlers (Fired by Blade) ──
+        const handleLiveUpdate = (e) => {
+            setReservationsData(e.detail || {});
+        };
+
+        const handleOpenApprove = (e) => {
+            const id = e.detail.id;
+            // Read from the state updater to ensure we have the latest data
+            setReservationsData(prev => {
+                const found = Object.values(prev).find(r => r.id == id);
+                if (found) {
+                    setActionTarget(found);
+                    setShowApprove(true);
+                }
+                return prev;
+            });
+        };
+
+        const handleOpenReject = (e) => {
+            const id = e.detail.id;
+            setReservationsData(prev => {
+                const found = Object.values(prev).find(r => r.id == id);
+                if (found) {
+                    setActionTarget(found);
+                    setRejectNotes('');
+                    setShowReject(true);
+                }
+                return prev;
+            });
+        };
+
+        const handleOpenView = (e) => {
+            const key = e.detail.key;
+            setReservationsData(prev => {
+                const found = prev[key];
+                if (found) {
+                    setData(found);
+                    setAdminNotes(found.adminNotes || '');
+                }
+                return prev;
+            });
+        };
+
+        window.addEventListener('reservation:data-updated', handleLiveUpdate);
+        window.addEventListener('reservation:approve', handleOpenApprove);
+        window.addEventListener('reservation:reject', handleOpenReject);
+        window.addEventListener('reservation:view', handleOpenView);
+
+        return () => {
+            window.removeEventListener('reservation:data-updated', handleLiveUpdate);
+            window.removeEventListener('reservation:approve', handleOpenApprove);
+            window.removeEventListener('reservation:reject', handleOpenReject);
+            window.removeEventListener('reservation:view', handleOpenView);
+        };
     }, []);
 
+    // sendAction and remaining code stays the same...
     const sendAction = useCallback(async (id, action, body = {}) => {
         if (id == null || id === '' || id === 'undefined') {
             throw new Error('Missing reservation id.');
