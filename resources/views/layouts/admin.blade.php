@@ -39,6 +39,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta name="csrf-token" content="{{ csrf_token() }}">
+
+    {{-- Reinforce anti-Back-Button behaviour on the client side --}}
+    <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+
     <title>@yield('title', 'Admin Portal') — JLM Cozy Cabin</title>
 
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -64,11 +70,12 @@
     @stack('styles')
 </head>
 
-<form id="logout-form" action="{{ route('logout') }}" method="POST" class="hidden">
-    @csrf
-</form>
-
 <body class="bg-[#f4f6f9] text-slate-900 antialiased flex h-full w-full overflow-hidden">
+
+    {{-- Hidden logout form — submitted by LogoutModal via confirmLogout() --}}
+    <form id="logout-form" action="{{ route('logout') }}" method="POST" class="hidden">
+        @csrf
+    </form>
 
     <div id="admin-sidebar-overlay"
          class="fixed inset-0 bg-slate-900/50 z-[999] hidden md:hidden backdrop-blur-sm"></div>

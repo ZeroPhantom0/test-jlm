@@ -7,6 +7,7 @@ use Illuminate\Foundation\Configuration\Middleware;
 use App\Http\Middleware\EnsureUserIsAdmin;
 use App\Http\Middleware\EnsureOnboardingComplete;
 use App\Http\Middleware\EnsureOnboardingStep;
+use App\Http\Middleware\PreventBackButtonCache;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -22,9 +23,10 @@ return Application::configure(basePath: dirname(__DIR__))
 
         // Register middleware aliases
         $middleware->alias([
-            'admin'               => EnsureUserIsAdmin::class,
-            'onboarding.complete' => EnsureOnboardingComplete::class,
-            'onboarding.step'     => EnsureOnboardingStep::class,
+            'admin'              => EnsureUserIsAdmin::class,
+            'onboarding.complete'=> EnsureOnboardingComplete::class,
+            'onboarding.step'    => EnsureOnboardingStep::class,
+            'prevent.back.cache' => PreventBackButtonCache::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {

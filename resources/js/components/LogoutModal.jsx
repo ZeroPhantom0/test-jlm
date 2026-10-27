@@ -1,7 +1,7 @@
 // resources/js/components/LogoutModal.jsx
 import React, { useState, useEffect } from 'react';
 import Modal from './Modal';
-import { logout } from '../utils/logout'; // We will create this below
+import { confirmLogout } from '../utils/logout';
 
 export default function LogoutModal() {
     const [isOpen, setIsOpen] = useState(false);
@@ -16,9 +16,7 @@ export default function LogoutModal() {
     const handleClose = () => setIsOpen(false);
 
     const handleConfirm = () => {
-        // Submit the hidden form defined in your Blade layouts
-        const form = document.getElementById('logout-form');
-        if (form) form.submit();
+        confirmLogout();
     };
 
     if (!isOpen) return null;
@@ -26,14 +24,14 @@ export default function LogoutModal() {
     return (
         <Modal onClose={handleClose} maxWidth="max-w-[420px]">
             <div className="p-5 flex justify-end pb-0">
-                <button 
-                    onClick={handleClose} 
+                <button
+                    onClick={handleClose}
                     className="text-slate-400 hover:text-slate-600 transition"
                 >
                     <i className="fa-solid fa-xmark text-xl"></i>
                 </button>
             </div>
-            
+
             <div className="px-8 pb-8 pt-2 flex flex-col items-center text-center">
                 {/* Red Icon Box */}
                 <div className="w-[52px] h-[52px] rounded-[14px] bg-rose-50 flex items-center justify-center text-rose-500 mb-4">
@@ -42,7 +40,7 @@ export default function LogoutModal() {
 
                 {/* Title */}
                 <h3 className="text-[20px] font-bold text-slate-900 mb-2">Logout</h3>
-                
+
                 {/* Message */}
                 <p className="text-[14px] text-slate-500 font-medium">
                     Are you sure want to logout?

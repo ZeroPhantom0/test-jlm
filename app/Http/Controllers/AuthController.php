@@ -354,7 +354,16 @@ class AuthController extends Controller
         $request->session()->invalidate();
         $request->session()->regenerateToken();
 
-        return Inertia::location('/');
+        // Force a real browser navigation (not an Inertia SPA visit) and
+        // attach anti-cache headers so pressing Back cannot restore the
+        // previously cached authenticated page from the browser's
+        // back-forward cache.
+        return redirect('/login')
+            ->withHeaders([
+                'Cache-Control' => 'no-store, no-cache, must-revalidate, max-age=0',
+                'Pragma'        => 'no-cache',
+                'Expires'       => 'Sat, 01 Jan 2000 00:00:00 GMT',
+            ]);
     }
 
     // ============ PASSWORD RESET ============

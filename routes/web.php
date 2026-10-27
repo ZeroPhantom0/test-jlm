@@ -114,7 +114,7 @@ Route::middleware('auth')->group(function () {
 // TENANT PORTAL
 // ============================================================
 
-Route::middleware(['auth', 'onboarding.complete'])
+Route::middleware(['auth', 'onboarding.complete', 'prevent.back.cache'])
     ->prefix('tenants')
     ->name('tenants.')
     ->group(function () {
@@ -146,7 +146,7 @@ Route::middleware(['auth', 'onboarding.complete'])
         Route::post('/messages/{message}/react',                [TenantMessageController::class, 'reactToMessage'])->name('messages.react');
 
         // ---------- Announcements / History ----------
-        Route::get('/announcements/data', [TenantAnnouncementController::class, 'data'])->name('announcements.data'); // NEW
+        Route::get('/announcements/data', [TenantAnnouncementController::class, 'data'])->name('announcements.data');
         Route::get('/announcements',      [TenantAnnouncementController::class, 'index'])->name('announcements');
         Route::get('/history',            [TenantHistoryController::class, 'index'])->name('history');
 
@@ -183,7 +183,7 @@ Route::middleware(['auth', 'onboarding.complete'])
 // ADMIN PORTAL
 // ============================================================
 
-Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(function () {
+Route::middleware(['auth', 'admin', 'prevent.back.cache'])->prefix('admin')->name('admin.')->group(function () {
 
     Route::get('/', [DashboardController::class, 'index'])->name('dashboard');
     Route::get('/dashboard/data', [DashboardController::class, 'data'])->name('dashboard.data');
@@ -227,7 +227,7 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
     Route::post('/reservations/{reservation}/reject',   [ReservationController::class, 'reject'])->name('reservations.reject');
 
     // ---------- Announcements ----------
-    Route::get('/announcements/data',                       [AnnouncementController::class, 'data'])->name('announcements.data'); // NEW
+    Route::get('/announcements/data',                       [AnnouncementController::class, 'data'])->name('announcements.data');
     Route::get('/announcements',                            [AnnouncementController::class, 'index'])->name('announcements');
     Route::post('/announcements',                           [AnnouncementController::class, 'store'])->name('announcements.store');
     Route::get('/announcements/{announcement}',             [AnnouncementController::class, 'show'])->name('announcements.show');
