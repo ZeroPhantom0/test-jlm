@@ -21,10 +21,6 @@
                 <p class="text-[13px] text-slate-500 mt-0.5">Track and resolve active maintenance issues submitted by tenants</p>
             </div>
         </div>
-        <div class="flex items-center gap-2 text-[11px] font-semibold text-emerald-600">
-            <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span>Live</span>
-        </div>
     </div>
 
     {{-- Stats --}}

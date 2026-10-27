@@ -20,10 +20,6 @@
                 <p class="text-[13px] text-slate-500 mt-0.5">Request to extend your lease period</p>
             </div>
         </div>
-        <div class="flex items-center gap-2 text-[11px] font-semibold text-emerald-600">
-            <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span>Live</span>
-        </div>
     </div>
 
     <div class="bg-blue-50 rounded-xl px-5 py-3.5 flex items-center gap-2.5 text-blue-600 text-[13.5px] mb-6">

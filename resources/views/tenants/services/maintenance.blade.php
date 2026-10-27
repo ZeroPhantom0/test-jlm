@@ -20,10 +20,6 @@
                 <p class="text-[13px] text-slate-500 mt-0.5">Track active and in-progress maintenance issues</p>
             </div>
         </div>
-        <div class="flex items-center gap-2 text-[11px] font-semibold text-emerald-600">
-            <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span>Live</span>
-        </div>
     </div>
 
     <div class="bg-blue-50 text-blue-600 rounded-lg px-5 py-3 flex items-center gap-2.5 mb-5 text-[13px]">

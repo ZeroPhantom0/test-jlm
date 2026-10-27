@@ -20,10 +20,6 @@
                 <p class="text-[13px] text-slate-500 mt-0.5">Review and manage pending tenant room transfer requests</p>
             </div>
         </div>
-        <div class="flex items-center gap-2 text-[11px] font-semibold text-emerald-600">
-            <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span>Live</span>
-        </div>
     </div>
 
     <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
