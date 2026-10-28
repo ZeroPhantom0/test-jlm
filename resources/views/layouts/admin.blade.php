@@ -50,11 +50,6 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
-    {{--
-        ── Echo bootstrap config only ──
-        Echo is created in resources/js/app.jsx (single source of truth).
-        Do NOT add <script src=".../pusher.min.js"> or new Echo(...) here.
-    --}}
     <script>
         window.__appConfig = {
             userId:  {{ $user?->id ?? 'null' }},
@@ -80,14 +75,17 @@
     <div id="admin-sidebar-overlay"
          class="fixed inset-0 bg-slate-900/50 z-[999] hidden md:hidden backdrop-blur-sm"></div>
 
+    {{-- SIDEBAR (Fixed height) --}}
     <div data-react="admin-sidebar"
          data-props='{!! $sidebarProps !!}'
          id="admin-sidebar-mount"
          class="shrink-0 h-full flex flex-col"></div>
 
-    <div class="flex-1 flex flex-col min-w-0 h-full overflow-y-auto">
-
-        <div data-react="admin-top-header" data-props='{!! $headerProps !!}'></div>
+    {{-- MAIN CONTENT AREA (Scrollable) --}}
+    <div class="flex-1 flex flex-col min-w-0 h-full overflow-y-auto relative">
+        
+        {{-- TOP HEADER (Sticky inside scrollable area) --}}
+        <div data-react="admin-top-header" data-props='{!! $headerProps !!}' class="sticky top-0 z-[100]"></div>
 
         <main class="flex-1">
             @yield('content')

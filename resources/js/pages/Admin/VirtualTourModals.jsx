@@ -213,6 +213,22 @@ export default function VirtualTourModals() {
         if (file) updateField('thumbnail', file);
     };
 
+    // -----------------------------------------------------------
+    // Open VR Tour in same tab
+    // -----------------------------------------------------------
+    const openVrTour = (e) => {
+        e.preventDefault();
+        if (!tour || !tour.id) return;
+        
+        // Build the viewer URL and append the `from` parameter
+        // so the tour's back button returns to the admin page
+        const baseUrl = routes().viewer.replace(':id', tour.id);
+        const fromPath = routes().fromPath || '';
+        const finalUrl = fromPath ? `${baseUrl}?from=${encodeURIComponent(fromPath)}` : baseUrl;
+        
+        window.location.href = finalUrl;
+    };
+
     if (!modal) return null;
 
     // ============================================================
@@ -408,18 +424,36 @@ export default function VirtualTourModals() {
     }
 
     // ============================================================
-    // VIEW MODAL
+    // VIEW MODAL — Opens VR Tour in same tab
     // ============================================================
     if (modal === 'view' && tour) {
         return (
             <Modal onClose={() => setModal(null)} maxWidth="max-w-[540px]">
-                <div className="relative h-[200px] bg-black shrink-0">
+                {/* 
+                  Wrap the image in an anchor tag. 
+                  Clicking it will navigate to the VR tour in the same tab,
+                  instead of opening a new window/tab.
+                */}
+                <a 
+                    href="#" 
+                    onClick={openVrTour} 
+                    className="relative h-[200px] bg-black shrink-0 block cursor-pointer group"
+                    title="Click to open full 360° tour"
+                >
                     <img
                         src={tour.thumbnail_url || 'https://via.placeholder.com/600x300?text=360+Tour'}
                         alt="Tour"
-                        className="w-full h-full object-cover"
+                        className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                     />
-                    <span className="absolute top-3 right-3 bg-black/70 text-white text-[11px] font-bold px-3 py-1 rounded-lg">
+                    
+                    {/* Hover overlay hint */}
+                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <span className="bg-white/90 text-slate-900 text-sm font-bold px-4 py-2 rounded-full inline-flex items-center gap-2">
+                            <i className="fa-solid fa-vr-cardboard"></i> Click to view Full VR Tour
+                        </span>
+                    </div>
+
+                    <span className="absolute top-3 right-3 bg-black/70 text-white text-[11px] font-bold px-3 py-1 rounded-lg backdrop-blur">
                         360° View
                     </span>
                     <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/80 to-transparent">
@@ -436,7 +470,7 @@ export default function VirtualTourModals() {
                             </span>
                         </div>
                     </div>
-                </div>
+                </a>
 
                 <div className="p-5 overflow-y-auto max-h-[60vh]">
                     <p className="text-[13px] text-slate-500 mb-4">

@@ -1,3 +1,4 @@
+{{-- resources/views/admin/reservations.blade.php --}}
 @extends('layouts.admin', ['active' => 'reservations', 'pageTitle' => 'Reservations'])
 @section('title', 'Reservations')
 
@@ -18,35 +19,20 @@
         </div>
 
         {{-- Summary Cards --}}
-        <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
             <div class="bg-white rounded-2xl px-5 py-4 border border-slate-100 shadow-sm">
-                <div class="text-[13px] font-semibold text-slate-500">Total</div>
-                <div id="metric-total" class="text-[26px] font-extrabold text-slate-900 mt-2">{{ $metrics['total'] }}</div>
+                <div class="text-[13px] font-semibold text-slate-500">Total Pending</div>
+                <div id="metric-total" class="text-[26px] font-extrabold text-slate-900 mt-2">
+                    {{ $metrics['pending'] }}</div>
             </div>
             <div class="bg-white rounded-2xl px-5 py-4 border border-slate-100 shadow-sm">
-                <div class="text-[13px] font-semibold text-slate-500">Pending</div>
+                <div class="text-[13px] font-semibold text-slate-500">Pending Review</div>
                 <div id="metric-pending"
                     class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-yellow-100 text-amber-700 text-base font-extrabold mt-2">
                     {{ $metrics['pending'] }}</div>
             </div>
-            <div class="bg-white rounded-2xl px-5 py-4 border border-slate-100 shadow-sm">
-                <div class="text-[13px] font-semibold text-slate-500">Approved</div>
-                <div id="metric-approved"
-                    class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-green-100 text-green-600 text-base font-extrabold mt-2">
-                    {{ $metrics['approved'] }}</div>
-            </div>
-            <div class="bg-white rounded-2xl px-5 py-4 border border-slate-100 shadow-sm">
-                <div class="text-[13px] font-semibold text-slate-500">Rejected</div>
-                <div id="metric-rejected"
-                    class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-rose-100 text-rose-600 text-base font-extrabold mt-2">
-                    {{ $metrics['rejected'] }}</div>
-            </div>
-            <div class="bg-white rounded-2xl px-5 py-4 border border-slate-100 shadow-sm">
-                <div class="text-[13px] font-semibold text-slate-500">Expired</div>
-                <div id="metric-expired"
-                    class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-slate-100 text-slate-500 text-base font-extrabold mt-2">
-                    {{ $metrics['expired'] }}</div>
-            </div>
+            {{-- We keep total historical counts as a subtle reference, but hide them from the main grid 
+                 since the admin cannot act on them here --}}
         </div>
 
         {{-- Table Card --}}
@@ -62,11 +48,8 @@
                 </div>
                 <select id="res-status-filter"
                     class="h-9 pl-3 pr-8 rounded-lg border border-slate-200 bg-slate-50/60 text-[12.5px] text-slate-700 outline-none cursor-pointer appearance-none bg-[url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 fill=%22none%22 viewBox=%220 0 24 24%22 stroke=%22%2394a3b8%22 stroke-width=%222%22><path stroke-linecap=%22round%22 stroke-linejoin=%22round%22 d=%22M19 9l-7 7-7-7%22/></svg>')] bg-[length:14px] bg-[right_10px_center] bg-no-repeat transition focus:border-teal-400 focus:bg-white focus:ring-2 focus:ring-teal-100 min-w-[180px]">
-                    <option value="">All Statuses</option>
+                    <option value="">All Pending</option>
                     <option value="Pending">Pending</option>
-                    <option value="Approved">Approved</option>
-                    <option value="Rejected">Rejected</option>
-                    <option value="Expired">Expired</option>
                 </select>
             </div>
 
@@ -74,7 +57,7 @@
             <div class="overflow-x-auto">
                 <table class="w-full text-left">
                     <thead>
-                        <tr class="text-[13px] font-bold text-slate-600 border-b border-slate-100 whitespace-nowrap">
+                        <tr class="text-[11px] uppercase tracking-wider font-bold text-slate-400 border-b border-slate-200 whitespace-nowrap">
                             <th class="py-3 px-4">Resident</th>
                             <th class="py-3 px-4">Contact</th>
                             <th class="py-3 px-4">Desired Room</th>
@@ -92,7 +75,7 @@
                 </table>
                 <div id="res-empty-filter" class="hidden text-center py-12 text-slate-400">
                     <i class="fa-solid fa-magnifying-glass text-4xl mb-3 opacity-50"></i>
-                    <p class="text-sm">No reservations match your current filters.</p>
+                    <p class="text-sm">No pending reservations match your current filters.</p>
                 </div>
             </div>
         </div>
@@ -124,14 +107,14 @@
     function rowTemplate(r) {
         const checkoutClass = r.check_out_is_null ? 'text-slate-400 italic' : 'text-slate-700';
         const checkoutIcon  = r.check_out_is_null ? 'fa-calendar-xmark' : 'fa-calendar-xmark';
-        const actions = r.status === 'Pending'
-            ? `
-                <i class="fa-regular fa-circle-check text-emerald-500 text-[15px] cursor-pointer hover:text-emerald-600 transition icon-approve"
-                    title="Approve" data-res-id="${r.id}"></i>
-                <i class="fa-regular fa-circle-xmark text-rose-500 text-[15px] cursor-pointer hover:text-rose-600 transition icon-reject"
-                    title="Reject" data-res-id="${r.id}"></i>
-            `
-            : '';
+        
+        // Only Pending items will reach here based on backend filter
+        const actions = `
+            <i class="fa-regular fa-circle-check text-emerald-500 text-[15px] cursor-pointer hover:text-emerald-600 transition icon-approve"
+                title="Approve" data-res-id="${r.id}"></i>
+            <i class="fa-regular fa-circle-xmark text-rose-500 text-[15px] cursor-pointer hover:text-rose-600 transition icon-reject"
+                title="Reject" data-res-id="${r.id}"></i>
+        `;
 
         return `
             <tr class="res-row border-b border-slate-50 last:border-0"
@@ -140,49 +123,49 @@
                 data-search="${escapeHtml([
                     r.tenant_name, r.email, r.phone, r.desired_room, r.reference_no
                 ].join(' ').toLowerCase())}">
-                <td class="py-4 px-4">
+                <td class="py-3.5 px-4">
                     <div class="flex items-center gap-3">
-                        <div class="w-9 h-9 rounded-full ${escapeHtml(r.avatar_bg)} ${escapeHtml(r.avatar_color)} flex items-center justify-center text-[14px] font-bold shrink-0">
+                        <div class="w-8 h-8 rounded-full ${escapeHtml(r.avatar_bg)} ${escapeHtml(r.avatar_color)} flex items-center justify-center text-[12px] font-bold shrink-0">
                             ${escapeHtml(r.tenant_initial)}
                         </div>
                         <div>
-                            <div class="font-bold text-slate-900 text-[13px]">${escapeHtml(r.tenant_name)}</div>
+                            <div class="font-semibold text-slate-900 text-[13.5px] tracking-tight">${escapeHtml(r.tenant_name)}</div>
                             <div class="text-[11px] text-slate-400 mt-0.5">${escapeHtml(r.reference_no)}</div>
                         </div>
                     </div>
                 </td>
-                <td class="py-4 px-4">
-                    <div class="text-[13px] text-slate-700">${escapeHtml(r.email)}</div>
+                <td class="py-3.5 px-4">
+                    <div class="text-[12.5px] text-slate-700">${escapeHtml(r.email)}</div>
                     <div class="text-[11px] text-slate-400 mt-0.5">${escapeHtml(r.phone)}</div>
                 </td>
-                <td class="py-4 px-4">
-                    <div class="text-[13px] font-medium text-slate-700">${escapeHtml(r.desired_room)}</div>
+                <td class="py-3.5 px-4">
+                    <div class="text-[12.5px] font-medium text-slate-700">${escapeHtml(r.desired_room)}</div>
                 </td>
-                <td class="py-4 px-4">
-                    <div class="flex items-center gap-2 text-[13px] text-slate-700">
-                        <i class="fa-regular fa-calendar text-slate-400 text-[13px]"></i>
+                <td class="py-3.5 px-4">
+                    <div class="flex items-center gap-2 text-[12.5px] text-slate-700">
+                        <i class="fa-regular fa-calendar text-slate-400 text-[11px]"></i>
                         ${escapeHtml(r.formatted_check_in)}
                     </div>
                 </td>
-                <td class="py-4 px-4">
-                    <div class="flex items-center gap-2 text-[13px] ${checkoutClass}">
-                        <i class="fa-regular ${checkoutIcon} text-slate-400 text-[13px]"></i>
+                <td class="py-3.5 px-4">
+                    <div class="flex items-center gap-2 text-[12.5px] ${checkoutClass}">
+                        <i class="fa-regular ${checkoutIcon} text-slate-400 text-[11px]"></i>
                         ${escapeHtml(r.formatted_check_out)}
                     </div>
                 </td>
-                <td class="py-4 px-4">
-                    <div class="font-extrabold text-emerald-600 text-[13px]">${escapeHtml(r.formatted_fee)}</div>
+                <td class="py-3.5 px-4">
+                    <div class="font-bold text-emerald-600 text-[13px] tracking-tight">${escapeHtml(r.formatted_fee)}</div>
                 </td>
-                <td class="py-4 px-4 text-[13px] text-slate-600 whitespace-nowrap">${escapeHtml(r.created_at ?? '')}</td>
-                <td class="py-4 px-4">
-                    <span class="inline-flex items-center gap-1.5 ${escapeHtml(r.status_class)} px-3 py-1 rounded-full text-[11px] font-bold whitespace-nowrap">
+                <td class="py-3.5 px-4 text-[12.5px] text-slate-600 whitespace-nowrap">${escapeHtml(r.created_at ?? '')}</td>
+                <td class="py-3.5 px-4">
+                    <span class="inline-flex items-center gap-1.5 ${escapeHtml(r.status_class)} px-2.5 py-1 rounded-full text-[10.5px] font-bold whitespace-nowrap">
                         <i class="${escapeHtml(r.status_icon)}"></i> ${escapeHtml(r.status)}
                     </span>
                 </td>
-                <td class="py-4 px-4">
+                <td class="py-3.5 px-4">
                     <div class="flex items-center justify-end gap-3">
                         ${actions}
-                        <i class="fa-regular fa-eye text-slate-700 text-[15px] cursor-pointer hover:text-orange-500 transition icon-view"
+                        <i class="fa-regular fa-eye text-slate-400 text-[15px] cursor-pointer hover:text-slate-900 transition icon-view"
                             title="View Details" data-res-key="${escapeHtml(r.reference_no)}"></i>
                     </div>
                 </td>
@@ -209,7 +192,6 @@
     }
 
     function bindRowActions() {
-        // Approve/reject/view buttons delegate to the existing React modals
         tbody.querySelectorAll('.icon-approve').forEach((el) => {
             el.onclick = () => window.dispatchEvent(new CustomEvent('reservation:approve', { detail: { id: +el.dataset.resId } }));
         });
@@ -222,11 +204,8 @@
     }
 
     function setMetrics(m) {
-        document.getElementById('metric-total').textContent    = m.total;
+        document.getElementById('metric-total').textContent    = m.pending;
         document.getElementById('metric-pending').textContent  = m.pending;
-        document.getElementById('metric-approved').textContent = m.approved;
-        document.getElementById('metric-rejected').textContent = m.rejected;
-        document.getElementById('metric-expired').textContent  = m.expired;
     }
 
     async function refresh() {
@@ -237,12 +216,14 @@
             });
             if (!res.ok) return;
             const data = await res.json();
-            allRows = data.rows || [];
+            
+            // Defensive filter: ensure we only render pending items in the table
+            allRows = (data.rows || []).filter(r => r.status === 'Pending');
+            
             currentReact = data.react || {};
             setMetrics(data.metrics || {});
             renderRows();
 
-            // Update React modal data attribute so modals see fresh data
             if (modalsEl) {
                 modalsEl.dataset.reservations = JSON.stringify(currentReact);
                 window.dispatchEvent(new CustomEvent('reservation:data-updated', { detail: currentReact }));
@@ -255,7 +236,7 @@
     searchInput?.addEventListener('input', () => { clearTimeout(t); t = setTimeout(renderRows, 120); });
     statusFilter?.addEventListener('change', renderRows);
 
-    // --- polling fallback (every 15s) ---
+    // --- polling fallback (every 3s) ---
     let pollTimer = setInterval(refresh, 3000);
     document.addEventListener('visibilitychange', () => {
         if (document.hidden) clearInterval(pollTimer);

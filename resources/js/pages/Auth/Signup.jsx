@@ -1,6 +1,6 @@
-// resources/js/Pages/Auth/Signup.jsx
+// resources/js/pages/Auth/Signup.jsx
 import React, { useState } from 'react';
-import { Head, Link, useForm } from '@inertiajs/react';
+import { Head, Link, useForm, router } from '@inertiajs/react';
 
 export default function Signup() {
     const [showPw, setShowPw]           = useState(false);
@@ -20,6 +20,11 @@ export default function Signup() {
         post('/signup', {
             onFinish: () => reset('password', 'password_confirmation'),
         });
+    };
+
+    const handleLoginNav = (e) => {
+        e.preventDefault();
+        router.visit('/login');
     };
 
     const fieldError = (field) => errors[field] && (
@@ -218,7 +223,10 @@ export default function Signup() {
                         </button>
 
                         <p className="login-link-text">
-                            Already have an account? <Link href="/login">Log in</Link>
+                            Already have an account?{" "}
+                            <a href="/login" onClick={handleLoginNav}>
+                                Log in
+                            </a>
                         </p>
                     </form>
                 </div>

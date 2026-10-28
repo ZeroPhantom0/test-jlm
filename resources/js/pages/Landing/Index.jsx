@@ -70,13 +70,10 @@ const NAV_LINKS = [
    MAIN COMPONENT
    ============================================================ */
 export default function Index({ rooms = [] }) {
-    // If the user lands on /#rooms (e.g. from the tour "Back to Rooms"
-    // button), scroll to the Rooms section after mount.
     useEffect(() => {
         if (window.location.hash === "#rooms") {
             const el = document.getElementById("rooms");
             if (el) {
-                // Defer to allow layout to settle
                 setTimeout(
                     () =>
                         el.scrollIntoView({ behavior: "auto", block: "start" }),
@@ -102,7 +99,7 @@ export default function Index({ rooms = [] }) {
 }
 
 /* ============================================================
-   HEADER
+   HEADER — OPTIMIZED AUTH NAVIGATION
    ============================================================ */
 function LandingHeader() {
     const [activeSection, setActiveSection] = useState("home");
@@ -146,28 +143,30 @@ function LandingHeader() {
         if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
     };
 
+    // Instant navigation — triggers Inertia load WHILE the splash plays
     const handleAuthNav = (e, target) => {
         e.preventDefault();
         setMobileNavOpen(false);
         setSplash({ target });
-    };
 
-    const handleSplashComplete = () => {
-        if (splash?.target) router.visit(splash.target);
-        setSplash(null);
+        router.visit(target, {
+            onFinish: () => {
+                // Clean up splash just in case the component hasn't unmounted yet
+                setTimeout(() => setSplash(null), 100);
+            },
+        });
     };
 
     return (
         <>
             {splash && (
                 <SplashScreen
-                    duration={1800}
+                    duration={800}
                     message={
                         splash.target === "/login"
                             ? "Signing you in…"
                             : "Creating your account…"
                     }
-                    onComplete={handleSplashComplete}
                 />
             )}
 
@@ -335,13 +334,15 @@ function AboutSection() {
 }
 
 /* ============================================================
-   AMENITIES CAROUSEL
+   AMENITIES CAROUSEL — True Infinite Loop via Slide Cloning
    ============================================================ */
 function AmenitiesCarousel() {
-    const [index, setIndex] = useState(0);
     const [visibleCount, setVisibleCount] = useState(3);
+    const [index, setIndex] = useState(0);
+    const [animate, setAnimate] = useState(true);
     const touchStartX = useRef(0);
     const touchDeltaX = useRef(0);
+    const isAnimatingRef = useRef(false);
 
     useEffect(() => {
         const update = () => {
@@ -355,26 +356,64 @@ function AmenitiesCarousel() {
         return () => window.removeEventListener("resize", update);
     }, []);
 
-    const maxIndex = Math.max(0, AMENITIES.length - visibleCount);
+    const total = AMENITIES.length;
+    const clonesCount = Math.min(visibleCount, total);
+    const extended = [
+        ...AMENITIES.slice(-clonesCount),
+        ...AMENITIES,
+        ...AMENITIES.slice(0, clonesCount),
+    ];
 
-    useEffect(() => {
-        if (index > maxIndex) setIndex(maxIndex);
-    }, [maxIndex, index]);
+    const trackOffset = clonesCount;
+    const stepPct = 100 / visibleCount;
 
-    const next = useCallback(
-        () => setIndex((i) => Math.min(i + 1, maxIndex)),
-        [maxIndex],
-    );
-    const prev = useCallback(() => setIndex((i) => Math.max(i - 1, 0)), []);
+    const resetWithoutAnimation = useCallback(() => {
+        setAnimate(false);
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => setAnimate(true));
+        });
+    }, []);
+
+    const goNext = useCallback(() => {
+        if (isAnimatingRef.current) return;
+        isAnimatingRef.current = true;
+        setAnimate(true);
+        setIndex((i) => i + 1);
+    }, []);
+
+    const goPrev = useCallback(() => {
+        if (isAnimatingRef.current) return;
+        isAnimatingRef.current = true;
+        setAnimate(true);
+        setIndex((i) => i - 1);
+    }, []);
+
+    const handleTransitionEnd = (e) => {
+        if (e.propertyName !== "transform") return;
+        if (index < 0) {
+            resetWithoutAnimation();
+            setIndex(total - 1);
+        } else if (index >= total) {
+            resetWithoutAnimation();
+            setIndex(0);
+        }
+        isAnimatingRef.current = false;
+    };
+
+    const goTo = (realIndex) => {
+        if (isAnimatingRef.current) return;
+        setAnimate(true);
+        setIndex(realIndex);
+    };
 
     useEffect(() => {
         const handler = (e) => {
-            if (e.key === "ArrowRight") next();
-            if (e.key === "ArrowLeft") prev();
+            if (e.key === "ArrowRight") goNext();
+            if (e.key === "ArrowLeft") goPrev();
         };
         window.addEventListener("keydown", handler);
         return () => window.removeEventListener("keydown", handler);
-    }, [next, prev]);
+    }, [goNext, goPrev]);
 
     const onTouchStart = (e) => {
         touchStartX.current = e.touches[0].clientX;
@@ -384,18 +423,26 @@ function AmenitiesCarousel() {
         touchDeltaX.current = e.touches[0].clientX - touchStartX.current;
     };
     const onTouchEnd = () => {
-        if (touchDeltaX.current > 50) prev();
-        if (touchDeltaX.current < -50) next();
+        if (touchDeltaX.current > 50) goPrev();
+        if (touchDeltaX.current < -50) goNext();
         touchDeltaX.current = 0;
     };
 
+    const offset = (index + trackOffset) * stepPct;
+
     const trackStyle = {
-        transform: `translateX(-${index * (100 / visibleCount)}%)`,
+        transform: `translateX(-${offset}%)`,
+        transition: animate
+            ? "transform 0.45s cubic-bezier(0.4, 0, 0.2, 1)"
+            : "none",
     };
+
     const slideStyle = {
-        flex: `0 0 ${100 / visibleCount}%`,
-        maxWidth: `${100 / visibleCount}%`,
+        flex: `0 0 ${stepPct}%`,
+        maxWidth: `${stepPct}%`,
     };
+
+    const activeDot = ((index % total) + total) % total;
 
     return (
         <section className="amenities-section" id="services">
@@ -412,8 +459,7 @@ function AmenitiesCarousel() {
                 <button
                     type="button"
                     className="carousel-btn carousel-btn-prev"
-                    onClick={prev}
-                    disabled={index === 0}
+                    onClick={goPrev}
                     aria-label="Previous amenities"
                 >
                     <i className="bi bi-chevron-left" />
@@ -425,46 +471,50 @@ function AmenitiesCarousel() {
                     onTouchMove={onTouchMove}
                     onTouchEnd={onTouchEnd}
                 >
-                    <div className="amenities-track" style={trackStyle}>
-                        {AMENITIES.map((a) => (
-                            <div
-                                className="amenity-slide"
-                                style={slideStyle}
-                                key={a.id}
-                            >
-                                <div className="amenity-card">
-                                    <div
-                                        className={`amenity-image image-${a.id}`}
-                                    >
-                                        <img
-                                            src={a.image}
-                                            alt={a.title}
-                                            className="amenity-img"
-                                            loading="lazy"
-                                            onError={(e) => {
-                                                e.currentTarget.style.display =
-                                                    "none";
-                                            }}
-                                        />
-                                        <div className="amenity-icon">
-                                            <i className={`bi ${a.icon}`} />
+                    <div
+                        className="amenities-track"
+                        style={trackStyle}
+                        onTransitionEnd={handleTransitionEnd}
+                    >
+                        {extended.map((a, i) => {
+                            const isClone = i < clonesCount || i >= clonesCount + total;
+                            return (
+                                <div
+                                    className="amenity-slide"
+                                    style={slideStyle}
+                                    key={`${a.id}-${i}`}
+                                    aria-hidden={isClone ? "true" : undefined}
+                                >
+                                    <div className="amenity-card">
+                                        <div className={`amenity-image image-${a.id}`}>
+                                            <img
+                                                src={a.image}
+                                                alt={a.title}
+                                                className="amenity-img"
+                                                loading="lazy"
+                                                onError={(e) => {
+                                                    e.currentTarget.style.display = "none";
+                                                }}
+                                            />
+                                            <div className="amenity-icon">
+                                                <i className={`bi ${a.icon}`} />
+                                            </div>
+                                        </div>
+                                        <div className="amenity-content">
+                                            <h3>{a.title}</h3>
+                                            <p>{a.description}</p>
                                         </div>
                                     </div>
-                                    <div className="amenity-content">
-                                        <h3>{a.title}</h3>
-                                        <p>{a.description}</p>
-                                    </div>
                                 </div>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 </div>
 
                 <button
                     type="button"
                     className="carousel-btn carousel-btn-next"
-                    onClick={next}
-                    disabled={index >= maxIndex}
+                    onClick={goNext}
                     aria-label="Next amenities"
                 >
                     <i className="bi bi-chevron-right" />
@@ -472,12 +522,12 @@ function AmenitiesCarousel() {
             </div>
 
             <div className="carousel-dots">
-                {Array.from({ length: maxIndex + 1 }).map((_, i) => (
+                {AMENITIES.map((_, i) => (
                     <button
                         key={i}
                         type="button"
-                        className={`carousel-dot ${i === index ? "active" : ""}`}
-                        onClick={() => setIndex(i)}
+                        className={`carousel-dot ${activeDot === i ? "active" : ""}`}
+                        onClick={() => goTo(i)}
                         aria-label={`Go to slide ${i + 1}`}
                     />
                 ))}
@@ -487,13 +537,18 @@ function AmenitiesCarousel() {
 }
 
 /* ============================================================
-   ROOMS — Grouped by Type with Dynamic Headers
+   ROOMS
    ============================================================ */
 function RoomsSection({ rooms }) {
-    // Group rooms by type
-    const soloRooms = rooms.filter((r) => r.room_type === "Solo Room");
-    const bedspaceRooms = rooms.filter((r) => r.room_type === "Bedspace");
-    const barkadaRooms = rooms.filter((r) => r.room_type === "Barkada Room");
+    const publishedRooms = rooms.filter((r) => {
+        const status = String(r.status || "").toLowerCase();
+        if (status === "draft") return false;
+        return true;
+    });
+
+    const soloRooms = publishedRooms.filter((r) => r.room_type === "Solo Room");
+    const bedspaceRooms = publishedRooms.filter((r) => r.room_type === "Bedspace");
+    const barkadaRooms = publishedRooms.filter((r) => r.room_type === "Barkada Room");
 
     return (
         <section className="rooms-section" id="rooms">
@@ -517,7 +572,6 @@ function RoomsSection({ rooms }) {
                 </div>
             </div>
 
-            {/* Render categories only if rooms exist */}
             {soloRooms.length > 0 && (
                 <>
                     <div className="category-header">
@@ -560,7 +614,7 @@ function RoomsSection({ rooms }) {
                 </>
             )}
 
-            {rooms.length === 0 && (
+            {publishedRooms.length === 0 && (
                 <div className="rooms-empty">
                     <i className="bi bi-door-closed" />
                     <p>
@@ -581,12 +635,13 @@ function RoomCard({ room }) {
             Occupied: "occupied-status",
         }[room.status] || "available-status";
 
-    const hasTour = !!room.has_tour && !!room.tour_id;
+    const isDraft = String(room.status || "").toLowerCase() === "draft";
+    const tourIsPublished =
+        room.tour_status === undefined || room.tour_status === "Published";
+    const hasTour =
+        !isDraft && room.has_tour === true && !!room.tour_id && tourIsPublished;
     const tourUrl = hasTour ? `/tour/${room.tour_id}` : null;
 
-    // Use a plain <a> (same-tab navigation) so the browser sends the
-    // Referer header to /tour/{id}. The tour-viewer uses that Referer
-    // to know it should send the user back to /#rooms.
     const ImageWrapper = hasTour ? "a" : "div";
     const imageProps = hasTour
         ? {
@@ -671,13 +726,12 @@ function RoomCard({ room }) {
 }
 
 /* ============================================================
-   CONTACT — SIDE-BY-SIDE (LEFT: Info, RIGHT: Stacked Grid)
+   CONTACT
    ============================================================ */
 function ContactSection() {
     return (
         <section className="contact-section" id="contact">
             <div className="contact-container">
-                {/* LEFT: Info */}
                 <div className="contact-info">
                     <div className="contact-badge">Contact Us</div>
                     <h2>
@@ -691,7 +745,6 @@ function ContactSection() {
                     </p>
                 </div>
 
-                {/* RIGHT: Stacked Grid */}
                 <div className="contact-details-grid">
                     <div className="contact-detail">
                         <div className="contact-icon">
@@ -726,7 +779,7 @@ function ContactSection() {
                         </div>
                         <div>
                             <small>OFFICE HOURS</small>
-                            <p>Mon–Sat, 8:00 AM – 8:00 PM</p>
+                            <p>Mon–Sun, 8:00 AM – 8:00 PM</p>
                         </div>
                     </div>
                 </div>

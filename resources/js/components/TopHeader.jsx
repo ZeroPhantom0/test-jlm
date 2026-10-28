@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { logout } from "../utils/logout";
 
 const STORAGE_KEY = "tenant.dismissedNotifications";
+const MAX_VISIBLE = 5;
 
 function readDismissed() {
     try {
@@ -73,17 +74,31 @@ export default function TopHeader({
 }) {
     const [dropdownOpen, setDropdownOpen] = useState(false);
     const [notifOpen, setNotifOpen]       = useState(false);
+    
+    // Store all fetched notifications from the server
     const [rawNotifications, setRawNotifications] = useState([]);
-    const [loading, setLoading]                   = useState(false);
-    const [dismissed, setDismissed]               = useState(() => readDismissed());
+    
+    // Keep track of locally read IDs and dismissed IDs
+    const [locallyRead, setLocallyRead] = useState(new Set());
+    const [dismissed, setDismissed]     = useState(() => readDismissed());
+    
+    const [loading, setLoading] = useState(false);
 
     const dropdownRef = useRef(null);
     const notifRef    = useRef(null);
 
     const displayRole = isTenant ? "Tenant" : "New Tenant";
 
-    const notifications = rawNotifications.filter((n) => !dismissed.has(n.id));
-    const unreadCount   = notifications.filter((n) => n.unread).length;
+    // 1. Process notifications: Apply read status, filter dismissed, and limit to FIFO 5
+    const processedNotifications = rawNotifications
+        .map(n => ({
+            ...n,
+            isUnread: n.unread && !locallyRead.has(n.id) && !dismissed.has(n.id)
+        }))
+        .filter(n => !dismissed.has(n.id))
+        .slice(0, MAX_VISIBLE); // FIFO: take the first 5 (newest)
+
+    const unreadCount = processedNotifications.filter((n) => n.isUnread).length;
 
     const fetchNotifications = async () => {
         try {
@@ -97,6 +112,8 @@ export default function TopHeader({
             });
             if (!res.ok) throw new Error("Failed to load notifications");
             const data = await res.json();
+            
+            // Data comes in newest-first from the backend
             setRawNotifications(data.notifications || []);
         } catch (err) {
             console.error(err);
@@ -107,7 +124,7 @@ export default function TopHeader({
 
     useEffect(() => {
         fetchNotifications();
-        const id = setInterval(fetchNotifications, 3000);
+        const id = setInterval(fetchNotifications, 5000);
         return () => clearInterval(id);
     }, []);
 
@@ -128,25 +145,40 @@ export default function TopHeader({
         return () => document.removeEventListener("mousedown", handleClickOutside);
     }, []);
 
-    const dismiss = (id) => {
-        setDismissed((prev) => {
+    const markAsRead = (id) => {
+        setLocallyRead(prev => {
             const next = new Set(prev);
             next.add(id);
-            saveDismissed(next);
+            return next;
+        });
+    };
+
+    const markAllAsRead = () => {
+        setLocallyRead(prev => {
+            const next = new Set(prev);
+            processedNotifications.forEach(n => next.add(n.id));
             return next;
         });
     };
 
     const clearAll = () => {
-        const next = new Set(dismissed);
-        notifications.forEach((n) => next.add(n.id));
-        saveDismissed(next);
-        setDismissed(next);
+        // Only dismiss notifications that have been read
+        const nextDismissed = new Set(dismissed);
+        processedNotifications.forEach((n) => {
+            if (!n.isUnread) {
+                nextDismissed.add(n.id);
+            }
+        });
+        saveDismissed(nextDismissed);
+        setDismissed(nextDismissed);
     };
 
     const handleClickNotification = (n) => {
-        dismiss(n.id);
+        // 1. Mark locally as read
+        markAsRead(n.id);
+        setNotifOpen(false);
 
+        // 2. If it's a message, mark the underlying message as read in DB
         if (n.type === "message" && n.id.startsWith("msg-")) {
             const messageId = n.id.replace("msg-", "");
             fetch("/tenants/notifications/message-read", {
@@ -164,7 +196,7 @@ export default function TopHeader({
     };
 
     return (
-        <header className="bg-white px-4 md:px-8 py-[14px] flex items-center justify-between border-b border-slate-200 sticky top-0 z-[90] flex-shrink-0">
+        <header className="bg-white px-4 md:px-8 py-[14px] flex items-center justify-between border-b border-slate-200 w-full sticky top-0 z-[100]">
             <div className="flex items-center gap-3">
                 <button
                     type="button"
@@ -207,23 +239,35 @@ export default function TopHeader({
                                         </span>
                                     )}
                                 </div>
-                                {notifications.length > 0 && (
-                                    <button
-                                        type="button"
-                                        onClick={clearAll}
-                                        className="text-[11px] font-semibold text-orange-600 hover:text-orange-700"
-                                    >
-                                        Clear all
-                                    </button>
+                                {processedNotifications.length > 0 && (
+                                    <div className="flex items-center gap-2">
+                                        {unreadCount > 0 && (
+                                            <button
+                                                type="button"
+                                                onClick={markAllAsRead}
+                                                className="text-[11px] font-semibold text-slate-500 hover:text-slate-800"
+                                            >
+                                                Mark all read
+                                            </button>
+                                        )}
+                                        <button
+                                            type="button"
+                                            onClick={clearAll}
+                                            className="text-[11px] font-semibold text-orange-600 hover:text-orange-700"
+                                            title="Dismiss read notifications"
+                                        >
+                                            Clear read
+                                        </button>
+                                    </div>
                                 )}
                             </div>
 
                             <div className="max-h-[380px] overflow-y-auto">
-                                {loading && notifications.length === 0 ? (
+                                {loading && processedNotifications.length === 0 ? (
                                     <div className="py-12 text-center text-[12px] text-slate-500">
                                         Loading…
                                     </div>
-                                ) : notifications.length === 0 ? (
+                                ) : processedNotifications.length === 0 ? (
                                     <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
                                         <div className="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center text-slate-400 text-lg mb-2">
                                             <i className="fa-solid fa-inbox"></i>
@@ -233,20 +277,20 @@ export default function TopHeader({
                                         </p>
                                     </div>
                                 ) : (
-                                    notifications.map((n) => (
+                                    processedNotifications.map((n) => (
                                         <a
                                             key={n.id}
                                             href={n.link}
                                             onClick={() => handleClickNotification(n)}
                                             className={`flex items-start gap-3 px-4 py-3 border-b border-slate-50 last:border-b-0 hover:bg-slate-50 transition ${
-                                                n.unread ? "bg-orange-50/40" : ""
+                                                n.isUnread ? "bg-orange-50/40" : ""
                                             }`}
                                         >
                                             <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${n.color}`}>
                                                 <i className={`${n.icon} text-[13px]`}></i>
                                             </div>
                                             <div className="flex-1 min-w-0">
-                                                <p className="text-[12.5px] font-semibold text-slate-900 leading-tight">
+                                                <p className={`text-[12.5px] leading-tight ${n.isUnread ? 'font-bold text-slate-900' : 'font-medium text-slate-600'}`}>
                                                     {n.title}
                                                 </p>
                                                 <p className="text-[11.5px] text-slate-500 mt-0.5 truncate">
@@ -256,7 +300,7 @@ export default function TopHeader({
                                                     {timeAgo(n.time)}
                                                 </p>
                                             </div>
-                                            {n.unread && (
+                                            {n.isUnread && (
                                                 <span className="w-2 h-2 rounded-full bg-rose-500 mt-1.5 flex-shrink-0" />
                                             )}
                                         </a>

@@ -237,6 +237,11 @@ if (inertiaRoot && inertiaPageData) {
         setup({ el, App, props }) {
             createRoot(el).render(<App {...props} />);
         },
+        // ── Add this block to optimize the page load indicator ──
+        progress: {
+            color: '#FF8904', // Matches your brand orange
+            showSpinner: false, // Top bar only — feels much faster
+        },
     });
 }
 

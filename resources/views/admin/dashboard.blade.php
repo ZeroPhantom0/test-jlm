@@ -308,6 +308,12 @@
         const nextBtn = document.getElementById('cal-next');
 
         let currentDate = "{{ $selectedDateStr }}";
+        
+        // Get today's date strictly in YYYY-MM-DD format
+        const today = new Date();
+        const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+        const todayYear = today.getFullYear();
+        const todayMonth = today.getMonth() + 1;
 
         function renderCalendar(selectedDateStr, year, month, daysInMonth, firstDayOfMonth) {
             // Title
@@ -318,7 +324,15 @@
             const prev = new Date(dt.getFullYear(), dt.getMonth() - 1, 1);
             const next = new Date(dt.getFullYear(), dt.getMonth() + 1, 1);
             prevBtn.href = `{{ route('admin.dashboard') }}?date=${prev.toISOString().split('T')[0]}`;
-            nextBtn.href = `{{ route('admin.dashboard') }}?date=${next.toISOString().split('T')[0]}`;
+            
+            // Disable "Next" button if we are already in the current month
+            if (year > todayYear || (year === todayYear && month >= todayMonth)) {
+                nextBtn.removeAttribute('href');
+                nextBtn.classList.add('opacity-30', 'cursor-not-allowed', 'pointer-events-none');
+            } else {
+                nextBtn.href = `{{ route('admin.dashboard') }}?date=${next.toISOString().split('T')[0]}`;
+                nextBtn.classList.remove('opacity-30', 'cursor-not-allowed', 'pointer-events-none');
+            }
 
             // Cells
             const dayHeaders = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
@@ -327,14 +341,42 @@
             for (let i = 0; i < firstDayOfMonth; i++) {
                 html += `<div class="day-val opacity-0"></div>`;
             }
+            
             const selectedDay = dt.getDate();
             for (let i = 1; i <= daysInMonth; i++) {
-                const isSelected = (i === selectedDay);
                 const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
-                html += `<a href="{{ route('admin.dashboard') }}?date=${dateStr}"
-                             class="day-val ${isSelected ? 'active' : 'hover:bg-slate-100 cursor-pointer'} block text-center leading-8">
-                             ${i}
-                         </a>`;
+                const isSelected = (i === selectedDay);
+                const isToday = (dateStr === todayStr);
+                
+                // Determine if date is in the future
+                const currentLoopDate = new Date(year, month - 1, i);
+                const isFuture = currentLoopDate > today;
+
+                // Base classes (matching your project palette)
+                let classes = "day-val block text-center leading-8 transition-colors duration-150";
+                
+                // Highlighting
+                if (isSelected) {
+                    classes += " active bg-teal-600 text-white rounded-full shadow-sm";
+                } else if (isFuture) {
+                    classes += " text-slate-300 cursor-not-allowed";
+                } else {
+                    classes += " text-slate-700 hover:bg-teal-50 hover:text-teal-700 cursor-pointer rounded-full";
+                }
+
+                // Today indicator ring (matches brand orange/teal)
+                if (isToday && !isSelected) {
+                    classes += " ring-2 ring-[#FF8904] ring-offset-1 font-bold rounded-full";
+                }
+
+                // Build HTML
+                if (isFuture) {
+                    // Render as a non-clickable div for future dates
+                    html += `<div class="${classes}">${i}</div>`;
+                } else {
+                    // Render as an anchor tag for clickable dates
+                    html += `<a href="{{ route('admin.dashboard') }}?date=${dateStr}" class="${classes}">${i}</a>`;
+                }
             }
             calendarGrid.innerHTML = html;
         }

@@ -41,14 +41,13 @@
 @endphp
 
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="h-full w-full overflow-hidden">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
 
-    {{-- Reinforce anti-Back-Button behaviour on the client side --}}
     <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
@@ -58,11 +57,6 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
-    {{--
-        ── Echo bootstrap config only ──
-        Echo is created in resources/js/app.jsx (single source of truth).
-        Do NOT add <script src=".../pusher.min.js"> or new Echo(...) here.
-    --}}
     <script>
         window.__appConfig = {
             userId:  {{ $user?->id ?? 'null' }},
@@ -78,7 +72,7 @@
     @stack('styles')
 </head>
 
-<body class="bg-slate-50 flex min-h-screen text-slate-800">
+<body class="bg-slate-50 flex h-full w-full overflow-hidden text-slate-800">
 
     {{-- Hidden logout form — submitted by LogoutModal via confirmLogout() --}}
     <form id="logout-form" action="{{ route('logout') }}" method="POST" class="hidden">
@@ -88,16 +82,16 @@
     <div id="mobile-sidebar-overlay"
          class="fixed inset-0 bg-slate-900/50 z-[999] hidden md:hidden"></div>
 
-    {{-- Tenant SIDEBAR (React) --}}
+    {{-- SIDEBAR --}}
     <div data-react="sidebar"
          data-props='{!! $sidebarProps !!}'
-         id="sidebar-mount"></div>
+         id="sidebar-mount" class="shrink-0 h-full"></div>
 
-    <div class="flex-1 flex flex-col min-w-0 h-screen overflow-y-auto">
-
-        {{-- Tenant TOP HEADER (React) --}}
-        <div data-react="top-header"
-             data-props='{!! $headerProps !!}'></div>
+    {{-- MAIN CONTENT AREA (Scrollable) --}}
+    <div class="flex-1 flex flex-col min-w-0 h-full overflow-y-auto relative">
+        
+        {{-- TOP HEADER (Sticky inside scrollable area) --}}
+        <div data-react="top-header" data-props='{!! $headerProps !!}' class="sticky top-0 z-[100]"></div>
 
         <main class="flex-1">
             @yield('content')

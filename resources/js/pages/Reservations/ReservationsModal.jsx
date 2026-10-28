@@ -33,12 +33,11 @@ const FALLBACK_ROOM = {
 };
 
 // ── Due-date tiers (mirrors computeDueDate() on the server) ──
-const TIER_1_MAX_DAYS = 1;    // ≤ 1 day       → check_out (same day)
-const TIER_2_MAX_DAYS = 6;    // 2 – 6 days    → check_in + 3 days
-const TIER_3_MAX_DAYS = 31;   // 7 – 31 days   → check_in + 7 days
-const TIER_4_MAX_DAYS = 100;  // 32 – 100 days → check_in + 1 month
-const TIER_5_MAX_DAYS = 364;  // 101 – 364 days → check_in + 2 months
-                              // ≥ 365 days    → check_in + 3 months
+const TIER_1_MAX_DAYS = 1;
+const TIER_2_MAX_DAYS = 6;
+const TIER_3_MAX_DAYS = 31;
+const TIER_4_MAX_DAYS = 100;
+const TIER_5_MAX_DAYS = 364;
 
 function computeDueDatePreview(checkInDate, checkInTime, checkOutDate, checkOutTime) {
     if (!checkInDate || !checkOutDate) return null;
@@ -85,6 +84,42 @@ function describeDueRule(days) {
     return "3 months after check-in";
 }
 
+// ── sessionStorage helpers for modal state persistence ──
+const STORAGE_KEY = "reservation_modal_state";
+
+function saveModalState(state) {
+    try {
+        // Don't persist File objects (they can't be serialized)
+        const { receipt, ...rest } = state.form;
+        sessionStorage.setItem(STORAGE_KEY, JSON.stringify({
+            showDetails: state.showDetails,
+            showReserve: state.showReserve,
+            room: state.room,
+            form: rest,
+            // Track that receipt needs re-upload
+            hadReceipt: !!receipt,
+        }));
+    } catch (e) {
+        console.warn("Failed to save modal state", e);
+    }
+}
+
+function loadModalState() {
+    try {
+        const raw = sessionStorage.getItem(STORAGE_KEY);
+        if (!raw) return null;
+        return JSON.parse(raw);
+    } catch (e) {
+        return null;
+    }
+}
+
+function clearModalState() {
+    try {
+        sessionStorage.removeItem(STORAGE_KEY);
+    } catch (e) {}
+}
+
 export default function ReservationsModal() {
     const [showDetails, setShowDetails] = useState(false);
     const [showReserve, setShowReserve] = useState(false);
@@ -113,7 +148,10 @@ export default function ReservationsModal() {
         agreed_to_terms: false,
     });
 
-    // 1. Read default payload on mount AND listen for live updates
+    // Track whether we need to warn about re-uploading receipt
+    const [needsReceiptReupload, setNeedsReceiptReupload] = useState(false);
+
+    // 1. Read default payload on mount AND restore any saved modal state
     useEffect(() => {
         const el = document.getElementById("tenant-reservations-modals");
         
@@ -126,7 +164,26 @@ export default function ReservationsModal() {
             }
         }
 
-        // ── Live update listener (Triggered by your Blade script) ──
+        // ── Restore saved modal state (from before navigating to tour) ──
+        const saved = loadModalState();
+        if (saved) {
+            if (saved.room) setRoom({ ...FALLBACK_ROOM, ...saved.room });
+            if (saved.form) {
+                setForm((f) => ({ ...f, ...saved.form }));
+            }
+            if (saved.showDetails) setShowDetails(true);
+            if (saved.showReserve) {
+                setShowReserve(true);
+                if (saved.hadReceipt) {
+                    setNeedsReceiptReupload(true);
+                }
+            }
+            // Clear after restoring so a fresh reload doesn't re-open
+            // (but we keep it until the user closes the modal or navigates)
+            clearModalState();
+        }
+
+        // ── Live update listener ──
         const handleLiveUpdate = (e) => {
             if (e.detail) {
                 setReservationsData(e.detail);
@@ -144,7 +201,14 @@ export default function ReservationsModal() {
         };
     }, []);
 
-    // 2. Global click listener (Open Details, Open Reserve, Open Cancel)
+    // 2. Persist modal state whenever it changes (so tour navigation can restore it)
+    useEffect(() => {
+        if (showDetails || showReserve) {
+            saveModalState({ showDetails, showReserve, room, form });
+        }
+    }, [showDetails, showReserve, room, form]);
+
+    // 3. Global click listener (Open Details, Open Reserve, Open Cancel)
     useEffect(() => {
         const handler = (e) => {
             const detailsBtn = e.target.closest(".open-room-details-btn");
@@ -175,6 +239,7 @@ export default function ReservationsModal() {
                     room_bed_id: "",
                     agreed_to_terms: false,
                 });
+                setNeedsReceiptReupload(false);
                 setShowReserve(true);
                 return;
             }
@@ -196,10 +261,17 @@ export default function ReservationsModal() {
         return () => document.removeEventListener("click", handler);
     }, [reservationsData]);
 
-    const closeDetails = () => setShowDetails(false);
+    // ── Close helpers — also clear saved state ──
+    const closeDetails = () => {
+        setShowDetails(false);
+        clearModalState();
+    };
+
     const closeReserve = () => {
         if (inFlightRef.current) return;
         setShowReserve(false);
+        setNeedsReceiptReupload(false);
+        clearModalState();
     };
 
     const closeCancelModal = () => {
@@ -257,7 +329,7 @@ export default function ReservationsModal() {
     }, [form.check_in_date, form.check_in_time, form.check_out_date, form.check_out_time]);
 
     // ============================================================
-    // Due-date preview (uses the same tiers as the server)
+    // Due-date preview
     // ============================================================
     const dueDatePreview = useMemo(
         () => computeDueDatePreview(
@@ -268,6 +340,17 @@ export default function ReservationsModal() {
         ),
         [form.check_in_date, form.check_in_time, form.check_out_date, form.check_out_time],
     );
+
+    // ============================================================
+    // Open 360° tour — same tab, with `from` back-link
+    // ============================================================
+    const openTour = () => {
+        if (!room.tourId) return;
+        // Persist current state so the tour's back button can restore it
+        saveModalState({ showDetails, showReserve, room, form });
+        const from = encodeURIComponent(window.location.pathname);
+        window.location.href = `/tour/${room.tourId}?from=${from}`;
+    };
 
     // ============================================================
     // Submit reservation
@@ -351,7 +434,8 @@ export default function ReservationsModal() {
                 );
 
             setShowReserve(false);
-            // Soft refresh instead of hard reload
+            clearModalState();
+            setNeedsReceiptReupload(false);
             window.dispatchEvent(new Event("reservation:refresh"));
             inFlightRef.current = false;
             setSaving(false);
@@ -390,7 +474,6 @@ export default function ReservationsModal() {
 
             setShowCancel(false);
             setCancelTarget(null);
-            // Soft refresh instead of hard reload
             window.dispatchEvent(new Event("reservation:refresh"));
         } catch (err) {
             alert(err.message);
@@ -439,15 +522,14 @@ export default function ReservationsModal() {
                             </span>
 
                             {room.tourId && (
-                                <a
-                                    href={`/tour/${room.tourId}`}
-                                    target="_blank"
-                                    rel="noreferrer"
+                                <button
+                                    type="button"
+                                    onClick={openTour}
                                     className="absolute top-3 right-3 bg-black/60 hover:bg-black/80 text-white text-[10px] font-semibold px-2.5 py-1 rounded-full backdrop-blur transition"
                                 >
                                     <i className="fa-solid fa-camera mr-1"></i>{" "}
                                     360° Tour
-                                </a>
+                                </button>
                             )}
 
                             <span className="absolute bottom-3 left-3 bg-blue-50 text-blue-600 text-[10px] font-extrabold uppercase px-2.5 py-1 rounded-md">
@@ -481,7 +563,7 @@ export default function ReservationsModal() {
                                 { label: "BEDS", value: room.beds },
                                 {
                                     label: "AVAILABLE SLOTS",
-                                    value: room.is_bookable ? (room.empty_beds || "1") : "0", // <-- Changed logic
+                                    value: room.is_bookable ? (room.empty_beds || "1") : "0",
                                 },
                                 {
                                     label: "DAILY RENT",
@@ -510,7 +592,6 @@ export default function ReservationsModal() {
                             >
                                 Close
                             </button>
-                            {/* <-- Changed condition to room.is_bookable --> */}
                             {room.has_reserved ? (
                                 <button
                                     disabled
@@ -524,7 +605,6 @@ export default function ReservationsModal() {
                                         closeDetails();
                                         inFlightRef.current = false;
                                         setSaving(false);
-                                        setForm((f) => ({ ...f }));
                                         setShowReserve(true);
                                     }}
                                     className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg py-2.5 text-[13px] font-semibold"
@@ -559,6 +639,18 @@ export default function ReservationsModal() {
                         <h3 className="text-lg font-bold text-slate-900">
                             Reserve - {room.name}
                         </h3>
+
+                        {needsReceiptReupload && (
+                            <div className="bg-amber-50 border border-amber-200 rounded-lg p-2.5 flex items-start gap-2">
+                                <i className="fa-solid fa-triangle-exclamation text-amber-500 mt-0.5"></i>
+                                <p className="text-[12px] text-amber-800 leading-snug">
+                                    You navigated away from this form. For
+                                    security, your uploaded receipt was not
+                                    saved — please re-upload your payment proof
+                                    before submitting.
+                                </p>
+                            </div>
+                        )}
 
                         <div className="bg-emerald-50 rounded-xl p-3 flex items-center gap-3">
                             <img
@@ -1043,12 +1135,13 @@ export default function ReservationsModal() {
                                 <input
                                     type="file"
                                     accept="image/*"
-                                    onChange={(e) =>
+                                    onChange={(e) => {
                                         updateField(
                                             "receipt",
                                             e.target.files[0] || null,
-                                        )
-                                    }
+                                        );
+                                        setNeedsReceiptReupload(false);
+                                    }}
                                     className="hidden"
                                 />
                             </label>

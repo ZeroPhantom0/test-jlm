@@ -18,7 +18,7 @@
         </div>
         <button id="admin-open-add-tour"
                 class="bg-[#0b1930] hover:bg-[#162640] text-white px-5 py-2.5 rounded-[10px] text-sm font-semibold inline-flex items-center gap-2 transition shadow-sm">
-            <i class="fa-solid fa-plus"></i> Add Room
+            <i className="fa-solid fa-plus"></i> Add Room
         </button>
     </div>
 
@@ -94,11 +94,11 @@
                     </span>
                 @elseif($tour->status === 'Draft')
                     <span class="inline-flex items-center gap-1.5 bg-yellow-100 text-amber-700 text-[11.5px] font-bold px-3 py-1 rounded-xl">
-                        <i class="fa-solid fa-circle" style="font-size: 6px;"></i> Draft
+                        <i className="fa-solid fa-circle" style="font-size: 6px;"></i> Draft
                     </span>
                 @else
                     <span class="inline-flex items-center gap-1.5 bg-slate-100 text-slate-600 text-[11.5px] font-bold px-3 py-1 rounded-xl">
-                        <i class="fa-solid fa-circle" style="font-size: 6px;"></i> Archived
+                        <i className="fa-solid fa-circle" style="font-size: 6px;"></i> Archived
                     </span>
                 @endif
                 <div class="flex items-center gap-2 text-[12.5px] text-slate-500">
@@ -115,7 +115,7 @@
                 <a href="{{ route('admin.virtual-tour.builder', $tour->id) }}"
                    title="Hotspot Configuration"
                    class="text-slate-400 hover:text-slate-900 transition">
-                    <i class="fa-solid fa-signal"></i>
+                    <i className="fa-solid fa-signal"></i>
                 </a>
                 <i class="fa-regular fa-pen-to-square cursor-pointer hover:text-slate-900 transition edit-tour-btn"
                    data-tour='@json($tour->toEditArray())' title="Edit Tour"></i>
@@ -126,9 +126,9 @@
         </div>
         @empty
         <div class="text-center py-16 bg-white rounded-2xl border border-dashed border-slate-200">
-            <i class="fa-solid fa-folder-open text-4xl text-slate-300 mb-3"></i>
+            <i className="fa-solid fa-folder-open text-4xl text-slate-300 mb-3"></i>
             <p class="text-slate-500 font-medium">No virtual tours found.</p>
-            <p class="text-slate-400 text-sm mt-1">Click "Add Room" to create your first virtual tour.</p>
+            <p className="text-slate-400 text-sm mt-1">Click "Add Room" to create your first virtual tour.</p>
         </div>
         @endforelse
     </div>
@@ -147,6 +147,9 @@
         store:   '{{ route("admin.virtual-tour.store") }}',
         update:  '{{ route("admin.virtual-tour.update", ":id") }}',
         destroy: '{{ route("admin.virtual-tour.destroy", ":id") }}',
+        // NEW: Add the viewer route so React can open the full-page VR tour
+        viewer:  '{{ route("tour.viewer", ":id") }}',
+        fromPath: '{{ "/" . ltrim(request()->path(), "/") }}'
     };
 </script>
 @endsection

@@ -1,6 +1,6 @@
-// resources/js/Pages/Auth/Login.jsx
+// resources/js/pages/Auth/Login.jsx
 import React, { useState } from 'react';
-import { Head, Link, useForm, usePage } from '@inertiajs/react';
+import { Head, Link, useForm, usePage, router } from '@inertiajs/react';
 
 export default function Login() {
     const { props } = usePage();
@@ -22,6 +22,12 @@ export default function Login() {
         const url = new URL('/auth/google', window.location.origin);
         if (data.remember) url.searchParams.set('remember', '1');
         window.location.href = url.toString();
+    };
+
+    const handleBackHome = (e) => {
+        e.preventDefault();
+        // Instantly visit the landing page
+        router.visit('/', { replace: true });
     };
 
     return (
@@ -48,7 +54,10 @@ export default function Login() {
 
                 <div className="login-right">
                     <form className="login-form-container" onSubmit={handleLogin}>
-                        <Link href="/" className="back-home-link"><i className="bi bi-arrow-left"></i> Back to Home</Link>
+                        <a href="/" onClick={handleBackHome} className="back-home-link">
+                            <i className="bi bi-arrow-left"></i> Back to Home
+                        </a>
+                        
                         <h2>Welcome Back!</h2>
                         <p className="login-subtitle">Sign in to access your tenant portal</p>
 

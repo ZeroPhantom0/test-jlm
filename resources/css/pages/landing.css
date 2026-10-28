@@ -445,7 +445,6 @@ body:has(.landing-page) {
 }
 .amenities-track {
     display: flex;
-    transition: transform 0.45s cubic-bezier(0.4, 0, 0.2, 1);
     will-change: transform;
 }
 .amenity-slide {
@@ -466,7 +465,7 @@ body:has(.landing-page) {
     flex-direction: column;
 }
 
-/* --- Image Area (now with real <img>) --- */
+/* --- Image Area --- */
 .amenity-image {
     position: relative;
     width: 100%;
@@ -476,7 +475,6 @@ body:has(.landing-page) {
     overflow: hidden;
 }
 
-/* Fallback gradient tint per amenity (visible while image loads / if it fails) */
 .amenity-image.image-wifi {
     background: linear-gradient(135deg, #dbeafe 0%, #93c5fd 100%);
 }
@@ -496,7 +494,6 @@ body:has(.landing-page) {
     background: linear-gradient(135deg, #d1fae5 0%, #6ee7b7 100%);
 }
 
-/* The actual amenity photo */
 .amenity-img {
     width: 100%;
     height: 100%;
@@ -504,12 +501,10 @@ body:has(.landing-page) {
     display: block;
     transition: transform 0.4s ease;
 }
-
 .amenity-card:hover .amenity-img {
     transform: scale(1.05);
 }
 
-/* Icon badge (overlays image, bottom-left) */
 .amenity-icon {
     position: absolute;
     left: 16px;
@@ -528,7 +523,6 @@ body:has(.landing-page) {
     z-index: 2;
 }
 
-/* Dark gradient under the icon so it stays readable on any photo */
 .amenity-image::after {
     content: "";
     position: absolute;
@@ -563,7 +557,7 @@ body:has(.landing-page) {
     line-height: 1.55;
 }
 
-/* Carousel controls */
+/* Carousel controls — never disabled (continuous loop) */
 .carousel-btn {
     width: 40px;
     height: 40px;
@@ -581,16 +575,14 @@ body:has(.landing-page) {
     transition: all 0.18s ease;
     z-index: 2;
 }
-.carousel-btn:hover:not(:disabled) {
+.carousel-btn:hover {
     background: #ff8904;
     color: #ffffff;
     border-color: #ff8904;
     transform: scale(1.05);
 }
 .carousel-btn:disabled {
-    opacity: 0.35;
-    cursor: not-allowed;
-    box-shadow: none;
+    /* Intentionally no style — buttons are never disabled */
 }
 
 /* Carousel dots */
@@ -690,7 +682,7 @@ body:has(.landing-page) {
     background: #ff3366;
 }
 
-/* --- New Category Headers --- */
+/* --- Category Headers --- */
 .category-header {
     display: flex;
     align-items: center;
@@ -741,7 +733,7 @@ body:has(.landing-page) {
     box-shadow: 0 10px 24px rgba(0, 0, 0, 0.1);
 }
 
-/* --- Compact Card Modifier (Applied in JSX) --- */
+/* --- Compact Card Modifier --- */
 .room-card.compact {
     border-radius: 12px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
@@ -755,14 +747,14 @@ body:has(.landing-page) {
 /* --- Image Area --- */
 .room-image {
     position: relative;
-    height: 320px; /* Default height */
+    height: 320px;
     background: linear-gradient(135deg, #dfe5ec 0%, #c8d1dc 100%);
     overflow: hidden;
     display: block;
 }
 
 .room-card.compact .room-image {
-    height: 200px; /* Smaller height for 3-col grid */
+    height: 200px;
 }
 
 .room-image.clickable {
@@ -1008,7 +1000,7 @@ body:has(.landing-page) {
         grid-template-columns: 1fr;
     }
     .room-card.compact .room-image {
-        height: 260px; /* Slightly taller on mobile */
+        height: 260px;
     }
     .room-card.compact .room-title-row h3 {
         font-size: 17px;
@@ -1019,7 +1011,7 @@ body:has(.landing-page) {
 }
 
 /* ============================================================
-   CONTACT — SIDE BY SIDE (Info Left, Grid Right)
+   CONTACT
    ============================================================ */
 .contact-section {
     padding: 64px 6%;
@@ -1028,21 +1020,19 @@ body:has(.landing-page) {
     scroll-margin-top: 64px;
 }
 
-/* Side-by-side Grid */
 .contact-container {
-    max-width: 1100px; /* Wider to accommodate the split layout */
+    max-width: 1100px;
     margin: 0 auto;
     display: grid;
-    grid-template-columns: 1fr 1.2fr; /* Left info, right cards */
+    grid-template-columns: 1fr 1.2fr;
     gap: 60px;
     align-items: center;
 }
 
-/* LEFT: Info */
 .contact-info {
     display: flex;
     flex-direction: column;
-    align-items: flex-start; /* Align text to left */
+    align-items: flex-start;
     text-align: left;
 }
 
@@ -1078,7 +1068,6 @@ body:has(.landing-page) {
     line-height: 1.7;
 }
 
-/* RIGHT: Stacked Grid */
 .contact-details-grid {
     display: flex;
     flex-direction: column;
@@ -1281,7 +1270,6 @@ body:has(.landing-page) {
         padding: 48px 4% 60px;
     }
 
-    /* Contact: Switch from Side-by-Side to Stacked */
     .contact-container {
         grid-template-columns: 1fr;
         gap: 40px;
@@ -1295,11 +1283,10 @@ body:has(.landing-page) {
         margin: 0 auto;
     }
     .contact-details-grid {
-        max-width: 600px; /* Constrain width so it doesn't stretch too far */
+        max-width: 600px;
         margin: 0 auto;
     }
 
-    /* Footer */
     .footer-container {
         grid-template-columns: 1.5fr 1fr 1fr;
         gap: 32px;
@@ -1361,13 +1348,16 @@ body:has(.landing-page) {
         font-weight: 700;
     }
 
+    /* ── Login button is now always visible on mobile ── */
     .login-btn {
-        display: none;
+        height: 32px;
+        padding: 0 12px;
+        font-size: 12px;
     }
     .signup-btn {
         height: 32px;
-        padding: 0 14px;
-        font-size: 12.5px;
+        padding: 0 12px;
+        font-size: 12px;
     }
     .mobile-menu-toggle {
         display: flex;
@@ -1431,16 +1421,6 @@ body:has(.landing-page) {
     .status-item {
         font-size: 11.5px;
     }
-    .recommended-label {
-        font-size: 12.5px;
-        padding: 8px 14px;
-    }
-    .rooms-grid {
-        gap: 20px;
-    }
-    .room-image {
-        height: 280px;
-    }
 
     .contact-container {
         gap: 28px;
@@ -1475,10 +1455,20 @@ body:has(.landing-page) {
     .logo span {
         font-size: 13.5px;
     }
+
+    /* Both buttons remain visible on phones */
+    .login-btn {
+        height: 30px;
+        padding: 0 10px;
+        font-size: 11.5px;
+    }
     .signup-btn {
         height: 30px;
-        padding: 0 12px;
-        font-size: 12px;
+        padding: 0 10px;
+        font-size: 11.5px;
+    }
+    .header-buttons {
+        gap: 6px;
     }
     .mobile-menu-toggle {
         width: 34px;
@@ -1572,10 +1562,6 @@ body:has(.landing-page) {
     .rooms-section {
         padding: 40px 5% 56px;
     }
-    .rooms-grid {
-        grid-template-columns: 1fr;
-        gap: 18px;
-    }
     .room-image {
         height: 240px;
     }
@@ -1598,11 +1584,6 @@ body:has(.landing-page) {
         margin: 0 0 10px 0;
     }
 
-    .recommended-heading {
-        margin: 22px 0 18px;
-    }
-
-    /* Contact Mobile specific tweaks */
     .contact-section {
         padding: 44px 5%;
     }
@@ -1616,7 +1597,6 @@ body:has(.landing-page) {
         font-size: 18px;
     }
 
-    /* Footer */
     .footer-container {
         grid-template-columns: 1fr;
         gap: 24px;
@@ -1643,6 +1623,17 @@ body:has(.landing-page) {
     }
     .logo span {
         display: none;
+    }
+    /* Keep both auth buttons visible but compact */
+    .login-btn {
+        height: 28px;
+        padding: 0 8px;
+        font-size: 11px;
+    }
+    .signup-btn {
+        height: 28px;
+        padding: 0 8px;
+        font-size: 11px;
     }
     .hero-content {
         margin-left: 8%;
