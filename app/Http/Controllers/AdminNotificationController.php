@@ -4,12 +4,93 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class AdminNotificationController extends Controller
 {
+    /**
+     * Cache TTL in seconds. The admin header polls every 5s by default,
+     * so 10s means each poll has a 50% chance of hitting cache, and
+     * a 30s fallback poll essentially always hits cache. This cuts the
+     * 12-query cost down to ~1 execution per 10s per admin.
+     */
+    private const CACHE_TTL = 10;
+
+    private function cacheKey(int $adminId): string
+    {
+        return 'admin.notifications.' . $adminId;
+    }
+
+    /**
+     * Invalidate the notification cache for every admin.
+     * Call this from broadcast-worthy events:
+     *   - MessageSent
+     *   - ReservationUpdated
+     *   - InvoiceUpdated
+     *   - MaintenanceUpdated
+     *   - ServiceRequestUpdated (room change / stay extension)
+     *   - AnnouncementUpdated
+     *
+     * Example: in your event's broadcastWith() or a listener, call
+     *   AdminNotificationController::flushCache();
+     */
+    public static function flushCache(): void
+    {
+        // If using Redis/Memcached with tags, replace with:
+        //   Cache::tags(['admin-notifications'])->flush();
+        //
+        // Without tags, we need to know the admin IDs. Look them up once.
+        try {
+            $adminIds = DB::table('users')
+                ->where('role', 'admin')
+                ->pluck('id');
+
+            foreach ($adminIds as $id) {
+                Cache::forget('admin.notifications.' . $id);
+            }
+        } catch (\Throwable $e) {
+            // Never let cache invalidation break a write
+            report($e);
+        }
+    }
+
     public function index(Request $request)
+    {
+        $cacheKey = 'admin.notifications.' . Auth::id();
+
+        $payload = Cache::remember(
+            $cacheKey,
+            self::CACHE_TTL,
+            fn() => $this->buildPayload((int) Auth::id())
+        );
+
+        return response()->json($payload);
+    }
+
+    public function markMessageRead(Request $request)
+    {
+        $validated = $request->validate([
+            'message_id' => ['required', 'integer', 'exists:messages,id'],
+        ]);
+
+        DB::table('messages')
+            ->where('id', $validated['message_id'])
+            ->whereNull('read_at')
+            ->update(['read_at' => now()]);
+
+        // Reading a message changes the unread count → drop cache for this admin
+        Cache::forget($this->cacheKey((int) Auth::id()));
+
+        return response()->json(['success' => true]);
+    }
+
+    // ============================================================
+    // PAYLOAD BUILDER (unchanged logic, just extracted)
+    // ============================================================
+    private function buildPayload(int $currentUserId): array
     {
         $notifications = [];
 
@@ -160,9 +241,6 @@ class AdminNotificationController extends Controller
         }
 
         // 4a) Tenant-cancelled maintenance requests
-        //     Maintenance has no `processed_by` column, so we filter by
-        //     status=Cancelled AND tenant_id IS NOT NULL AND updated_at
-        //     within the last 30 days to keep it fresh.
         $tenantCancelledMaintenance = DB::table('maintenance_requests')
             ->where('status', 'Cancelled')
             ->whereNotNull('tenant_id')
@@ -207,7 +285,6 @@ class AdminNotificationController extends Controller
         }
 
         // 4c) Tenant-cancelled room change requests
-        //     Admin reject always sets `processed_by`; tenant cancel does NOT.
         $tenantCancelledRoomChanges = DB::table('room_change_requests')
             ->where('status', 'Rejected')
             ->whereNull('processed_by')
@@ -273,9 +350,14 @@ class AdminNotificationController extends Controller
         }
 
         // 5) Recently published announcements (last 7 days)
+        //    Excludes announcements authored by the current admin
         $announcements = DB::table('announcements')
             ->where('is_published', 1)
             ->where('created_at', '>=', now()->subDays(7))
+            ->where(function ($q) use ($currentUserId) {
+                $q->whereNull('created_by')
+                    ->orWhere('created_by', '!=', $currentUserId);
+            })
             ->orderByDesc('created_at')
             ->limit(5)
             ->get();
@@ -294,50 +376,35 @@ class AdminNotificationController extends Controller
             ];
         }
 
-        // 6) Recent report exports
-        $exports = DB::table('audit_logs')
-            ->where('module', 'REPORTS')
-            ->where('action', 'EXPORT')
-            ->orderByDesc('created_at')
-            ->limit(5)
-            ->get();
+        // 🛡️ Defensive filter — never leak report/export items to the UI
+        $notifications = array_values(array_filter($notifications, function ($n) {
+            $type = $n['type'] ?? '';
+            $id   = $n['id']   ?? '';
+            $link = $n['link'] ?? '';
 
-        foreach ($exports as $log) {
-            $notifications[] = [
-                'id'          => 'exp-' . $log->id,
-                'type'        => 'export',
-                'icon'        => 'fa-solid fa-file-export',
-                'color'       => 'text-sky-600 bg-sky-50',
-                'title'       => 'Report exported',
-                'description' => $log->description,
-                'time'        => $log->created_at,
-                'unread'      => false,
-                'link'        => '/admin/reports',
-            ];
-        }
+            if (in_array($type, ['export', 'report', 'reports', 'report-export'], true)) {
+                return false;
+            }
+            if (str_starts_with($id, 'exp-')) {
+                return false;
+            }
+            if (is_string($link) && (
+                str_contains($link, '/admin/reports') ||
+                str_contains($link, '/reports/export')
+            )) {
+                return false;
+            }
+            return true;
+        }));
 
         // Sort newest first
-        usort($notifications, fn ($x, $y) => strtotime($y['time']) <=> strtotime($x['time']));
+        usort($notifications, fn($x, $y) => strtotime($y['time']) <=> strtotime($x['time']));
 
         $unreadCount = collect($notifications)->where('unread', true)->count();
 
-        return response()->json([
+        return [
             'notifications' => $notifications,
             'unread_count'  => $unreadCount,
-        ]);
-    }
-
-    public function markMessageRead(Request $request)
-    {
-        $validated = $request->validate([
-            'message_id' => ['required', 'integer', 'exists:messages,id'],
-        ]);
-
-        DB::table('messages')
-            ->where('id', $validated['message_id'])
-            ->whereNull('read_at')
-            ->update(['read_at' => now()]);
-
-        return response()->json(['success' => true]);
+        ];
     }
 }

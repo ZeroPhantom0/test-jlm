@@ -6,6 +6,7 @@ use App\Models\TourScene;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class VirtualTour extends Model
@@ -25,10 +26,6 @@ class VirtualTour extends Model
         'updated_at' => 'datetime',
     ];
 
-    // ============================================================
-    // RELATIONSHIPS
-    // ============================================================
-
     public function room(): BelongsTo
     {
         return $this->belongsTo(Room::class);
@@ -38,10 +35,6 @@ class VirtualTour extends Model
     {
         return $this->hasMany(TourScene::class, 'tour_id');
     }
-
-    // ============================================================
-    // ACCESSORS
-    // ============================================================
 
     public function getThumbnailUrlAttribute(): string
     {
@@ -58,48 +51,48 @@ class VirtualTour extends Model
 
     public function getHotspotsCountAttribute(): int
     {
-        if (isset($this->attributes['hotspots_count'])) {
+        if (array_key_exists('hotspots_count', $this->attributes)) {
             return (int) $this->attributes['hotspots_count'];
         }
 
-        return $this->scenes()->withCount('hotspots')->get()->sum('hotspots_count');
+        return (int) DB::table('tour_hotspots')
+            ->join('tour_scenes', 'tour_hotspots.scene_id', '=', 'tour_scenes.id')
+            ->where('tour_scenes.tour_id', $this->id)
+            ->count();
     }
-
-    // ============================================================
-    // HELPER METHODS FOR FRONTEND
-    // ============================================================
 
     public function toEditArray(): array
     {
         return [
-            'id' => $this->id,
-            'room_id' => $this->room_id,
-            'title' => $this->title,
-            'description' => $this->description,
-            'status' => $this->status,
-            'thumbnail' => $this->thumbnail,
+            'id'            => $this->id,
+            'room_id'       => $this->room_id,
+            'title'         => $this->title,
+            'description'   => $this->description,
+            'status'        => $this->status,
+            'thumbnail'     => $this->thumbnail,
             'thumbnail_url' => $this->thumbnail_url,
-            'room_number' => $this->room->room_number ?? '',
+            'room_number'   => $this->room?->room_number ?? '',
         ];
     }
 
     public function toViewerArray(): array
     {
+        // Prefer the eager-loaded `scenes_count`; fall back to a count query
+        // only if it's missing (avoids loading every scene row).
+        $scenesCount = $this->scenes_count
+            ?? ($this->relationLoaded('scenes') ? $this->scenes->count() : $this->scenes()->count());
+
         return [
-            'id' => $this->id,
-            'title' => $this->title,
-            'description' => $this->description,
-            'status' => $this->status,
-            'thumbnail_url' => $this->thumbnail_url,
-            'room_number' => $this->room->room_number ?? 'N/A',
-            'scenes_count' => $this->scenes->count(),
-            'created_at_formatted' => $this->created_at->format('M d, Y'),
+            'id'                   => $this->id,
+            'title'                => $this->title,
+            'description'          => $this->description,
+            'status'               => $this->status,
+            'thumbnail_url'        => $this->thumbnail_url,
+            'room_number'          => $this->room?->room_number ?? 'N/A',
+            'scenes_count'         => $scenesCount,
+            'created_at_formatted' => $this->created_at?->format('M d, Y'),
         ];
     }
-
-    // ============================================================
-    // SCOPES
-    // ============================================================
 
     public function scopePublished($query)
     {

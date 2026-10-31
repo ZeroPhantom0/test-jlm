@@ -355,6 +355,29 @@
 
                 <div class="flex flex-col gap-4">
 
+                    <div class="settings-accordion bg-white border border-slate-100 rounded-xl overflow-hidden" data-accordion-key="personal-info">
+                        <div class="settings-accordion-header px-6 py-[18px] flex items-center justify-between cursor-pointer select-none hover:bg-slate-50 transition">
+                            <h4 class="text-[15px] font-semibold text-slate-900">Personal Information Collected</h4>
+                            <i class="fa-solid fa-chevron-down settings-accordion-chevron text-slate-400 text-xs transition-transform duration-300"></i>
+                        </div>
+                        <div class="settings-accordion-body max-h-0 overflow-hidden transition-all duration-300 border-t border-transparent px-6">
+                            <div class="pt-[18px] text-[13.5px] text-slate-600 leading-[1.7]">
+                                <p class="mb-3">In accordance with Republic Act No. 10173, also known as the Data Privacy Act of 2012, JLM Cozy Cabin collects and processes the following personal information from tenants and applicants:</p>
+                                <ul class="list-none pl-0 mb-3">
+                                    <li class="relative pl-4 mb-1.5 before:content-['•'] before:absolute before:left-0 before:text-slate-600 before:font-bold">Full legal name</li>
+                                    <li class="relative pl-4 mb-1.5 before:content-['•'] before:absolute before:left-0 before:text-slate-600 before:font-bold">Contact number and email address</li>
+                                    <li class="relative pl-4 mb-1.5 before:content-['•'] before:absolute before:left-0 before:text-slate-600 before:font-bold">Current address</li>
+                                    <li class="relative pl-4 mb-1.5 before:content-['•'] before:absolute before:left-0 before:text-slate-600 before:font-bold">Government-issued identification documents (e.g., National ID, Passport, Driver's License, UMID)</li>
+                                    <li class="relative pl-4 mb-1.5 before:content-['•'] before:absolute before:left-0 before:text-slate-600 before:font-bold">Emergency contact name and contact number</li>
+                                    <li class="relative pl-4 mb-1.5 before:content-['•'] before:absolute before:left-0 before:text-slate-600 before:font-bold">Profile photograph</li>
+                                    <li class="relative pl-4 mb-1.5 before:content-['•'] before:absolute before:left-0 before:text-slate-600 before:font-bold">Reservation and accommodation information</li>
+                                    <li class="relative pl-4 mb-1.5 before:content-['•'] before:absolute before:left-0 before:text-slate-600 before:font-bold">Payment-related information, including payment method and uploaded proof of payment</li>
+                                </ul>
+                                <p class="mb-3">Sensitive personal information such as government ID numbers are handled with the highest level of care and are accessed only by authorized management personnel.</p>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="settings-accordion bg-white border border-slate-100 rounded-xl overflow-hidden" data-accordion-key="purpose">
                         <div class="settings-accordion-header px-6 py-[18px] flex items-center justify-between cursor-pointer select-none hover:bg-slate-50 transition">
                             <h4 class="text-[15px] font-semibold text-slate-900">Purpose of Data Collection</h4>
@@ -377,16 +400,33 @@
                         </div>
                     </div>
 
-                    <div class="settings-accordion bg-white border border-slate-100 rounded-xl overflow-hidden" data-accordion-key="use">
+                    <div class="settings-accordion bg-white border border-slate-100 rounded-xl overflow-hidden" data-accordion-key="retention">
                         <div class="settings-accordion-header px-6 py-[18px] flex items-center justify-between cursor-pointer select-none hover:bg-slate-50 transition">
-                            <h4 class="text-[15px] font-semibold text-slate-900">Use and Storage of Data</h4>
+                            <h4 class="text-[15px] font-semibold text-slate-900">Data Storage, Account Inactivity, and Retention</h4>
                             <i class="fa-solid fa-chevron-down settings-accordion-chevron text-slate-400 text-xs transition-transform duration-300"></i>
                         </div>
                         <div class="settings-accordion-body max-h-0 overflow-hidden transition-all duration-300 border-t border-transparent px-6">
                             <div class="pt-[18px] text-[13.5px] text-slate-600 leading-[1.7]">
-                                <p class="mb-3">Your personal information is securely stored in the JLM Cozy Cabin management system and is accessible only to authorized personnel.</p>
-                                <p class="mb-3">Personal information is kept only for as long as necessary for tenancy, reservations, billing, communication, and other legitimate purposes of the system.</p>
-                                <p class="mb-3">JLM Cozy Cabin does not sell or use your personal information for unrelated commercial purposes. Information may only be shared when necessary for legitimate purposes or when required by law.</p>
+                                <p class="mb-3">JLM Cozy Cabin retains personal information only for as long as necessary to support tenant management, reservations, billing, communication, and other legitimate purposes, subject to applicable legal and regulatory requirements.</p>
+                                
+                                <h5 class="text-[13.5px] font-bold text-slate-900 mt-4 mb-1.5">1. Account Inactivity</h5>
+                                <p class="mb-3">An account may be considered inactive when the user has not logged in or performed any account-related activity for six (6) consecutive months. Accounts associated with ongoing tenancy, active reservations, or unsettled billing obligations shall not be automatically deactivated solely due to inactivity.</p>
+
+                                <h5 class="text-[13.5px] font-bold text-slate-900 mt-4 mb-1.5">2. Inactivity Notification – After 6 Months</h5>
+                                <p class="mb-3">After six (6) consecutive months of inactivity, JLM Cozy Cabin may send an inactivity reminder through the user's registered email address or other available communication channels. The notification will inform the user about the account's inactivity and possible deactivation if no further activity occurs.</p>
+
+                                <h5 class="text-[13.5px] font-bold text-slate-900 mt-4 mb-1.5">3. Account Deactivation – After 12 Months</h5>
+                                <p class="mb-3">Accounts that remain inactive for twelve (12) consecutive months may be deactivated, provided that no active tenancy, reservation, or outstanding obligation requires continued account access. Prior notice shall be provided where practicable.</p>
+                                <p class="mb-3">Deactivated users may request account reactivation by contacting the administrator, subject to identity verification and applicable security procedures.</p>
+
+                                <h5 class="text-[13.5px] font-bold text-slate-900 mt-4 mb-1.5">4. Data Retention Review – After 24 Months</h5>
+                                <p class="mb-3">After twenty-four (24) consecutive months of inactivity, JLM Cozy Cabin shall review the personal information associated with the account to determine whether continued retention remains necessary.</p>
+                                <p class="mb-3">Personal information that is no longer required for legitimate purposes shall be securely deleted or anonymized, subject to applicable legal obligations and justified retention requirements.</p>
+                                <p class="mb-3">Reservation histories, billing records, payment transactions, and other necessary records may be retained separately when required for legitimate operational, legal, or recordkeeping purposes.</p>
+
+                                <h5 class="text-[13.5px] font-bold text-slate-900 mt-4 mb-1.5">5. Account Deletion Requests</h5>
+                                <p class="mb-3">Users may request the deletion of their accounts and associated personal information by contacting the JLM Cozy Cabin administrator. Requests shall be reviewed in accordance with applicable data privacy laws.</p>
+                                <p class="mb-3">Information that must be retained for legitimate or legal purposes may be excluded from immediate deletion and shall remain protected until its retention period ends.</p>
                             </div>
                         </div>
                     </div>

@@ -1,7 +1,6 @@
 // resources/js/app.jsx
 import "../css/app.css";
 import { createRoot } from "react-dom/client";
-import { createInertiaApp } from "@inertiajs/react";
 
 // ── WebSocket / Real-time Imports ──
 import Echo from "laravel-echo";
@@ -53,21 +52,10 @@ import TenantHistoryModals from "./pages/History/HistoryModals";
 import TenantSettingsAccordions from "./pages/Settings/SettingsAccordions";
 
 // ============================================================
-// ECHO (REAL-TIME) BOOTSTRAP — SINGLE SOURCE OF TRUTH
+// ECHO (REAL-TIME) BOOTSTRAP
 // ============================================================
-//
-// IMPORTANT: This is the ONLY place where Echo is created.
-// The Blade layouts (admin.blade.php, tenant.blade.php) no longer
-// load Pusher/Echo from CDN or call `new Echo(...)` — they only
-// expose `window.__appConfig.broadcast` so this file can read it.
-//
-// Guard with `if (!window.Echo)` so Vite HMR reloads don't leak
-// WebSocket connections. Disconnect on HMR dispose (see bottom).
-
 (function bootstrapEcho() {
-    // Already connected — never create a second socket.
     if (window.Echo) return;
-
     window.Pusher = Pusher;
 
     const cfg = window.__appConfig?.broadcast || {};
@@ -75,7 +63,7 @@ import TenantSettingsAccordions from "./pages/Settings/SettingsAccordions";
     const cluster = cfg.cluster || import.meta.env.VITE_PUSHER_APP_CLUSTER || "ap1";
 
     if (!key) {
-        console.warn("[Echo] Pusher key missing — real-time disabled, polling fallback active.");
+        console.warn("[Echo] Pusher key missing — real-time disabled.");
         window.__liveAvailable = false;
         return;
     }
@@ -90,17 +78,13 @@ import TenantSettingsAccordions from "./pages/Settings/SettingsAccordions";
             auth: {
                 headers: {
                     "X-CSRF-TOKEN":
-                        document
-                            .querySelector('meta[name="csrf-token"]')
-                            ?.getAttribute("content") || window.__appConfig?.csrf,
+                        document.querySelector('meta[name="csrf-token"]')?.getAttribute("content") || window.__appConfig?.csrf,
                     Accept: "application/json",
                 },
             },
         });
 
-        // ── Connection state (used by polling fallbacks everywhere) ──
         window.__liveAvailable = false;
-
         const conn = window.Echo.connector.pusher.connection;
 
         conn.bind("connected", () => {
@@ -119,26 +103,26 @@ import TenantSettingsAccordions from "./pages/Settings/SettingsAccordions";
             document.dispatchEvent(new CustomEvent("echo:unavailable"));
         });
 
-        // ── Shared channel helpers (importable by any page) ──
+        // ── SHARED CHANNEL HELPERS ──
+        
         window.LiveAdminChannels = {
             reservations: (handler) => {
-                const ch = window.Echo.channel("admin.reservations");
+                const ch = window.Echo.private("admin.reservations");
                 ch.listen(".reservation.updated", handler);
                 return () => ch.stopListening(".reservation.updated", handler);
             },
             billing: (handler) => {
-                const ch = window.Echo.channel("admin.billing");
+                const ch = window.Echo.private("admin.billing");
                 ch.listen(".invoice.updated", handler);
                 return () => ch.stopListening(".invoice.updated", handler);
             },
             announcements: (handler) => {
-                const ch = window.Echo.channel("admin.announcements");
+                const ch = window.Echo.private("admin.announcements");
                 ch.listen(".announcement.updated", handler);
                 return () => ch.stopListening(".announcement.updated", handler);
             },
             services: (handler) => {
-                // Unified listener for all 3 service events
-                const ch = window.Echo.channel("admin.services");
+                const ch = window.Echo.private("admin.services");
                 const wrapped = (e) => handler(e);
                 ch.listen(".maintenance.updated", wrapped);
                 ch.listen(".room-change.updated", wrapped);
@@ -149,26 +133,32 @@ import TenantSettingsAccordions from "./pages/Settings/SettingsAccordions";
                     ch.stopListening(".stay-extension.updated", wrapped);
                 };
             },
+            // 🟢 NEW: Admin Messages
+            messages: (handler) => {
+                const ch = window.Echo.private("admin.messages");
+                ch.listen(".message.sent", handler);
+                return () => ch.stopListening(".message.sent", handler);
+            }
         };
 
         window.LiveTenantChannels = {
             reservations: (handler) => {
-                const ch = window.Echo.channel("tenant.reservations");
+                const ch = window.Echo.private("tenant.reservations");
                 ch.listen(".reservation.updated", handler);
                 return () => ch.stopListening(".reservation.updated", handler);
             },
             billing: (handler) => {
-                const ch = window.Echo.channel("tenant.billing");
+                const ch = window.Echo.private("tenant.billing");
                 ch.listen(".invoice.updated", handler);
                 return () => ch.stopListening(".invoice.updated", handler);
             },
             announcements: (handler) => {
-                const ch = window.Echo.channel("tenant.announcements");
+                const ch = window.Echo.private("tenant.announcements");
                 ch.listen(".announcement.updated", handler);
                 return () => ch.stopListening(".announcement.updated", handler);
             },
             services: (handler) => {
-                const ch = window.Echo.channel("tenant.services");
+                const ch = window.Echo.private("tenant.services");
                 const wrapped = (e) => handler(e);
                 ch.listen(".maintenance.updated", wrapped);
                 ch.listen(".room-change.updated", wrapped);
@@ -179,6 +169,12 @@ import TenantSettingsAccordions from "./pages/Settings/SettingsAccordions";
                     ch.stopListening(".stay-extension.updated", wrapped);
                 };
             },
+            // 🟢 NEW: Tenant Messages (uses tenant ID to scope)
+            messages: (tenantId, handler) => {
+                const ch = window.Echo.private(`tenant.${tenantId}.messages`);
+                ch.listen(".message.sent", handler);
+                return () => ch.stopListening(".message.sent", handler);
+            }
         };
 
         console.info("[Echo] Initialized (single instance).");
@@ -196,52 +192,6 @@ if (import.meta.hot) {
         } catch {}
         window.Echo = null;
         window.__liveAvailable = false;
-    });
-}
-
-// ============================================================
-// INERTIA APP BOOTSTRAP
-// ============================================================
-const inertiaRoot = document.getElementById("app");
-const inertiaPageData = document.querySelector('script[data-page="app"]');
-
-if (inertiaRoot && inertiaPageData) {
-    const pages = import.meta.glob("./pages/**/*.jsx", { eager: true });
-
-    const resolvePage = (name) => {
-        const clean = name.replace(/^\.?\//, "").replace(/\.jsx$/, "");
-        const candidates = [
-            `./pages/${clean}.jsx`,
-            `./pages/${clean}`,
-            `./pages/${clean}/index.jsx`,
-        ];
-        for (const key of candidates) {
-            if (pages[key]) return pages[key];
-        }
-        const lower = clean.toLowerCase();
-        const foundKey = Object.keys(pages).find(
-            (k) => k.toLowerCase() === `./pages/${lower}.jsx`,
-        );
-        if (foundKey) return pages[foundKey];
-
-        console.error(
-            `[Inertia] Page component not found for "${name}".\n` +
-                `Tried: ${candidates.join(", ")}\n` +
-                `Available pages:\n${Object.keys(pages).join("\n")}`,
-        );
-        return null;
-    };
-
-    createInertiaApp({
-        resolve: resolvePage,
-        setup({ el, App, props }) {
-            createRoot(el).render(<App {...props} />);
-        },
-        // ── Add this block to optimize the page load indicator ──
-        progress: {
-            color: '#FF8904', // Matches your brand orange
-            showSpinner: false, // Top bar only — feels much faster
-        },
     });
 }
 

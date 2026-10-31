@@ -16,10 +16,6 @@ class AnnouncementController extends Controller
         return view('admin.announcements', $this->buildPayload($request));
     }
 
-    /**
-     * Live data endpoint for polling / Echo refresh.
-     * GET /admin/announcements/data
-     */
     public function data(Request $request)
     {
         return response()->json($this->buildPayload($request));
@@ -42,16 +38,16 @@ class AnnouncementController extends Controller
             'urgent'    => Announcement::ofPriority('Urgent')->count(),
         ];
 
-        $announcementsForReact = $announcements->mapWithKeys(function ($a) {
-            return [$a->id => $a->toReactArray()];
-        })->toArray();
+        $announcementsForReact = $announcements->mapWithKeys(
+            fn ($a) => [$a->id => $a->toReactArray()]
+        )->toArray();
 
-        // Structured rows for JS re-rendering
         $rows = $announcements->map(fn (Announcement $a) => [
             'id'             => $a->id,
             'title'          => $a->title,
             'content'        => $a->content,
             'priority'       => $a->priority,
+            'priority_lc'    => strtolower($a->priority),        // ← added for tenant card styling
             'priority_class' => $a->priority_class,
             'priority_icon'  => $a->priority_icon,
             'icon_bg'        => $a->icon_bg,

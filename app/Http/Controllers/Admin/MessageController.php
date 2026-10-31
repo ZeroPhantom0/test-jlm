@@ -3,6 +3,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Events\MessageSent;
 use App\Http\Controllers\Controller;
 use App\Models\Conversation;
 use App\Models\Message;
@@ -14,8 +15,6 @@ use Illuminate\Support\Facades\Auth;
 
 class MessageController extends Controller
 {
-    // ... [index() and show() methods remain exactly the same] ...
-    
     public function index(Request $request)
     {
         $admin = Auth::user();
@@ -28,11 +27,12 @@ class MessageController extends Controller
             ->get();
 
         $total = $conversations->count();
-        $unreadCount = $conversations->sum(fn ($c) =>
+        $unreadCount = $conversations->sum(
+            fn($c) =>
             $c->messages()
-              ->whereNull('read_at')
-              ->where('sender_role', 'tenant')
-              ->count()
+                ->whereNull('read_at')
+                ->where('sender_role', 'tenant')
+                ->count()
         );
 
         $conversationsForReact = $conversations->mapWithKeys(function ($c) {
@@ -55,7 +55,7 @@ class MessageController extends Controller
             ->orderBy('users.name')
             ->select('tenants.*')
             ->get()
-            ->map(fn ($t) => [
+            ->map(fn($t) => [
                 'id'    => $t->id,
                 'name'  => $t->user->name,
                 'email' => $t->user->email,
@@ -83,7 +83,7 @@ class MessageController extends Controller
         $conversation->load(['tenant.user', 'messages.sender', 'messages.reactions']);
 
         $visible = $conversation->messages
-            ->reject(fn (Message $m) => $m->isHiddenFrom('admin'));
+            ->reject(fn(Message $m) => $m->isHiddenFrom('admin'));
 
         return response()->json([
             'success' => true,
@@ -91,7 +91,7 @@ class MessageController extends Controller
                 'id'       => $conversation->id,
                 'tenant'   => $conversation->tenant->user->name ?? 'Unknown',
                 'subject'  => $conversation->subject,
-                'messages' => $visible->map(fn (Message $m) => [
+                'messages' => $visible->map(fn(Message $m) => [
                     'id'                   => $m->id,
                     'sender'               => $m->sender->name ?? 'Unknown',
                     'sender_id'            => $m->sender_id,
@@ -105,9 +105,6 @@ class MessageController extends Controller
         ]);
     }
 
-    /**
-     * Create a new conversation + first message.
-     */
     public function store(Request $request)
     {
         $validated = $request->validate([
@@ -133,11 +130,22 @@ class MessageController extends Controller
             'body'            => $validated['body'],
         ]);
 
-        // ── TRIGGER SMS TO TENANT ──
         if ($tenant->user && $tenant->user->phone) {
             $msg = "JLM Cozy Cabin: You have received a new message from the administrator. Log in to your account and visit the Messages section to view and reply.";
             SmsService::send($tenant->user->phone, $msg);
         }
+
+        // 🔴 Broadcast to admin screens and the specific tenant
+        $messageText = $validated['body'];
+        $senderName = $auth->name ?? 'Admin';
+
+        event(new MessageSent(
+            $conversation->id,
+            $conversation->tenant_id, // or $tenant->id in store()
+            'admin',
+            $senderName,
+            $messageText
+        ));
 
         return response()->json([
             'success' => true,
@@ -146,9 +154,6 @@ class MessageController extends Controller
         ]);
     }
 
-    /**
-     * Append a reply from the admin.
-     */
     public function reply(Request $request, Conversation $conversation)
     {
         $validated = $request->validate([
@@ -166,12 +171,23 @@ class MessageController extends Controller
 
         $conversation->update(['last_message_at' => now()]);
 
-        // ── TRIGGER SMS TO TENANT ──
         $conversation->load('tenant.user');
         if ($conversation->tenant?->user?->phone) {
             $msg = "JLM Cozy Cabin: You have received a new message from the administrator. Log in to your account and visit the Messages section to view and reply.";
             SmsService::send($conversation->tenant->user->phone, $msg);
         }
+
+        // 🔴 Broadcast to admin screens and the specific tenant
+        $messageText = $validated['body'];
+        $senderName = $auth->name ?? 'Admin';
+
+        event(new MessageSent(
+            $conversation->id,
+            $conversation->tenant_id, // or $tenant->id in store()
+            'admin',
+            $senderName,
+            $messageText
+        ));
 
         return response()->json([
             'success' => true,
@@ -179,8 +195,6 @@ class MessageController extends Controller
         ]);
     }
 
-    // ... [deleteMessage(), reactToMessage(), deleteConversation() remain exactly the same] ...
-    
     public function deleteMessage(Message $message)
     {
         $message->update(['deleted_by_receiver' => true]);

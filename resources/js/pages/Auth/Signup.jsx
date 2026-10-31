@@ -1,10 +1,21 @@
 // resources/js/pages/Auth/Signup.jsx
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Head, Link, useForm, router } from '@inertiajs/react';
+import PrivacyModal from './Modals/PrivacyModal';
+import TermsModal from './Modals/TermsModal';
 
 export default function Signup() {
     const [showPw, setShowPw]           = useState(false);
     const [showConfirm, setShowConfirm] = useState(false);
+
+    // Modal States
+    const [showPrivacyModal, setShowPrivacyModal] = useState(false);
+    const [showTermsModal, setShowTermsModal]     = useState(false);
+
+    // Track which fields the user has interacted with
+    const [touched, setTouched] = useState({});
+    // Track whether user attempted submit at least once
+    const [submitAttempted, setSubmitAttempted] = useState(false);
 
     const { data, setData, post, processing, errors, reset } = useForm({
         fullname: '',
@@ -15,8 +26,115 @@ export default function Signup() {
         terms: false,
     });
 
+    /* ============================================================
+       CLIENT-SIDE VALIDATION RULES
+       ============================================================ */
+    const clientErrors = useMemo(() => {
+        const e = {};
+
+        // Full name
+        if (data.fullname) {
+            if (data.fullname.trim().length < 3) {
+                e.fullname = 'Please enter your full name (at least 3 characters).';
+            } else if (data.fullname.trim().length > 100) {
+                e.fullname = 'Name is too long (maximum 100 characters).';
+            }
+        }
+
+        // Email
+        if (data.email) {
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+            if (!emailRegex.test(data.email)) {
+                e.email = 'Please enter a valid email (e.g. name@example.com).';
+            }
+        }
+
+        // Phone
+        if (data.phone) {
+            const digits = data.phone.replace(/\D/g, '');
+            if (digits.length < 10) {
+                e.phone = 'Phone number looks too short. Include the area/country code.';
+            } else if (digits.length > 15) {
+                e.phone = 'Phone number is too long. Please double-check.';
+            }
+        }
+
+        // Password
+        if (data.password) {
+            if (data.password.length < 8) {
+                e.password = 'Password must be at least 8 characters.';
+            } else if (
+                !/[A-Z]/.test(data.password) ||
+                !/[a-z]/.test(data.password) ||
+                !/[0-9]/.test(data.password)
+            ) {
+                e.password = 'Use uppercase, lowercase, and a number for a strong password.';
+            }
+        }
+
+        // Confirm password
+        if (data.password_confirmation) {
+            if (data.password_confirmation !== data.password) {
+                e.password_confirmation = 'Passwords do not match.';
+            }
+        }
+
+        // Terms — required
+        if (!data.terms) {
+            e.terms = 'Please accept the Privacy Policy to continue.';
+        }
+
+        return e;
+    }, [data]);
+
+    /* ============================================================
+       HELPERS
+       ============================================================ */
+    const fieldError = (field) => {
+        const message = clientErrors[field] || errors[field];
+        if (!message) return null;
+        if (!touched[field] && !submitAttempted) return null;
+
+        return (
+            <div className="signup-field-error">
+                <i className="bi bi-exclamation-circle"></i>
+                {message}
+            </div>
+        );
+    };
+
+    const fieldValid = (field) => {
+        if (!touched[field] && !submitAttempted) return false;
+        if (clientErrors[field] || errors[field]) return false;
+        if (!data[field]) return false;
+        return (
+            <div className="signup-field-valid">
+                <i className="bi bi-check-circle-fill"></i>
+            </div>
+        );
+    };
+
+    const handleBlur = (field) => {
+        setTouched((t) => ({ ...t, [field]: true }));
+    };
+
+    /* ============================================================
+       SUBMIT
+       ============================================================ */
     const handleSubmit = (e) => {
         e.preventDefault();
+        setSubmitAttempted(true);
+
+        // Block if any client-side validation fails (includes terms)
+        if (Object.keys(clientErrors).length > 0) {
+            return;
+        }
+
+        setShowTermsModal(true);
+    };
+
+    const confirmTermsAndSubmit = () => {
+        setShowTermsModal(false);
         post('/signup', {
             onFinish: () => reset('password', 'password_confirmation'),
         });
@@ -26,13 +144,6 @@ export default function Signup() {
         e.preventDefault();
         router.visit('/login');
     };
-
-    const fieldError = (field) => errors[field] && (
-        <div className="signup-field-error">
-            <i className="bi bi-exclamation-circle"></i>
-            {errors[field]}
-        </div>
-    );
 
     return (
         <div className="signup-page signup-page-enter">
@@ -79,7 +190,7 @@ export default function Signup() {
 
                 {/* RIGHT */}
                 <div className="signup-right">
-                    <form className="signup-form-container" onSubmit={handleSubmit}>
+                    <form className="signup-form-container" onSubmit={handleSubmit} noValidate>
                         <h2>Hello, There!</h2>
                         <p className="signup-subtitle">
                             Sign up to reserve a unit and access tenant services
@@ -97,9 +208,18 @@ export default function Signup() {
                                     placeholder="Juan Dela Cruz"
                                     value={data.fullname}
                                     onChange={(e) => setData('fullname', e.target.value)}
+                                    onBlur={() => handleBlur('fullname')}
                                     autoFocus
+                                    aria-invalid={!!(touched.fullname && (clientErrors.fullname || errors.fullname))}
                                 />
+                                {fieldValid('fullname')}
                             </div>
+                            {touched.fullname && !clientErrors.fullname && !errors.fullname && (
+                                <div className="signup-field-hint">
+                                    <i className="bi bi-info-circle"></i>
+                                    Use your real name as it appears on your ID.
+                                </div>
+                            )}
                             {fieldError('fullname')}
                         </div>
 
@@ -116,8 +236,11 @@ export default function Signup() {
                                         placeholder="name@example.com"
                                         value={data.email}
                                         onChange={(e) => setData('email', e.target.value)}
+                                        onBlur={() => handleBlur('email')}
                                         autoComplete="email"
+                                        aria-invalid={!!(touched.email && (clientErrors.email || errors.email))}
                                     />
+                                    {fieldValid('email')}
                                 </div>
                                 {fieldError('email')}
                             </div>
@@ -132,8 +255,11 @@ export default function Signup() {
                                         placeholder="+63 912 345 6789"
                                         value={data.phone}
                                         onChange={(e) => setData('phone', e.target.value)}
+                                        onBlur={() => handleBlur('phone')}
                                         autoComplete="tel"
+                                        aria-invalid={!!(touched.phone && (clientErrors.phone || errors.phone))}
                                     />
+                                    {fieldValid('phone')}
                                 </div>
                                 {fieldError('phone')}
                             </div>
@@ -152,7 +278,9 @@ export default function Signup() {
                                         placeholder="Create password"
                                         value={data.password}
                                         onChange={(e) => setData('password', e.target.value)}
+                                        onBlur={() => handleBlur('password')}
                                         autoComplete="new-password"
+                                        aria-invalid={!!(touched.password && (clientErrors.password || errors.password))}
                                     />
                                     <button
                                         type="button"
@@ -162,6 +290,7 @@ export default function Signup() {
                                     >
                                         <i className={showPw ? 'bi bi-eye-slash' : 'bi bi-eye'}></i>
                                     </button>
+                                    {fieldValid('password')}
                                 </div>
                                 {fieldError('password')}
                             </div>
@@ -176,7 +305,9 @@ export default function Signup() {
                                         placeholder="Confirm password"
                                         value={data.password_confirmation}
                                         onChange={(e) => setData('password_confirmation', e.target.value)}
+                                        onBlur={() => handleBlur('password_confirmation')}
                                         autoComplete="new-password"
+                                        aria-invalid={!!(touched.password_confirmation && (clientErrors.password_confirmation || errors.password_confirmation))}
                                     />
                                     <button
                                         type="button"
@@ -186,21 +317,37 @@ export default function Signup() {
                                     >
                                         <i className={showConfirm ? 'bi bi-eye-slash' : 'bi bi-eye'}></i>
                                     </button>
+                                    {fieldValid('password_confirmation')}
                                 </div>
                                 {fieldError('password_confirmation')}
                             </div>
                         </div>
 
                         {/* TERMS */}
-                        <label className="signup-terms">
+                        <label
+                            className={`signup-terms ${
+                                submitAttempted && !data.terms ? 'signup-terms-invalid' : ''
+                            }`}
+                        >
                             <input
                                 type="checkbox"
                                 name="terms"
                                 checked={data.terms}
-                                onChange={(e) => setData('terms', e.target.checked)}
+                                onChange={(e) => {
+                                    setData('terms', e.target.checked);
+                                    handleBlur('terms');
+                                }}
+                                aria-invalid={!!(submitAttempted && !data.terms)}
                             />
                             <span>
-                                I agree to the <a href="#">Terms and Conditions</a> and <a href="#">Privacy Policy</a>
+                                I agree to the{' '}
+                                <button
+                                    type="button"
+                                    onClick={() => setShowPrivacyModal(true)}
+                                    className="text-link"
+                                >
+                                    Privacy Policy
+                                </button>
                             </span>
                         </label>
                         {fieldError('terms')}
@@ -231,6 +378,14 @@ export default function Signup() {
                     </form>
                 </div>
             </div>
+
+            {/* Modals */}
+            <PrivacyModal isOpen={showPrivacyModal} onClose={() => setShowPrivacyModal(false)} />
+            <TermsModal
+                isOpen={showTermsModal}
+                onClose={() => setShowTermsModal(false)}
+                onConfirm={confirmTermsAndSubmit}
+            />
         </div>
     );
 }

@@ -5,6 +5,21 @@ import { logout } from "../utils/logout";
 const STORAGE_KEY = "admin.dismissedNotifications";
 const MAX_VISIBLE = 5;
 
+// 🚫 Notifications of these types/ids/links are hidden from the bell
+const HIDDEN_TYPES = new Set(["report", "report-export", "export", "reports"]);
+const HIDDEN_IDS   = new Set(["report-export", "report-export-ready", "reports-ready"]);
+
+function isHiddenNotification(n) {
+    if (!n) return true;
+    if (HIDDEN_TYPES.has(n.type)) return true;
+    if (HIDDEN_IDS.has(n.id)) return true;
+    if (typeof n.link === "string" && (
+        n.link.includes("/admin/reports") ||
+        n.link.includes("/reports/export")
+    )) return true;
+    return false;
+}
+
 function readDismissed() {
     try {
         return new Set(JSON.parse(sessionStorage.getItem(STORAGE_KEY) || "[]"));
@@ -69,21 +84,26 @@ export default function AdminTopHeader({
 }) {
     const [dropdownOpen, setDropdownOpen] = useState(false);
     const [notifOpen, setNotifOpen]       = useState(false);
-    
+
     // Store all fetched notifications from the server
     const [rawNotifications, setRawNotifications] = useState([]);
-    
+
     // Keep track of locally read IDs and dismissed IDs
     const [locallyRead, setLocallyRead] = useState(new Set());
     const [dismissed, setDismissed]     = useState(() => readDismissed());
-    
+
     const [loading, setLoading] = useState(false);
 
     const dropdownRef = useRef(null);
     const notifRef    = useRef(null);
 
-    // 1. Process notifications: Apply read status, filter dismissed, and limit to FIFO 5
+    // 1. Process notifications:
+    //    - Drop report/export notifications
+    //    - Apply read status
+    //    - Filter dismissed
+    //    - Limit to FIFO 5
     const processedNotifications = rawNotifications
+        .filter((n) => !isHiddenNotification(n))
         .map(n => ({
             ...n,
             isUnread: n.unread && !locallyRead.has(n.id) && !dismissed.has(n.id)
@@ -105,9 +125,12 @@ export default function AdminTopHeader({
             });
             if (!res.ok) throw new Error("Failed to load notifications");
             const data = await res.json();
-            
-            // Data comes in newest-first from the backend (sortByDesc)
-            setRawNotifications(data.notifications || []);
+
+            // Filter once at the source so no report items ever enter state
+            const filtered = (data.notifications || []).filter(
+                (n) => !isHiddenNotification(n)
+            );
+            setRawNotifications(filtered);
         } catch (err) {
             console.error(err);
         } finally {

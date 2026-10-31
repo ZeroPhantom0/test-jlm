@@ -126,6 +126,9 @@ export default function ReservationsModal() {
     const [showCancel, setShowCancel] = useState(false);
     const [cancelTarget, setCancelTarget] = useState(null);
 
+    // State for the Reservation Policy modal
+    const [showPolicyModal, setShowPolicyModal] = useState(false);
+
     const [room, setRoom] = useState(FALLBACK_ROOM);
     const [saving, setSaving] = useState(false);
 
@@ -278,6 +281,10 @@ export default function ReservationsModal() {
         if (cancelInFlightRef.current) return;
         setShowCancel(false);
         setCancelTarget(null);
+    };
+
+    const closePolicyModal = () => {
+        setShowPolicyModal(false);
     };
 
     const updateField = (key, value) =>
@@ -1179,9 +1186,13 @@ export default function ReservationsModal() {
                                 />
                                 <span className="text-[12.5px] text-slate-600 leading-relaxed">
                                     I have read, understood, and agree to the{" "}
-                                    <strong className="text-emerald-600">
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowPolicyModal(true)}
+                                        className="text-emerald-600 font-bold underline hover:text-emerald-700"
+                                    >
                                         Reservation Policy
-                                    </strong>
+                                    </button>
                                     . I understand the deposit, cancellation,
                                     and approval terms.{" "}
                                     <span className="text-rose-500">*</span>
@@ -1283,6 +1294,47 @@ export default function ReservationsModal() {
                                     Yes, Cancel
                                 </>
                             )}
+                        </button>
+                    </div>
+                </Modal>
+            )}
+
+            {/* RESERVATION POLICY MODAL */}
+            {showPolicyModal && (
+                <Modal onClose={closePolicyModal} maxWidth="max-w-[540px]">
+                    <div className="p-5 pb-4 flex items-center justify-between border-b border-slate-100 shrink-0">
+                        <div className="flex items-center gap-3">
+                            <i className="fa-regular fa-file-lines text-slate-500 text-xl"></i>
+                            <h3 className="text-lg font-bold text-slate-900">
+                                Reservation Policy
+                            </h3>
+                        </div>
+                        <button
+                            onClick={closePolicyModal}
+                            className="text-slate-400 hover:text-slate-700 text-lg"
+                        >
+                            <i className="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+
+                    <div className="p-6 overflow-y-auto max-h-[70vh]">
+                        <div className="text-[13.5px] text-slate-600 leading-relaxed space-y-3">
+                            <p>All reservations at JLM Cozy Cabin are subject to room availability and the submission of complete and accurate reservation information.</p>
+                            <p>Tenants must provide the required reservation details and select an available payment option before submitting their reservation. The available payment options may include a fifty percent (50%) down payment or full payment, depending on the applicable reservation requirements.</p>
+                            <p>After submission, the reservation will be placed under Pending Verification status and will not be considered confirmed until reviewed by the Admin. The Admin will review the reservation details and submitted payment information before approving or rejecting the reservation.</p>
+                            <p>An approved reservation will be confirmed by the system and the tenant will be notified of the reservation status. If the reservation does not meet the applicable requirements, the Admin may reject it and provide an appropriate reason.</p>
+                            <p>Reservations may expire if the required requirements are not completed within the specified period or if the tenant fails to arrive on the scheduled move-in date, subject to the applicable reservation conditions.</p>
+                            <p>Reservation cancellations, changes to reservation details, and room changes are subject to room availability, applicable policies, and Admin approval.</p>
+                            <p>Upon move-in, tenants may be required to present a valid identification document and reservation confirmation for verification.</p>
+                        </div>
+                    </div>
+
+                    <div className="p-5 border-t border-slate-100 flex justify-end shrink-0">
+                        <button
+                            onClick={closePolicyModal}
+                            className="bg-[#02122c] hover:bg-[#0d2347] text-white px-6 py-2.5 rounded-lg text-[13px] font-bold transition"
+                        >
+                            Close
                         </button>
                     </div>
                 </Modal>

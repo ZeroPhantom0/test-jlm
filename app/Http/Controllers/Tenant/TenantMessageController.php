@@ -3,6 +3,7 @@
 
 namespace App\Http\Controllers\Tenant;
 
+use App\Events\MessageSent;
 use App\Http\Controllers\Controller;
 use App\Models\Conversation;
 use App\Models\Message;
@@ -15,8 +16,6 @@ use Illuminate\Support\Facades\Auth;
 
 class TenantMessageController extends Controller
 {
-    // ... [index() and show() methods remain exactly the same] ...
-    
     public function index(Request $request)
     {
         $user   = Auth::user();
@@ -41,11 +40,12 @@ class TenantMessageController extends Controller
             ->get();
 
         $total       = $conversations->count();
-        $unreadCount = $conversations->sum(fn ($c) =>
+        $unreadCount = $conversations->sum(
+            fn($c) =>
             $c->messages()
-              ->whereNull('read_at')
-              ->where('sender_role', 'admin')
-              ->count()
+                ->whereNull('read_at')
+                ->where('sender_role', 'admin')
+                ->count()
         );
 
         $conversationsForReact = $conversations->mapWithKeys(function ($c) {
@@ -87,14 +87,14 @@ class TenantMessageController extends Controller
         $conversation->load(['messages.sender', 'messages.reactions']);
 
         $visible = $conversation->messages
-            ->reject(fn (Message $m) => $m->isHiddenFrom('tenant'));
+            ->reject(fn(Message $m) => $m->isHiddenFrom('tenant'));
 
         return response()->json([
             'success' => true,
             'data'    => [
                 'id'       => $conversation->id,
                 'subject'  => $conversation->subject,
-                'messages' => $visible->map(fn (Message $m) => [
+                'messages' => $visible->map(fn(Message $m) => [
                     'id'                   => $m->id,
                     'sender'               => $m->sender->name ?? 'Unknown',
                     'sender_id'            => $m->sender_id,
@@ -108,9 +108,6 @@ class TenantMessageController extends Controller
         ]);
     }
 
-    /**
-     * Start a new conversation with the admin.
-     */
     public function store(Request $request)
     {
         $validated = $request->validate([
@@ -141,13 +138,23 @@ class TenantMessageController extends Controller
             'body'            => $validated['body'],
         ]);
 
-        // ── TRIGGER SMS TO ADMIN ──
         $admin = User::where('role', 'admin')->first();
         if ($admin && $admin->phone) {
             $msg = "New Message from Tenant: You have received a new message from a tenant. Log in to JLM Cozy Cabin to view it.";
             SmsService::send($admin->phone, $msg);
         }
 
+        // 🔴 Broadcast to admin screens and the specific tenant
+        $messageText = $validated['body'];
+        $senderName = $user->name ?? 'Tenant';
+
+        event(new MessageSent(
+            $conversation->id,
+            $tenant->id,
+            'tenant',
+            $senderName,
+            $messageText
+        ));
         return response()->json([
             'success' => true,
             'message' => 'Message sent.',
@@ -155,9 +162,6 @@ class TenantMessageController extends Controller
         ]);
     }
 
-    /**
-     * Append a reply from the tenant.
-     */
     public function reply(Request $request, Conversation $conversation)
     {
         $user   = Auth::user();
@@ -180,12 +184,23 @@ class TenantMessageController extends Controller
 
         $conversation->update(['last_message_at' => now()]);
 
-        // ── TRIGGER SMS TO ADMIN ──
         $admin = User::where('role', 'admin')->first();
         if ($admin && $admin->phone) {
             $msg = "New Message from Tenant: You have received a new message from a tenant. Log in to JLM Cozy Cabin to view it.";
             SmsService::send($admin->phone, $msg);
         }
+
+        // 🔴 Broadcast to admin screens and the specific tenant
+        $messageText = $validated['body'];
+        $senderName = $user->name ?? 'Tenant';
+
+        event(new MessageSent(
+            $conversation->id,
+            $tenant->id,
+            'tenant',
+            $senderName,
+            $messageText
+        ));
 
         return response()->json([
             'success' => true,
@@ -193,8 +208,6 @@ class TenantMessageController extends Controller
         ]);
     }
 
-    // ... [deleteMessage(), reactToMessage(), deleteConversation() remain exactly the same] ...
-    
     public function deleteMessage(Message $message)
     {
         $user   = Auth::user();

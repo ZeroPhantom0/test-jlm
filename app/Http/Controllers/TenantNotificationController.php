@@ -316,7 +316,7 @@ class TenantNotificationController extends Controller
                 'title'       => 'Announcement: ' . $a->title,
                 'description' => Str::limit(strip_tags($a->content), 60),
                 'time'        => $a->created_at,
-                'unread'      => false,
+                'unread'      => true, // 👈 CHANGED TO TRUE
                 'link'        => '/tenants/announcements',
             ];
         }

@@ -40,7 +40,6 @@ function csrfToken() {
 function UserAvatar({ src, name = "User", size = 34, className = "" }) {
     const dimension = `${size}px`;
     
-    // Check if src exists AND is a valid string (not null, not empty, not "null")
     if (src && typeof src === 'string' && src.trim() !== "" && src !== "null") {
         return (
             <img
@@ -52,7 +51,6 @@ function UserAvatar({ src, name = "User", size = 34, className = "" }) {
         );
     }
     
-    // Default Fallback: Styled icon instead of an image
     return (
         <div
             className={`rounded-full bg-slate-100 text-slate-400 flex items-center justify-center border border-slate-200 ${className}`}
@@ -69,16 +67,14 @@ export default function TopHeader({
     userName  = "Tenant",
     userRole  = "Tenant",
     userEmail = "",
-    avatar    = null,   // Strictly null by default
+    avatar    = null,
     isTenant  = false,
 }) {
     const [dropdownOpen, setDropdownOpen] = useState(false);
     const [notifOpen, setNotifOpen]       = useState(false);
     
-    // Store all fetched notifications from the server
     const [rawNotifications, setRawNotifications] = useState([]);
     
-    // Keep track of locally read IDs and dismissed IDs
     const [locallyRead, setLocallyRead] = useState(new Set());
     const [dismissed, setDismissed]     = useState(() => readDismissed());
     
@@ -89,14 +85,17 @@ export default function TopHeader({
 
     const displayRole = isTenant ? "Tenant" : "New Tenant";
 
-    // 1. Process notifications: Apply read status, filter dismissed, and limit to FIFO 5
+    // 🛡️ Coerce PHP/MySQL booleans safely
+    const isTruthy = (v) => v === true || v === 1 || v === "1" || v === "true";
+
+    // 1. Process notifications
     const processedNotifications = rawNotifications
         .map(n => ({
             ...n,
-            isUnread: n.unread && !locallyRead.has(n.id) && !dismissed.has(n.id)
+            isUnread: isTruthy(n.unread) && !locallyRead.has(n.id) && !dismissed.has(n.id)
         }))
         .filter(n => !dismissed.has(n.id))
-        .slice(0, MAX_VISIBLE); // FIFO: take the first 5 (newest)
+        .slice(0, MAX_VISIBLE);
 
     const unreadCount = processedNotifications.filter((n) => n.isUnread).length;
 
@@ -113,7 +112,6 @@ export default function TopHeader({
             if (!res.ok) throw new Error("Failed to load notifications");
             const data = await res.json();
             
-            // Data comes in newest-first from the backend
             setRawNotifications(data.notifications || []);
         } catch (err) {
             console.error(err);
@@ -162,7 +160,6 @@ export default function TopHeader({
     };
 
     const clearAll = () => {
-        // Only dismiss notifications that have been read
         const nextDismissed = new Set(dismissed);
         processedNotifications.forEach((n) => {
             if (!n.isUnread) {
@@ -174,11 +171,9 @@ export default function TopHeader({
     };
 
     const handleClickNotification = (n) => {
-        // 1. Mark locally as read
         markAsRead(n.id);
         setNotifOpen(false);
 
-        // 2. If it's a message, mark the underlying message as read in DB
         if (n.type === "message" && n.id.startsWith("msg-")) {
             const messageId = n.id.replace("msg-", "");
             fetch("/tenants/notifications/message-read", {

@@ -58,6 +58,16 @@
             csrf:    @json(csrf_token()),
             broadcast: @json($broadcastConfig),
         };
+
+        document.addEventListener('mouseover', (e) => {
+            const link = e.target.closest('a[href^="/admin"]');
+            if (!link || link.dataset.prefetched) return;
+            link.dataset.prefetched = 'true';
+            const pre = document.createElement('link');
+            pre.rel = 'prefetch';
+            pre.href = link.href;
+            document.head.appendChild(pre);
+        });
     </script>
 
     @viteReactRefresh
