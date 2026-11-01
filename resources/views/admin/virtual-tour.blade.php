@@ -66,99 +66,56 @@
     <div class="flex flex-col gap-3.5" id="tours-list-container">
         @forelse($tours as $index => $tour)
         <div class="bg-white border border-slate-200 rounded-2xl px-5 py-3 flex items-center justify-between gap-4 tour-item"
-             data-tour-id="{{ $tour->id }}"
-             data-status="{{ $tour->status }}"
-             data-title="{{ strtolower($tour->title) }}"
-             data-index="{{ $index + 1 }}">
+             data-tour-id="{{ $tour->id }}" data-status="{{ $tour->status }}" data-title="{{ strtolower($tour->title) }}">
             <div class="flex items-center gap-4">
-                <div class="flex flex-col items-center gap-0.5 text-slate-400 text-[11px]">
-                    <i class="fa-solid fa-chevron-up cursor-pointer hover:text-slate-700"></i>
-                    <span class="text-xs font-bold text-slate-500 row-index">{{ $index + 1 }}</span>
-                    <i class="fa-solid fa-chevron-down cursor-pointer hover:text-slate-700"></i>
-                </div>
-                <img src="{{ $tour->thumbnail_url }}" alt="Room"
-                     class="w-[110px] h-16 rounded-lg object-cover"
-                     data-tour-thumb
-                     onerror="this.src='https://via.placeholder.com/220x128?text=360+Tour'">
+                <img src="{{ $tour->thumbnail_url }}" alt="Room" class="w-[110px] h-16 rounded-lg object-cover">
                 <div>
-                    <h4 class="text-[14.5px] font-bold text-slate-900 leading-tight" data-tour-title>{{ $tour->title }}</h4>
+                    <h4 class="text-[14.5px] font-bold text-slate-900 leading-tight">{{ $tour->title }}</h4>
                     <p class="text-xs text-slate-500 mt-1">
-                        {{ $tour->room->room_number ?? 'N/A' }}
-                        &nbsp; Cap: {{ $tour->room->total_beds ?? 'N/A' }}
-                        &nbsp; <span class="text-emerald-500 font-bold">₱{{ number_format($tour->room->daily_rent ?? 0, 0) }}/day</span>
+                        {{ $tour->room->room_number ?? 'N/A' }} &nbsp; Cap: {{ $tour->room->total_beds ?? 'N/A' }} &nbsp; 
+                        <span class="text-emerald-500 font-bold">₱{{ number_format($tour->room->daily_rent ?? 0, 0) }}/day</span>
                     </p>
                 </div>
             </div>
             <div class="hidden md:flex items-center gap-8">
                 @if($tour->status === 'Published')
-                    <span data-status-pill class="inline-flex items-center gap-1.5 bg-emerald-100 text-emerald-600 text-[11.5px] font-bold px-3 py-1 rounded-xl">
-                        <i class="fa-solid fa-circle" style="font-size: 6px;"></i> Published
-                    </span>
+                    <span data-status-pill class="inline-flex items-center gap-1.5 bg-emerald-100 text-emerald-600 text-[11.5px] font-bold px-3 py-1 rounded-xl"><i class="fa-solid fa-circle" style="font-size: 6px;"></i> Published</span>
                 @elseif($tour->status === 'Draft')
-                    <span data-status-pill class="inline-flex items-center gap-1.5 bg-yellow-100 text-amber-700 text-[11.5px] font-bold px-3 py-1 rounded-xl">
-                        <i class="fa-solid fa-circle" style="font-size: 6px;"></i> Draft
-                    </span>
+                    <span data-status-pill class="inline-flex items-center gap-1.5 bg-yellow-100 text-amber-700 text-[11.5px] font-bold px-3 py-1 rounded-xl"><i class="fa-solid fa-circle" style="font-size: 6px;"></i> Draft</span>
                 @else
-                    <span data-status-pill class="inline-flex items-center gap-1.5 bg-slate-100 text-slate-600 text-[11.5px] font-bold px-3 py-1 rounded-xl">
-                        <i class="fa-solid fa-circle" style="font-size: 6px;"></i> Archived
-                    </span>
+                    <span data-status-pill class="inline-flex items-center gap-1.5 bg-slate-100 text-slate-600 text-[11.5px] font-bold px-3 py-1 rounded-xl"><i class="fa-solid fa-circle" style="font-size: 6px;"></i> Archived</span>
                 @endif
                 <div class="flex items-center gap-2 text-[12.5px] text-slate-500">
-                    <span class="rounded-full bg-violet-100 text-violet-700 font-bold text-[11px] inline-flex items-center justify-center w-6 h-6" data-hotspots-count>
-                        {{ $tour->hotspots_count }}
-                    </span>
-                    hotspots
+                    <span class="rounded-full bg-violet-100 text-violet-700 font-bold text-[11px] inline-flex items-center justify-center w-6 h-6" data-hotspots-count>{{ $tour->hotspots_count }}</span> hotspots
                 </div>
-                <div class="text-xs text-slate-400" data-created-at>{{ $tour->created_at->format('M d, Y') }}</div>
+                <div class="text-xs text-slate-400">{{ $tour->created_at->format('M d, Y') }}</div>
             </div>
             <div class="flex items-center gap-4 text-slate-400 text-[15px]">
-                <i class="fa-regular fa-eye cursor-pointer hover:text-slate-900 transition view-tour-btn"
-                   data-tour='@json($tour->toViewerArray())' title="Preview Tour"></i>
-                <a href="{{ route('admin.virtual-tour.builder', $tour->id) }}"
-                   title="Hotspot Configuration"
-                   class="text-slate-400 hover:text-slate-900 transition">
-                    <i class="fa-solid fa-signal"></i>
-                </a>
-                <i class="fa-regular fa-pen-to-square cursor-pointer hover:text-slate-900 transition edit-tour-btn"
-                   data-tour='@json($tour->toEditArray())' title="Edit Tour"></i>
-                <i class="fa-regular fa-trash-can cursor-pointer hover:text-rose-500 transition delete-tour-btn"
-                   data-tour-id="{{ $tour->id }}"
-                   data-tour-title="{{ $tour->title }}" title="Delete Tour"></i>
+                <i class="fa-regular fa-eye cursor-pointer hover:text-slate-900 transition view-tour-btn" data-tour='@json($tour->toViewerArray())' title="Preview Tour"></i>
+                <a href="{{ route('admin.virtual-tour.builder', $tour->id) }}" title="Hotspot Configuration" class="text-slate-400 hover:text-slate-900 transition"><i class="fa-solid fa-signal"></i></a>
+                <i class="fa-regular fa-pen-to-square cursor-pointer hover:text-slate-900 transition edit-tour-btn" data-tour='@json($tour->toEditArray())' title="Edit Tour"></i>
+                <i class="fa-regular fa-trash-can cursor-pointer hover:text-rose-500 transition delete-tour-btn" data-tour-id="{{ $tour->id }}" data-tour-title="{{ $tour->title }}" title="Delete Tour"></i>
             </div>
         </div>
         @empty
         <div class="text-center py-16 bg-white rounded-2xl border border-dashed border-slate-200" id="tours-empty-state">
             <i class="fa-solid fa-folder-open text-4xl text-slate-300 mb-3"></i>
             <p class="text-slate-500 font-medium">No virtual tours found.</p>
-            <p class="text-slate-400 text-sm mt-1">Click "Add Room" to create your first virtual tour.</p>
         </div>
         @endforelse
     </div>
 
-    {{-- Hidden data for React modal --}}
-    <div id="vt-rooms-data"
-         data-rooms="{{ json_encode($roomsForReact, JSON_HEX_APOS | JSON_HEX_QUOT) }}"
-         class="hidden"></div>
-
-    {{-- React modal mount point --}}
+    <div id="vt-rooms-data" data-rooms="{{ json_encode($roomsForReact, JSON_HEX_APOS | JSON_HEX_QUOT) }}" class="hidden"></div>
     <div id="admin-virtual-tour-modals"></div>
 
-    {{-- Pass route URLs to React --}}
     <script>
-        window.__VT_ROUTES__ = {
-            store:    '{{ route("admin.virtual-tour.store") }}',
-            update:   '{{ route("admin.virtual-tour.update", ":id") }}',
-            destroy:  '{{ route("admin.virtual-tour.destroy", ":id") }}',
-            viewer:   '{{ route("tour.viewer", ":id") }}',
-            fromPath: '{{ "/" . ltrim(request()->path(), "/") }}'
-        };
+        window.__VT_ROUTES__ = { store: '{{ route("admin.virtual-tour.store") }}', update: '{{ route("admin.virtual-tour.update", ":id") }}', destroy: '{{ route("admin.virtual-tour.destroy", ":id") }}', viewer: '{{ route("tour.viewer", ":id") }}', fromPath: '{{ "/" . ltrim(request()->path(), "/") }}' };
     </script>
 </div>
 @endsection
 
 @push('scripts')
 <script>
-// Client-side search & filter (also re-run after DOM patches)
 (function () {
     const searchInput  = document.getElementById('tour-search');
     const statusFilter = document.getElementById('tour-status-filter');
@@ -167,34 +124,18 @@
     function filterTours() {
         const search = searchInput.value.toLowerCase();
         const status = statusFilter.value;
-
         let visible = 0;
         document.querySelectorAll('.tour-item').forEach(item => {
-            const title      = item.dataset.title || '';
+            const title = item.dataset.title || '';
             const itemStatus = item.dataset.status || '';
-            const matchesSearch = title.includes(search);
-            const matchesStatus = !status || itemStatus === status;
-            const show = matchesSearch && matchesStatus;
+            const show = title.includes(search) && (!status || itemStatus === status);
             item.style.display = show ? '' : 'none';
             if (show) visible++;
         });
-
-        // Toggle the "no results" empty state that React may have injected
-        const existingEmpty = document.getElementById('tours-empty-state');
-        const hasRows = document.querySelectorAll('.tour-item').length > 0;
-        if (!hasRows) {
-            // leave React's injected empty state alone
-            return;
-        }
-        if (existingEmpty && visible > 0 && existingEmpty.dataset.react !== '1') {
-            existingEmpty.remove();
-        }
     }
 
     searchInput.addEventListener('input', filterTours);
     statusFilter.addEventListener('change', filterTours);
-
-    // Expose so React can re-run the filter after patching DOM
     window.__vtFilterTours = filterTours;
 })();
 </script>

@@ -150,7 +150,7 @@ export default function TenantMaintenanceModals() {
             setShowDelete(false);
             setDeleteTarget(null);
             setShowDetails(false);
-            document.dispatchEvent(new CustomEvent('maintenance:refresh'));
+            window.dispatchEvent(new CustomEvent('maintenance:refresh'));
         } catch (err) {
             alert(err.message);
         } finally {
@@ -180,7 +180,7 @@ export default function TenantMaintenanceModals() {
             const data = await res.json();
             if (!res.ok) throw new Error(data.message || 'Failed to create request.');
             setShowNew(false);
-            document.dispatchEvent(new CustomEvent('maintenance:refresh'));
+            window.dispatchEvent(new CustomEvent('maintenance:refresh'));
         } catch (err) {
             alert(err.message);
         } finally {

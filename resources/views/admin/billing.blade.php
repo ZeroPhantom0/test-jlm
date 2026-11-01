@@ -213,10 +213,10 @@
 
     statusFilter?.addEventListener('change', () => { renderRows(); refresh(); });
 
-    let pollTimer = setInterval(refresh, 15000);
+    let pollTimer = setInterval(refresh, 3000);
     document.addEventListener('visibilitychange', () => {
         if (document.hidden) clearInterval(pollTimer);
-        else { refresh(); pollTimer = setInterval(refresh, 15000); }
+        else { refresh(); pollTimer = setInterval(refresh, 3000); }
     });
 
     if (window.Echo) {

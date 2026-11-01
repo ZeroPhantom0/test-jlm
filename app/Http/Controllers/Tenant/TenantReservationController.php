@@ -14,6 +14,7 @@ use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 
 class TenantReservationController extends Controller
@@ -254,7 +255,28 @@ class TenantReservationController extends Controller
 
     public function store(Request $request)
     {
+
+        session()->save();
+        
         $user = Auth::user();
+
+        // ── Timing helper ──────────────────────────────────────
+        $t = [];
+        $mark = function (string $label) use (&$t) {
+            $t[$label] = microtime(true);
+        };
+        $lap = function (string $label, string $from) use (&$t) {
+            $ms = isset($t[$from])
+                ? round((microtime(true) - $t[$from]) * 1000)
+                : null;
+            Log::channel('single')->info('[reservation.timing] ' . $label, [
+                'ms'       => $ms,
+                'user_id'  => Auth::id(),
+                'peak_mem' => round(memory_get_peak_usage(true) / 1048576, 2) . 'MB',
+            ]);
+        };
+
+        $mark('start');
 
         $validated = $request->validate([
             'room_id'         => ['required', 'exists:rooms,id'],
@@ -270,6 +292,7 @@ class TenantReservationController extends Controller
             'room_bed_id'     => ['nullable', 'string', 'max:50'],
             'agreed_to_terms' => ['accepted'],
         ]);
+        $lap('validate', 'start');
 
         $inDate  = Carbon::parse($validated['check_in_date']  . ' ' . ($validated['check_in_time']  ?? '00:00'));
         $outDate = Carbon::parse($validated['check_out_date'] . ' ' . ($validated['check_out_time'] ?? '00:00'));
@@ -309,12 +332,19 @@ class TenantReservationController extends Controller
                 'data'       => ['reference_no' => $recentDuplicate->reference_no],
             ], 200);
         }
+        $lap('prechecks', 'validate');
 
+        // ── File upload timing ─────────────────────────────────
+        $mark('upload_start');
         $receiptPath = $request->file('receipt')
             ->store('reservations/' . $user->id, 'public');
+        $lap('upload', 'upload_start');
 
         try {
-            $reservation = DB::transaction(function () use ($validated, $user, $receiptPath) {
+            // ── DB transaction timing ──────────────────────────
+            $mark('db_start');
+
+            [$reservation, $invoice] = DB::transaction(function () use ($validated, $user, $receiptPath) {
 
                 $room = Room::where('id', $validated['room_id'])
                     ->lockForUpdate()
@@ -422,7 +452,7 @@ class TenantReservationController extends Controller
 
                 $tenant = Tenant::where('user_id', $user->id)->first();
 
-                Invoice::create([
+                $invoice = Invoice::create([
                     'transaction_no' => Invoice::generateTransactionNo(),
                     'tenant_id'      => $tenant?->id,
                     'room_id'        => $reservation->room_id,
@@ -444,30 +474,55 @@ class TenantReservationController extends Controller
                     'date_paid'      => now()->toDateString(),
                 ]);
 
-                return $reservation;
+                return [$reservation, $invoice];
             });
+            $lap('db_transaction', 'db_start');
 
+            // ── Broadcast event timing (the likely culprit) ────
+            $mark('events_start');
             event(new ReservationUpdated('created', $reservation->id));
-            event(new InvoiceUpdated('created', null));
+            $lap('event_reservation', 'events_start');
+
+            $mark('event_invoice_start');
+            event(new InvoiceUpdated('created', $invoice->id));
+            $lap('event_invoice', 'event_invoice_start');
+
+            $mark('response_start');
 
             return response()->json([
                 'success' => true,
                 'message' => 'Reservation submitted. Awaiting admin approval.',
                 'data'    => ['reference_no' => $reservation->reference_no],
-            ]);
+            ])->header('Connection', 'close');;
         } catch (\RuntimeException $e) {
             if (Storage::disk('public')->exists($receiptPath)) {
                 Storage::disk('public')->delete($receiptPath);
             }
+            Log::info('[reservation.timing] FAILED_RUNTIME', [
+                'user_id' => Auth::id(),
+                'message' => $e->getMessage(),
+            ]);
             return response()->json(['message' => $e->getMessage()], 422);
         } catch (\Throwable $e) {
             if (Storage::disk('public')->exists($receiptPath)) {
                 Storage::disk('public')->delete($receiptPath);
             }
             report($e);
+            Log::info('[reservation.timing] FAILED_EXCEPTION', [
+                'user_id' => Auth::id(),
+                'message' => $e->getMessage(),
+            ]);
             return response()->json([
                 'message' => 'Something went wrong. Please try again.',
             ], 500);
+        } finally {
+            // Total time — useful even on failure
+            if (isset($t['start'])) {
+                Log::channel('single')->info('[reservation.timing] TOTAL', [
+                    'ms'      => round((microtime(true) - $t['start']) * 1000),
+                    'user_id' => Auth::id(),
+                ]);
+            }
         }
     }
 
@@ -485,24 +540,53 @@ class TenantReservationController extends Controller
             ], 422);
         }
 
-        DB::transaction(function () use ($reservation) {
+        $t0 = microtime(true);
+        $affectedInvoiceIds = [];
+
+        DB::transaction(function () use ($reservation, &$affectedInvoiceIds) {
             if ($reservation->proof_of_payment) {
                 Storage::disk('public')->delete($reservation->proof_of_payment);
             }
 
             $reservation->update(['status' => 'Rejected']);
 
-            Invoice::where('tenant_name', $reservation->tenant_name)
+            $affectedInvoiceIds = Invoice::where('tenant_name', $reservation->tenant_name)
                 ->where('description', 'like', '%' . $reservation->reference_no . '%')
-                ->update([
-                    'status'       => 'Unpaid',
-                    'receipt_path' => null,
-                    'date_paid'    => null,
-                ]);
+                ->pluck('id')
+                ->all();
+
+            if (! empty($affectedInvoiceIds)) {
+                Invoice::whereIn('id', $affectedInvoiceIds)
+                    ->update([
+                        'status'       => 'Unpaid',
+                        'receipt_path' => null,
+                        'date_paid'    => null,
+                    ]);
+            }
         });
 
+        Log::info('[reservation.timing] cancel_db', [
+            'ms'      => round((microtime(true) - $t0) * 1000),
+            'user_id' => $user->id,
+        ]);
+
+        $t1 = microtime(true);
         event(new ReservationUpdated('cancelled', $reservation->id));
-        event(new InvoiceUpdated('updated', null));
+        Log::info('[reservation.timing] cancel_event', [
+            'ms'      => round((microtime(true) - $t1) * 1000),
+            'user_id' => $user->id,
+        ]);
+
+        if (count($affectedInvoiceIds) === 1) {
+            event(new InvoiceUpdated('updated', $affectedInvoiceIds[0]));
+        } elseif (count($affectedInvoiceIds) > 1) {
+            event(new InvoiceUpdated('updated', null));
+        }
+
+        Log::info('[reservation.timing] cancel_total', [
+            'ms'      => round((microtime(true) - $t0) * 1000),
+            'user_id' => $user->id,
+        ]);
 
         return response()->json([
             'success' => true,

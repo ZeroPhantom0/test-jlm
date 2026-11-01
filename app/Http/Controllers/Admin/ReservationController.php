@@ -25,7 +25,7 @@ class ReservationController extends Controller
         $filters = $request->only(['search', 'status']);
 
         $reservations = Reservation::filter($filters)
-            ->whereNotIn('status', ['Approved', 'Expired'])
+            ->where('status', 'Pending')
             ->latest()
             ->get();
 
@@ -58,7 +58,7 @@ class ReservationController extends Controller
         $filters = $request->only(['search', 'status']);
 
         $reservations = Reservation::filter($filters)
-            ->whereNotIn('status', ['Approved', 'Expired'])
+            ->where('status', 'Pending')
             ->latest()
             ->get();
 
@@ -70,7 +70,7 @@ class ReservationController extends Controller
             'expired'  => Reservation::expired()->count(),
         ];
 
-        $rows = $reservations->map(fn (Reservation $res) => [
+        $rows = $reservations->map(fn(Reservation $res) => [
             'id'                  => $res->id,
             'reference_no'        => $res->reference_no,
             'tenant_name'         => $res->tenant_name,
@@ -91,7 +91,7 @@ class ReservationController extends Controller
         ])->values();
 
         $reactMap = $reservations->mapWithKeys(
-            fn (Reservation $res) => [$res->reference_no => $res->toReactArray()]
+            fn(Reservation $res) => [$res->reference_no => $res->toReactArray()]
         )->toArray();
 
         return response()->json([
@@ -229,9 +229,10 @@ class ReservationController extends Controller
             }
         }
 
-        $invoiceChanged = false;
+        // Captured out of the transaction so we can broadcast the invoice ID
+        $settledInvoice = null;
 
-        DB::transaction(function () use ($request, $reservation, $validated, &$invoiceChanged) {
+        DB::transaction(function () use ($request, $reservation, $validated, &$settledInvoice) {
             $reservation->update([
                 'status'       => 'Approved',
                 'admin_notes'  => $validated['admin_notes'] ?? $reservation->admin_notes,
@@ -256,7 +257,8 @@ class ReservationController extends Controller
                 $reservation->room->syncStatus();
             }
 
-            $invoiceChanged = $this->settleReservationInvoice($reservation, $tenant);
+            // Now returns ?Invoice
+            $settledInvoice = $this->settleReservationInvoice($reservation, $tenant);
         });
 
         AuditLogger::log([
@@ -270,8 +272,10 @@ class ReservationController extends Controller
         ]);
 
         event(new ReservationUpdated('approved', $reservation->id));
-        if ($invoiceChanged) {
-            event(new InvoiceUpdated('created', null));
+
+        // Broadcast with the real invoice ID when one was created/updated
+        if ($settledInvoice) {
+            event(new InvoiceUpdated('created', $settledInvoice->id));
         }
 
         return response()->json([
@@ -287,9 +291,9 @@ class ReservationController extends Controller
             'admin_notes' => ['nullable', 'string'],
         ]);
 
-        $invoicesDeleted = 0;
+        $deletedInvoiceIds = [];
 
-        DB::transaction(function () use ($request, $reservation, $validated, &$invoicesDeleted) {
+        DB::transaction(function () use ($request, $reservation, $validated, &$deletedInvoiceIds) {
             $reservation->update([
                 'status'       => 'Rejected',
                 'admin_notes'  => $validated['admin_notes'] ?? $reservation->admin_notes,
@@ -301,7 +305,7 @@ class ReservationController extends Controller
                 $reservation->room->syncStatus();
             }
 
-            $invoicesDeleted = $this->deleteInvoicesOnRejection($reservation);
+            $deletedInvoiceIds = $this->deleteInvoicesOnRejection($reservation);
         });
 
         AuditLogger::log([
@@ -316,7 +320,13 @@ class ReservationController extends Controller
         ]);
 
         event(new ReservationUpdated('rejected', $reservation->id));
-        if ($invoicesDeleted > 0) {
+
+        // Multiple invoices may have been deleted. The listener does a full
+        // refresh anyway, so we pass null when more than one was removed and
+        // the single ID when exactly one was.
+        if (count($deletedInvoiceIds) === 1) {
+            event(new InvoiceUpdated('deleted', $deletedInvoiceIds[0]));
+        } elseif (count($deletedInvoiceIds) > 1) {
             event(new InvoiceUpdated('deleted', null));
         }
 
@@ -381,9 +391,11 @@ class ReservationController extends Controller
     }
 
     /**
-     * Returns true if an invoice was created or updated (so callers can broadcast).
+     * Creates or updates the invoice tied to the reservation.
+     * Returns the Invoice (fresh) so callers can broadcast its ID,
+     * or null if nothing was changed (already paid).
      */
-    private function settleReservationInvoice(Reservation $reservation, ?Tenant $tenant): bool
+    private function settleReservationInvoice(Reservation $reservation, ?Tenant $tenant): ?Invoice
     {
         $totalCharges = (float) $reservation->total_charges;
         $paidAmount   = (float) $reservation->reservation_fee;
@@ -401,7 +413,7 @@ class ReservationController extends Controller
             ->exists();
 
         if ($alreadyPaid) {
-            return false;
+            return null;
         }
 
         $invoice = Invoice::query()
@@ -415,7 +427,7 @@ class ReservationController extends Controller
         );
 
         if (! $invoice) {
-            Invoice::create([
+            $invoice = Invoice::create([
                 'transaction_no' => Invoice::generateTransactionNo(),
                 'tenant_id'      => $tenant?->id,
                 'room_id'        => $reservation->room_id,
@@ -439,7 +451,8 @@ class ReservationController extends Controller
                 'verified_by'    => $status === 'Paid' ? Auth::id() : null,
                 'verified_at'    => $status === 'Paid' ? now() : null,
             ]);
-            return true;
+
+            return $invoice;
         }
 
         $invoice->update([
@@ -459,27 +472,30 @@ class ReservationController extends Controller
                 : null,
         ]);
 
-        return true;
+        return $invoice->fresh();
     }
 
     /**
-     * Returns how many invoices were deleted.
+     * Deletes invoices tied to the reservation on rejection.
+     * Returns the list of deleted invoice IDs (was: a count).
      */
-    private function deleteInvoicesOnRejection(Reservation $reservation): int
+    private function deleteInvoicesOnRejection(Reservation $reservation): array
     {
         $invoices = Invoice::query()
             ->where('description', 'like', '%' . $reservation->reference_no . '%')
             ->whereIn('status', ['Unpaid', 'Partial', 'Pending'])
             ->get();
 
-        $count = 0;
+        $deletedIds = [];
+
         foreach ($invoices as $inv) {
             if ($inv->receipt_path && Storage::disk('public')->exists($inv->receipt_path)) {
                 Storage::disk('public')->delete($inv->receipt_path);
             }
+            $deletedIds[] = $inv->id;
             $inv->delete();
-            $count++;
         }
-        return $count;
+
+        return $deletedIds;
     }
 }

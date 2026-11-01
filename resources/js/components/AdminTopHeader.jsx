@@ -141,7 +141,7 @@ export default function AdminTopHeader({
     // Initial + polling every 5s
     useEffect(() => {
         fetchNotifications();
-        const id = setInterval(fetchNotifications, 5000);
+        const id = setInterval(fetchNotifications, 3000);
         return () => clearInterval(id);
     }, []);
 

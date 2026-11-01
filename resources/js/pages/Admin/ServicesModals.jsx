@@ -171,7 +171,7 @@ export default function ServicesModals() {
 
             // Refresh the admin list in-place — no full page reload.
             // The polling script listens for this event and re-fetches.
-            document.dispatchEvent(new CustomEvent('maintenance:refresh'));
+            window.dispatchEvent(new CustomEvent('maintenance:refresh'));
         } catch (err) {
             alert(err.message);
         } finally {
@@ -200,7 +200,7 @@ export default function ServicesModals() {
             setShowNew(false);
 
             // Refresh the admin list in-place — no full page reload.
-            document.dispatchEvent(new CustomEvent('maintenance:refresh'));
+            window.dispatchEvent(new CustomEvent('maintenance:refresh'));
         } catch (err) {
             alert(err.message);
         } finally {
@@ -249,7 +249,7 @@ export default function ServicesModals() {
             setShowDetails(false);
 
             // Refresh the admin list in-place — no full page reload.
-            document.dispatchEvent(new CustomEvent('maintenance:refresh'));
+            window.dispatchEvent(new CustomEvent('maintenance:refresh'));
         } catch (err) {
             alert(err.message);
         } finally {
@@ -386,9 +386,9 @@ export default function ServicesModals() {
                             <h4 className="text-lg font-bold text-slate-900">{request.title}</h4>
                             <div className="flex items-center gap-1.5">
                                 <span className={`text-[10px] font-extrabold px-1.5 py-0.5 rounded uppercase ${
-                                    request.priority === 'Critical' ? 'bg-rose-100 text-rose-700' :
-                                    request.priority === 'High' ? 'bg-rose-100 text-rose-600' :
-                                    request.priority === 'Medium' ? 'bg-yellow-100 text-amber-700' :
+                                    String(request.priority).toUpperCase() === 'CRITICAL' ? 'bg-rose-100 text-rose-700' :
+                                    String(request.priority).toUpperCase() === 'HIGH' ? 'bg-rose-100 text-rose-600' :
+                                    String(request.priority).toUpperCase() === 'MEDIUM' ? 'bg-yellow-100 text-amber-700' :
                                     'bg-blue-100 text-blue-600'
                                 }`}>
                                     {request.priority}

@@ -3,13 +3,13 @@
 namespace App\Events;
 
 use App\Models\Reservation;
-use Illuminate\Broadcasting\Channel;
 use Illuminate\Broadcasting\InteractsWithSockets;
-use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
+use Illuminate\Broadcasting\PrivateChannel; // <-- FIXED IMPORT
+use Illuminate\Contracts\Broadcasting\ShouldBroadcast; // <-- CHANGED TO QUEUED BROADCAST
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
 
-class ReservationUpdated implements ShouldBroadcastNow
+class ReservationUpdated implements ShouldBroadcast
 {
     use Dispatchable, InteractsWithSockets, SerializesModels;
 
@@ -21,8 +21,8 @@ class ReservationUpdated implements ShouldBroadcastNow
     public function broadcastOn(): array
     {
         return [
-            new Channel('admin.reservations'),
-            new Channel('tenant.reservations'),
+            new PrivateChannel('admin.reservations'),
+            new PrivateChannel('tenant.reservations'),
         ];
     }
 

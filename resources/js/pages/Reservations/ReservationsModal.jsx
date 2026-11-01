@@ -39,10 +39,15 @@ const TIER_3_MAX_DAYS = 31;
 const TIER_4_MAX_DAYS = 100;
 const TIER_5_MAX_DAYS = 364;
 
-function computeDueDatePreview(checkInDate, checkInTime, checkOutDate, checkOutTime) {
+function computeDueDatePreview(
+    checkInDate,
+    checkInTime,
+    checkOutDate,
+    checkOutTime,
+) {
     if (!checkInDate || !checkOutDate) return null;
 
-    const inD  = new Date(checkInDate  + "T" + (checkInTime  || "00:00"));
+    const inD = new Date(checkInDate + "T" + (checkInTime || "00:00"));
     const outD = new Date(checkOutDate + "T" + (checkOutTime || "00:00"));
     if (isNaN(inD) || isNaN(outD) || outD <= inD) return null;
 
@@ -71,7 +76,9 @@ function computeDueDatePreview(checkInDate, checkInTime, checkOutDate, checkOutT
 function formatDateLong(d) {
     if (!d) return "";
     return d.toLocaleDateString("en-US", {
-        year: "numeric", month: "short", day: "numeric",
+        year: "numeric",
+        month: "short",
+        day: "numeric",
     });
 }
 
@@ -91,14 +98,17 @@ function saveModalState(state) {
     try {
         // Don't persist File objects (they can't be serialized)
         const { receipt, ...rest } = state.form;
-        sessionStorage.setItem(STORAGE_KEY, JSON.stringify({
-            showDetails: state.showDetails,
-            showReserve: state.showReserve,
-            room: state.room,
-            form: rest,
-            // Track that receipt needs re-upload
-            hadReceipt: !!receipt,
-        }));
+        sessionStorage.setItem(
+            STORAGE_KEY,
+            JSON.stringify({
+                showDetails: state.showDetails,
+                showReserve: state.showReserve,
+                room: state.room,
+                form: rest,
+                // Track that receipt needs re-upload
+                hadReceipt: !!receipt,
+            }),
+        );
     } catch (e) {
         console.warn("Failed to save modal state", e);
     }
@@ -157,7 +167,7 @@ export default function ReservationsModal() {
     // 1. Read default payload on mount AND restore any saved modal state
     useEffect(() => {
         const el = document.getElementById("tenant-reservations-modals");
-        
+
         // Initial load
         if (el?.dataset?.reservations) {
             try {
@@ -182,7 +192,6 @@ export default function ReservationsModal() {
                 }
             }
             // Clear after restoring so a fresh reload doesn't re-open
-            // (but we keep it until the user closes the modal or navigates)
             clearModalState();
         }
 
@@ -200,18 +209,58 @@ export default function ReservationsModal() {
         window.addEventListener("reservation:data-updated", handleLiveUpdate);
 
         return () => {
-            window.removeEventListener("reservation:data-updated", handleLiveUpdate);
+            window.removeEventListener(
+                "reservation:data-updated",
+                handleLiveUpdate,
+            );
         };
     }, []);
 
-    // 2. Persist modal state whenever it changes (so tour navigation can restore it)
+    // 2. Refetch data dynamically from the server without a page reload
+    useEffect(() => {
+        const handleRefetch = async () => {
+            try {
+                const res = await fetch("/tenants/reservations/data", {
+                    headers: { Accept: "application/json" },
+                });
+                if (!res.ok) return;
+                const data = await res.json();
+
+                if (data && data.reservations) {
+                    setReservationsData(data.reservations);
+                    window.dispatchEvent(
+                        new CustomEvent("reservation:data-updated", {
+                            detail: data.reservations,
+                        }),
+                    );
+                }
+            } catch (err) {
+                console.warn("Failed to refetch reservation data", err);
+            }
+        };
+
+        // Listen for local submissions
+        window.addEventListener("reservation:refresh", handleRefetch);
+        // Listen for remote updates coming via WebSockets
+        window.addEventListener("reservation:remote-updated", handleRefetch);
+
+        return () => {
+            window.removeEventListener("reservation:refresh", handleRefetch);
+            window.removeEventListener(
+                "reservation:remote-updated",
+                handleRefetch,
+            );
+        };
+    }, []);
+
+    // 3. Persist modal state whenever it changes (so tour navigation can restore it)
     useEffect(() => {
         if (showDetails || showReserve) {
             saveModalState({ showDetails, showReserve, room, form });
         }
     }, [showDetails, showReserve, room, form]);
 
-    // 3. Global click listener (Open Details, Open Reserve, Open Cancel)
+    // 4. Global click listener (Open Details, Open Reserve, Open Cancel)
     useEffect(() => {
         const handler = (e) => {
             const detailsBtn = e.target.closest(".open-room-details-btn");
@@ -327,25 +376,38 @@ export default function ReservationsModal() {
 
     const meets24hMinimum = useMemo(() => {
         if (!form.check_in_date || !form.check_out_date) return true;
-        const inStr = form.check_in_date + "T" + (form.check_in_time || "00:00");
-        const outStr = form.check_out_date + "T" + (form.check_out_time || "00:00");
+        const inStr =
+            form.check_in_date + "T" + (form.check_in_time || "00:00");
+        const outStr =
+            form.check_out_date + "T" + (form.check_out_time || "00:00");
         const inD = new Date(inStr);
         const outD = new Date(outStr);
         if (isNaN(inD) || isNaN(outD)) return false;
-        return (outD - inD) >= 24 * 60 * 60 * 1000;
-    }, [form.check_in_date, form.check_in_time, form.check_out_date, form.check_out_time]);
+        return outD - inD >= 24 * 60 * 60 * 1000;
+    }, [
+        form.check_in_date,
+        form.check_in_time,
+        form.check_out_date,
+        form.check_out_time,
+    ]);
 
     // ============================================================
     // Due-date preview
     // ============================================================
     const dueDatePreview = useMemo(
-        () => computeDueDatePreview(
+        () =>
+            computeDueDatePreview(
+                form.check_in_date,
+                form.check_in_time,
+                form.check_out_date,
+                form.check_out_time,
+            ),
+        [
             form.check_in_date,
             form.check_in_time,
             form.check_out_date,
             form.check_out_time,
-        ),
-        [form.check_in_date, form.check_in_time, form.check_out_date, form.check_out_time],
+        ],
     );
 
     // ============================================================
@@ -363,21 +425,25 @@ export default function ReservationsModal() {
     // Submit reservation
     // ============================================================
     const handleSubmit = async () => {
-        if (inFlightRef.current) return;
+        if (inFlightRef.current || saving) return;
+        inFlightRef.current = true;
 
         if (!form.check_in_date || !form.check_out_date) {
+            inFlightRef.current = false;
             alert("Please select both check-in and check-out dates.");
             return;
         }
 
         if (!meets24hMinimum) {
+            inFlightRef.current = false;
             alert(
-                "The minimum stay is 24 hours (1 full day). Please extend your check-out date or time."
+                "The minimum stay is 24 hours (1 full day). Please extend your check-out date or time.",
             );
             return;
         }
 
         if (room.bed_slots && room.bed_slots.length > 0 && !form.room_bed_id) {
+            inFlightRef.current = false;
             alert("Please select a bed slot.");
             return;
         }
@@ -387,6 +453,7 @@ export default function ReservationsModal() {
                 (s) => s.status !== "Occupied",
             );
             if (availableSlots.length === 0) {
+                inFlightRef.current = false;
                 alert(
                     "All beds in this room are currently occupied. Please pick another room.",
                 );
@@ -395,20 +462,26 @@ export default function ReservationsModal() {
         }
 
         if (!form.reference_no.trim()) {
+            inFlightRef.current = false;
             alert("Please enter your GCash reference number.");
             return;
         }
         if (!form.receipt) {
+            inFlightRef.current = false;
             alert("Please upload your payment proof.");
             return;
         }
         if (!form.agreed_to_terms) {
+            inFlightRef.current = false;
             alert("Please agree to the Reservation Policy.");
             return;
         }
 
-        inFlightRef.current = true;
         setSaving(true);
+
+        // Use the actual DOM element, not the React component
+        const modalEl = document.getElementById("tenant-reservations-modals");
+        if (modalEl) modalEl.dataset.saving = "true";
 
         try {
             const fd = new FormData();
@@ -430,62 +503,34 @@ export default function ReservationsModal() {
                 headers: {
                     Accept: "application/json",
                     "X-CSRF-TOKEN": csrf(),
+                    Connection: "close",
                 },
                 body: fd,
             });
 
             const data = await res.json().catch(() => ({}));
-            if (!res.ok)
+            if (!res.ok) {
                 throw new Error(
                     data.message || "Failed to submit reservation.",
                 );
+            }
 
             setShowReserve(false);
             clearModalState();
             setNeedsReceiptReupload(false);
             window.dispatchEvent(new Event("reservation:refresh"));
-            inFlightRef.current = false;
-            setSaving(false);
+
+            // Keep the lock for 2 seconds so WebSockets don't trigger a double-refresh
+            setTimeout(() => {
+                inFlightRef.current = false;
+                setSaving(false);
+                if (modalEl) delete modalEl.dataset.saving;
+            }, 2000);
         } catch (err) {
             alert(err.message);
             inFlightRef.current = false;
             setSaving(false);
-        }
-    };
-
-    const handleCopyGCash = () => {
-        navigator.clipboard?.writeText("0917-123-4567");
-        alert("GCash number copied!");
-    };
-
-    const confirmCancelReservation = async () => {
-        if (!cancelTarget) return;
-        if (cancelInFlightRef.current) return;
-
-        cancelInFlightRef.current = true;
-        setSaving(true);
-
-        try {
-            const res = await fetch(
-                `/tenants/reservations/${cancelTarget.id}/cancel`,
-                {
-                    method: "POST",
-                    headers: {
-                        Accept: "application/json",
-                        "X-CSRF-TOKEN": csrf(),
-                    },
-                },
-            );
-            const result = await res.json().catch(() => ({}));
-            if (!res.ok) throw new Error(result.message || "Failed to cancel.");
-
-            setShowCancel(false);
-            setCancelTarget(null);
-            window.dispatchEvent(new Event("reservation:refresh"));
-        } catch (err) {
-            alert(err.message);
-            cancelInFlightRef.current = false;
-            setSaving(false);
+            if (modalEl) delete modalEl.dataset.saving;
         }
     };
 
@@ -519,13 +564,15 @@ export default function ReservationsModal() {
                                     room.has_reserved
                                         ? "bg-emerald-100 text-emerald-700 border border-emerald-200"
                                         : room.status === "Occupied"
-                                        ? "bg-rose-200 text-rose-700"
-                                        : room.status === "Available"
-                                          ? "bg-green-100 text-green-700"
-                                          : "bg-amber-100 text-amber-700"
+                                          ? "bg-rose-200 text-rose-700"
+                                          : room.status === "Available"
+                                            ? "bg-green-100 text-green-700"
+                                            : "bg-amber-100 text-amber-700"
                                 }`}
                             >
-                                {room.has_reserved ? "Reserved by You" : room.status}
+                                {room.has_reserved
+                                    ? "Reserved by You"
+                                    : room.status}
                             </span>
 
                             {room.tourId && (
@@ -543,17 +590,18 @@ export default function ReservationsModal() {
                                 {room.roomNumber}
                             </span>
 
-                            {room.status === "Occupied" && !room.has_reserved && (
-                                <div className="absolute bottom-3 right-3 bg-white/95 px-3 py-1.5 rounded-md text-[10px] text-slate-700 text-right shadow">
-                                    <div>
-                                        Estimated Availability:{" "}
-                                        <strong>{room.estDate}</strong>
+                            {room.status === "Occupied" &&
+                                !room.has_reserved && (
+                                    <div className="absolute bottom-3 right-3 bg-white/95 px-3 py-1.5 rounded-md text-[10px] text-slate-700 text-right shadow">
+                                        <div>
+                                            Estimated Availability:{" "}
+                                            <strong>{room.estDate}</strong>
+                                        </div>
+                                        <div className="text-slate-500">
+                                            {room.estApprox}
+                                        </div>
                                     </div>
-                                    <div className="text-slate-500">
-                                        {room.estApprox}
-                                    </div>
-                                </div>
-                            )}
+                                )}
                         </div>
 
                         <p className="text-[13px] text-slate-500 leading-relaxed">
@@ -570,7 +618,9 @@ export default function ReservationsModal() {
                                 { label: "BEDS", value: room.beds },
                                 {
                                     label: "AVAILABLE SLOTS",
-                                    value: room.is_bookable ? (room.empty_beds || "1") : "0",
+                                    value: room.is_bookable
+                                        ? room.empty_beds || "1"
+                                        : "0",
                                 },
                                 {
                                     label: "DAILY RENT",
@@ -692,22 +742,35 @@ export default function ReservationsModal() {
                                     <input
                                         type="date"
                                         value={form.check_in_date}
-                                        min={new Date().toISOString().split("T")[0]}
+                                        min={
+                                            new Date()
+                                                .toISOString()
+                                                .split("T")[0]
+                                        }
                                         onChange={(e) => {
                                             const value = e.target.value;
                                             updateField("check_in_date", value);
                                             if (value) {
-                                                const inD = new Date(value + "T00:00:00");
+                                                const inD = new Date(
+                                                    value + "T00:00:00",
+                                                );
                                                 inD.setDate(inD.getDate() + 1);
                                                 const yyyy = inD.getFullYear();
-                                                const mm = String(inD.getMonth() + 1).padStart(2, "0");
-                                                const dd = String(inD.getDate()).padStart(2, "0");
+                                                const mm = String(
+                                                    inD.getMonth() + 1,
+                                                ).padStart(2, "0");
+                                                const dd = String(
+                                                    inD.getDate(),
+                                                ).padStart(2, "0");
                                                 const minOut = `${yyyy}-${mm}-${dd}`;
                                                 if (
                                                     form.check_out_date &&
                                                     form.check_out_date < minOut
                                                 ) {
-                                                    updateField("check_out_date", minOut);
+                                                    updateField(
+                                                        "check_out_date",
+                                                        minOut,
+                                                    );
                                                 }
                                             }
                                         }}
@@ -779,7 +842,8 @@ export default function ReservationsModal() {
                             {form.check_in_date && minCheckOutDate && (
                                 <p className="text-[11px] text-slate-400 mt-1 pl-1">
                                     <i className="fa-solid fa-circle-info mr-1"></i>
-                                    Minimum stay is 24 hours. Earliest check-out:{" "}
+                                    Minimum stay is 24 hours. Earliest
+                                    check-out:{" "}
                                     <strong className="text-slate-600">
                                         {minCheckOutDate}
                                     </strong>
@@ -790,9 +854,10 @@ export default function ReservationsModal() {
                                 <div className="bg-rose-50 border border-rose-200 rounded-lg p-2.5 mt-2 flex items-start gap-2">
                                     <i className="fa-solid fa-circle-exclamation text-rose-500 mt-0.5"></i>
                                     <p className="text-[12px] text-rose-700 leading-snug">
-                                        Your selected duration is under 24 hours.
-                                        Please extend your check-out date or
-                                        time — the minimum stay is 1 full day.
+                                        Your selected duration is under 24
+                                        hours. Please extend your check-out date
+                                        or time — the minimum stay is 1 full
+                                        day.
                                     </p>
                                 </div>
                             )}
@@ -1319,13 +1384,53 @@ export default function ReservationsModal() {
 
                     <div className="p-6 overflow-y-auto max-h-[70vh]">
                         <div className="text-[13.5px] text-slate-600 leading-relaxed space-y-3">
-                            <p>All reservations at JLM Cozy Cabin are subject to room availability and the submission of complete and accurate reservation information.</p>
-                            <p>Tenants must provide the required reservation details and select an available payment option before submitting their reservation. The available payment options may include a fifty percent (50%) down payment or full payment, depending on the applicable reservation requirements.</p>
-                            <p>After submission, the reservation will be placed under Pending Verification status and will not be considered confirmed until reviewed by the Admin. The Admin will review the reservation details and submitted payment information before approving or rejecting the reservation.</p>
-                            <p>An approved reservation will be confirmed by the system and the tenant will be notified of the reservation status. If the reservation does not meet the applicable requirements, the Admin may reject it and provide an appropriate reason.</p>
-                            <p>Reservations may expire if the required requirements are not completed within the specified period or if the tenant fails to arrive on the scheduled move-in date, subject to the applicable reservation conditions.</p>
-                            <p>Reservation cancellations, changes to reservation details, and room changes are subject to room availability, applicable policies, and Admin approval.</p>
-                            <p>Upon move-in, tenants may be required to present a valid identification document and reservation confirmation for verification.</p>
+                            <p>
+                                All reservations at JLM Cozy Cabin are subject
+                                to room availability and the submission of
+                                complete and accurate reservation information.
+                            </p>
+                            <p>
+                                Tenants must provide the required reservation
+                                details and select an available payment option
+                                before submitting their reservation. The
+                                available payment options may include a fifty
+                                percent (50%) down payment or full payment,
+                                depending on the applicable reservation
+                                requirements.
+                            </p>
+                            <p>
+                                After submission, the reservation will be placed
+                                under Pending Verification status and will not
+                                be considered confirmed until reviewed by the
+                                Admin. The Admin will review the reservation
+                                details and submitted payment information before
+                                approving or rejecting the reservation.
+                            </p>
+                            <p>
+                                An approved reservation will be confirmed by the
+                                system and the tenant will be notified of the
+                                reservation status. If the reservation does not
+                                meet the applicable requirements, the Admin may
+                                reject it and provide an appropriate reason.
+                            </p>
+                            <p>
+                                Reservations may expire if the required
+                                requirements are not completed within the
+                                specified period or if the tenant fails to
+                                arrive on the scheduled move-in date, subject to
+                                the applicable reservation conditions.
+                            </p>
+                            <p>
+                                Reservation cancellations, changes to
+                                reservation details, and room changes are
+                                subject to room availability, applicable
+                                policies, and Admin approval.
+                            </p>
+                            <p>
+                                Upon move-in, tenants may be required to present
+                                a valid identification document and reservation
+                                confirmation for verification.
+                            </p>
                         </div>
                     </div>
 

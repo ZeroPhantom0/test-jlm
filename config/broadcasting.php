@@ -1,5 +1,5 @@
 <?php
-// config/services.php
+// config/broadcasting.php
 
 return [
     'pusher' => [

@@ -7,11 +7,9 @@ import Echo from "laravel-echo";
 import Pusher from "pusher-js";
 
 // Tenant components
-import Sidebar from "./components/Sidebar";
 import TopHeader from "./components/TopHeader";
 
 // Admin components
-import AdminSidebar from "./components/AdminSidebar";
 import AdminTopHeader from "./components/AdminTopHeader";
 
 // Global Modals
@@ -199,25 +197,12 @@ if (import.meta.hot) {
 // EXISTING REACT COMPONENT MOUNTER (Tenant & Admin portals)
 // ============================================================
 function mountReact() {
-    const tenantSidebar = document.querySelector('[data-react="sidebar"]');
-    if (tenantSidebar && !tenantSidebar.dataset.mounted) {
-        const props = JSON.parse(tenantSidebar.dataset.props || "{}");
-        createRoot(tenantSidebar).render(<Sidebar {...props} />);
-        tenantSidebar.dataset.mounted = "true";
-    }
 
     const tenantHeader = document.querySelector('[data-react="top-header"]');
     if (tenantHeader && !tenantHeader.dataset.mounted) {
         const props = JSON.parse(tenantHeader.dataset.props || "{}");
         createRoot(tenantHeader).render(<TopHeader {...props} />);
         tenantHeader.dataset.mounted = "true";
-    }
-
-    const adminSidebar = document.querySelector('[data-react="admin-sidebar"]');
-    if (adminSidebar && !adminSidebar.dataset.mounted) {
-        const props = JSON.parse(adminSidebar.dataset.props || "{}");
-        createRoot(adminSidebar).render(<AdminSidebar {...props} />);
-        adminSidebar.dataset.mounted = "true";
     }
 
     const adminHeader = document.querySelector('[data-react="admin-top-header"]');
@@ -287,3 +272,9 @@ if (document.readyState === "loading") {
 } else {
     mountReact();
 }
+
+window.mountReact = mountReact;
+
+document.addEventListener('livewire:navigated', () => {
+    window.mountReact();
+});

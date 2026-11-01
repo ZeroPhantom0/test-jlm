@@ -1,4 +1,5 @@
 <?php
+// app/Events/MaintenanceUpdated.php
 
 namespace App\Events;
 
@@ -14,15 +15,23 @@ class MaintenanceUpdated implements ShouldBroadcastNow
 
     public function __construct(
         public string $action,
-        public ?int $requestId = null
+        public ?int $requestId = null,
+        public ?int $tenantId = null // <-- Added this
     ) {}
 
     public function broadcastOn(): array
     {
-        return [
+        $channels = [
             new Channel('admin.services'),
-            new Channel('tenant.services'),
         ];
+
+        if ($this->tenantId) {
+            $channels[] = new Channel('tenant.' . $this->tenantId . '.services');
+        } else {
+            $channels[] = new Channel('tenant.services');
+        }
+
+        return $channels;
     }
 
     public function broadcastAs(): string
