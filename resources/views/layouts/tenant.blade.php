@@ -125,6 +125,7 @@
             isTenant: {{ $user?->isTenant() ? 'true' : 'false' }},
             csrf: @json(csrf_token()),
             broadcast: @json($broadcastConfig),
+            tenantId: {{ $user?->tenant?->id ?? 'null' }},
         };
     </script>
 
@@ -147,8 +148,8 @@
         <div class="px-4.5 pt-5 pb-3.75 flex items-center justify-between whitespace-nowrap shrink-0">
             <div class="flex items-center gap-3">
                 <div
-                    class="w-9.5 h-9.5 rounded-full bg-white flex items-center justify-center text-[#e06800] text-lg shrink-0">
-                    <i class="fa-solid fa-house-chimney"></i>
+                    class="w-9.5 h-9.5 rounded-full bg-white flex items-center justify-center shrink-0 overflow-hidden">
+                    <img src="{{ asset('images/jlm-logo.png') }}" alt="JLM Logo" class="w-full h-full object-cover">
                 </div>
                 <div>
                     <h3 class="text-sm font-bold leading-tight text-white">JLM Cozy Cabin</h3>

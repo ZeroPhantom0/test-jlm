@@ -24,17 +24,21 @@ class TenantReservationController extends Controller
         $user   = Auth::user();
         $tenant = Tenant::where('user_id', $user->id)->first();
 
-        $myReservations = Reservation::where(function ($q) use ($user, $tenant) {
+        // Unfiltered — used for room card bookability + React modal map
+        $allMyReservations = Reservation::where(function ($q) use ($user, $tenant) {
             $q->where('user_id', $user->id)
                 ->orWhere('tenant_name', $user->name);
         })
             ->latest()
             ->get();
 
-        $reservationCards = $this->buildReservationCards($myReservations);
-        $rooms            = $this->buildRoomCards($myReservations);
+        // "My Reservations" list — only Pending
+        $pendingReservations = $allMyReservations->where('status', 'Pending')->values();
 
-        $myReservationsForReact = $myReservations->mapWithKeys(function ($r) {
+        $reservationCards = $this->buildReservationCards($pendingReservations);
+        $rooms            = $this->buildRoomCards($allMyReservations);   // ← use full list
+
+        $myReservationsForReact = $allMyReservations->mapWithKeys(function ($r) {
             return [
                 $r->reference_no => [
                     'id'      => $r->id,
@@ -63,17 +67,19 @@ class TenantReservationController extends Controller
         $user   = Auth::user();
         $tenant = Tenant::where('user_id', $user->id)->first();
 
-        $myReservations = Reservation::where(function ($q) use ($user, $tenant) {
+        $allMyReservations = Reservation::where(function ($q) use ($user, $tenant) {
             $q->where('user_id', $user->id)
                 ->orWhere('tenant_name', $user->name);
         })
             ->latest()
             ->get();
 
-        $reservationCards = $this->buildReservationCards($myReservations);
-        $rooms            = $this->buildRoomCards($myReservations);
+        $pendingReservations = $allMyReservations->where('status', 'Pending')->values();
 
-        $myReservationsForReact = $myReservations->mapWithKeys(function ($r) {
+        $reservationCards = $this->buildReservationCards($pendingReservations);
+        $rooms            = $this->buildRoomCards($allMyReservations);
+
+        $myReservationsForReact = $allMyReservations->mapWithKeys(function ($r) {
             return [
                 $r->reference_no => [
                     'id'      => $r->id,
@@ -154,7 +160,7 @@ class TenantReservationController extends Controller
                     'price'       => (float) $room->daily_rent,
                     'status'      => $room->status,
                     'is_bookable' => $isBookable,
-                    'has_reserved'=> $hasReserved,
+                    'has_reserved' => $hasReserved,
                     'empty_beds'  => $emptyBeds,
                     'img'         => $room->virtualTour?->thumbnail_url
                         ?? 'https://images.unsplash.com/photo-1598928506311-c55ded91a20c?auto=format&fit=crop&w=600&q=80',
@@ -257,7 +263,7 @@ class TenantReservationController extends Controller
     {
 
         session()->save();
-        
+
         $user = Auth::user();
 
         // ── Timing helper ──────────────────────────────────────

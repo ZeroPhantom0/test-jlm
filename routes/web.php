@@ -248,6 +248,7 @@ Route::middleware(['auth', 'admin', 'prevent.back.cache'])->prefix('admin')->nam
     Route::get('/history',        [HistoryController::class, 'index'])->name('history');
     Route::get('/reports',        [ReportsController::class, 'index'])->name('reports');
     Route::get('/reports/export', [ReportsController::class, 'export'])->name('reports.export');
+    Route::get('/reports/export-pdf', [ReportsController::class, 'exportPdf'])->name('reports.export-pdf');
 
     // ---------- Audit Logs ----------
     Route::get('/audit-logs',        [AuditLogController::class, 'index'])->name('audit-logs');

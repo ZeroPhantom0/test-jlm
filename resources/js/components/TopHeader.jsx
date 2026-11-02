@@ -31,16 +31,18 @@ function timeAgo(dateStr) {
 }
 
 function csrfToken() {
-    return document
-        .querySelector('meta[name="csrf-token"]')
-        ?.getAttribute("content") || "";
+    return (
+        document
+            .querySelector('meta[name="csrf-token"]')
+            ?.getAttribute("content") || ""
+    );
 }
 
 /* Reusable avatar block: shows uploaded pic if present, otherwise a default user icon */
 function UserAvatar({ src, name = "User", size = 34, className = "" }) {
     const dimension = `${size}px`;
-    
-    if (src && typeof src === 'string' && src.trim() !== "" && src !== "null") {
+
+    if (src && typeof src === "string" && src.trim() !== "" && src !== "null") {
         return (
             <img
                 src={src}
@@ -50,7 +52,7 @@ function UserAvatar({ src, name = "User", size = 34, className = "" }) {
             />
         );
     }
-    
+
     return (
         <div
             className={`rounded-full bg-slate-100 text-slate-400 flex items-center justify-center border border-slate-200 ${className}`}
@@ -63,25 +65,25 @@ function UserAvatar({ src, name = "User", size = 34, className = "" }) {
 }
 
 export default function TopHeader({
-    title     = "Dashboard",
-    userName  = "Tenant",
-    userRole  = "Tenant",
+    title = "Dashboard",
+    userName = "Tenant",
+    userRole = "Tenant",
     userEmail = "",
-    avatar    = null,
-    isTenant  = false,
+    avatar = null,
+    isTenant = false,
 }) {
     const [dropdownOpen, setDropdownOpen] = useState(false);
-    const [notifOpen, setNotifOpen]       = useState(false);
-    
+    const [notifOpen, setNotifOpen] = useState(false);
+
     const [rawNotifications, setRawNotifications] = useState([]);
-    
+
     const [locallyRead, setLocallyRead] = useState(new Set());
-    const [dismissed, setDismissed]     = useState(() => readDismissed());
-    
+    const [dismissed, setDismissed] = useState(() => readDismissed());
+
     const [loading, setLoading] = useState(false);
 
     const dropdownRef = useRef(null);
-    const notifRef    = useRef(null);
+    const notifRef = useRef(null);
 
     const displayRole = isTenant ? "Tenant" : "New Tenant";
 
@@ -90,16 +92,23 @@ export default function TopHeader({
 
     // 1. Process notifications
     const processedNotifications = rawNotifications
-        .map(n => ({
+        .map((n) => ({
             ...n,
-            isUnread: isTruthy(n.unread) && !locallyRead.has(n.id) && !dismissed.has(n.id)
+            isUnread:
+                isTruthy(n.unread) &&
+                !locallyRead.has(n.id) &&
+                !dismissed.has(n.id),
         }))
-        .filter(n => !dismissed.has(n.id))
+        .filter((n) => !dismissed.has(n.id))
         .slice(0, MAX_VISIBLE);
 
     const unreadCount = processedNotifications.filter((n) => n.isUnread).length;
 
+    const fetchingRef = useRef(false);
+
     const fetchNotifications = async () => {
+        if (fetchingRef.current) return; // skip if already in flight
+        fetchingRef.current = true;
         try {
             setLoading(true);
             const res = await fetch("/tenants/notifications/feed", {
@@ -111,17 +120,76 @@ export default function TopHeader({
             });
             if (!res.ok) throw new Error("Failed to load notifications");
             const data = await res.json();
-            
+
             setRawNotifications(data.notifications || []);
         } catch (err) {
             console.error(err);
         } finally {
             setLoading(false);
+            fetchingRef.current = false;
         }
     };
 
+    // Initial fetch + fallback poll (only when Echo is NOT live)
     useEffect(() => {
         fetchNotifications();
+
+        const intervalId = setInterval(() => {
+            if (document.visibilityState !== "visible") return;
+            if (window.__liveAvailable === true) return; // Echo is pushing updates
+            fetchNotifications();
+        }, 60000);
+
+        const onVisible = () => {
+            if (document.visibilityState === "visible") fetchNotifications();
+        };
+        document.addEventListener("visibilitychange", onVisible);
+
+        return () => {
+            clearInterval(intervalId);
+            document.removeEventListener("visibilitychange", onVisible);
+        };
+    }, []);
+
+    // ── Real-time: refetch whenever any tenant-side event fires ──
+    useEffect(() => {
+        if (!window.Echo) return;
+
+        const chans = window.LiveTenantChannels;
+        if (!chans) return;
+
+        const handler = () => fetchNotifications();
+
+        // Tenant ID is needed for the per-tenant messages channel.
+        // window.__appConfig.userId is the tenant's user ID; the
+        // channel expects the tenant record ID, so we fetch it from
+        // the tenant-specific channels that don't need an ID, and
+        // rely on billing/services/reservations for everything else.
+        //
+        // (The messages channel key is `tenant.{tenantId}.messages`
+        //  where tenantId is the Tenant record ID. We don't have it
+        //  in appConfig, so message-refresh is covered by the slow
+        //  fallback poll and by the initial fetch. Everything else
+        //  is real-time.)
+        const tenantId = window.__appConfig?.tenantId;
+        const unsubs = [
+            chans.reservations(handler),
+            chans.billing(handler),
+            chans.services(handler),
+            chans.announcements(handler),
+        ];
+
+        if (tenantId) {
+            unsubs.push(chans.messages(tenantId, handler));
+        }
+
+        const onReconnected = () => fetchNotifications();
+        document.addEventListener("echo:connected", onReconnected);
+
+        return () => {
+            unsubs.forEach((fn) => fn && fn());
+            document.removeEventListener("echo:connected", onReconnected);
+        };
     }, []);
 
     useEffect(() => {
@@ -130,7 +198,10 @@ export default function TopHeader({
 
     useEffect(() => {
         const handleClickOutside = (e) => {
-            if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+            if (
+                dropdownRef.current &&
+                !dropdownRef.current.contains(e.target)
+            ) {
                 setDropdownOpen(false);
             }
             if (notifRef.current && !notifRef.current.contains(e.target)) {
@@ -138,11 +209,12 @@ export default function TopHeader({
             }
         };
         document.addEventListener("mousedown", handleClickOutside);
-        return () => document.removeEventListener("mousedown", handleClickOutside);
+        return () =>
+            document.removeEventListener("mousedown", handleClickOutside);
     }, []);
 
     const markAsRead = (id) => {
-        setLocallyRead(prev => {
+        setLocallyRead((prev) => {
             const next = new Set(prev);
             next.add(id);
             return next;
@@ -150,9 +222,9 @@ export default function TopHeader({
     };
 
     const markAllAsRead = () => {
-        setLocallyRead(prev => {
+        setLocallyRead((prev) => {
             const next = new Set(prev);
-            processedNotifications.forEach(n => next.add(n.id));
+            processedNotifications.forEach((n) => next.add(n.id));
             return next;
         });
     };
@@ -194,12 +266,16 @@ export default function TopHeader({
                 <button
                     type="button"
                     className="md:hidden text-slate-800 text-lg p-1.5 rounded-md hover:bg-slate-100"
-                    onClick={() => window.dispatchEvent(new Event("open-mobile-sidebar"))}
+                    onClick={() =>
+                        window.dispatchEvent(new Event("open-mobile-sidebar"))
+                    }
                     aria-label="Open menu"
                 >
                     <i className="fa-solid fa-bars" />
                 </button>
-                <h1 className="text-lg md:text-xl font-bold text-slate-800">{title}</h1>
+                <h1 className="text-lg md:text-xl font-bold text-slate-800">
+                    {title}
+                </h1>
             </div>
 
             <div className="flex items-center gap-5 md:gap-6">
@@ -256,7 +332,8 @@ export default function TopHeader({
                             </div>
 
                             <div className="max-h-[380px] overflow-y-auto">
-                                {loading && processedNotifications.length === 0 ? (
+                                {loading &&
+                                processedNotifications.length === 0 ? (
                                     <div className="py-12 text-center text-[12px] text-slate-500">
                                         Loading…
                                     </div>
@@ -274,16 +351,26 @@ export default function TopHeader({
                                         <a
                                             key={n.id}
                                             href={n.link}
-                                            onClick={() => handleClickNotification(n)}
+                                            onClick={() =>
+                                                handleClickNotification(n)
+                                            }
                                             className={`flex items-start gap-3 px-4 py-3 border-b border-slate-50 last:border-b-0 hover:bg-slate-50 transition ${
-                                                n.isUnread ? "bg-orange-50/40" : ""
+                                                n.isUnread
+                                                    ? "bg-orange-50/40"
+                                                    : ""
                                             }`}
                                         >
-                                            <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${n.color}`}>
-                                                <i className={`${n.icon} text-[13px]`}></i>
+                                            <div
+                                                className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${n.color}`}
+                                            >
+                                                <i
+                                                    className={`${n.icon} text-[13px]`}
+                                                ></i>
                                             </div>
                                             <div className="flex-1 min-w-0">
-                                                <p className={`text-[12.5px] leading-tight ${n.isUnread ? 'font-bold text-slate-900' : 'font-medium text-slate-600'}`}>
+                                                <p
+                                                    className={`text-[12.5px] leading-tight ${n.isUnread ? "font-bold text-slate-900" : "font-medium text-slate-600"}`}
+                                                >
                                                     {n.title}
                                                 </p>
                                                 <p className="text-[11.5px] text-slate-500 mt-0.5 truncate">
@@ -325,13 +412,18 @@ export default function TopHeader({
                     {dropdownOpen && (
                         <div className="absolute right-0 top-[calc(100%+12px)] w-60 bg-white rounded-2xl border border-slate-100 shadow-xl p-3 z-[1000] animate-in fade-in slide-in-from-top-2 duration-150">
                             <div className="flex items-center gap-3 p-2 pb-3 border-b border-slate-100 mb-1.5">
-                                <UserAvatar src={avatar} name={userName} size={38} />
+                                <UserAvatar
+                                    src={avatar}
+                                    name={userName}
+                                    size={38}
+                                />
                                 <div className="overflow-hidden">
                                     <h4 className="text-[13px] font-bold text-slate-900">
                                         {userName}
                                     </h4>
                                     <p className="text-[11px] text-slate-400 truncate">
-                                        {userEmail || `${displayRole.toLowerCase().replace(/\s+/g, "")}@jlmcozycabin.com`}
+                                        {userEmail ||
+                                            `${displayRole.toLowerCase().replace(/\s+/g, "")}@jlmcozycabin.com`}
                                     </p>
                                 </div>
                             </div>

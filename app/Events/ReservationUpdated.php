@@ -1,10 +1,10 @@
 <?php
+// app/Events/ReservationUpdated.php
 
 namespace App\Events;
 
-use App\Models\Reservation;
 use Illuminate\Broadcasting\InteractsWithSockets;
-use Illuminate\Broadcasting\PrivateChannel; // <-- FIXED IMPORT
+use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
@@ -14,9 +14,11 @@ class ReservationUpdated implements ShouldBroadcastNow
     use Dispatchable, InteractsWithSockets, SerializesModels;
 
     public function __construct(
-        public string $action,      // created | approved | rejected | updated | deleted
+        public string $action,
         public ?int $reservationId = null
-    ) {}
+    ) {
+        \App\Http\Controllers\AdminNotificationController::flushCache();
+    }
 
     public function broadcastOn(): array
     {

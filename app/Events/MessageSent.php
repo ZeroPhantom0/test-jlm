@@ -19,7 +19,9 @@ class MessageSent implements ShouldBroadcastNow
         public string $senderRole,
         public string $senderName,
         public string $body
-    ) {}
+    ) {
+        \App\Http\Controllers\AdminNotificationController::flushCache();
+    }
 
     public function broadcastOn(): array
     {
@@ -31,7 +33,7 @@ class MessageSent implements ShouldBroadcastNow
 
     public function broadcastAs(): string
     {
-        return 'message.sent'; 
+        return 'message.sent';
     }
 
     public function broadcastWith(): array

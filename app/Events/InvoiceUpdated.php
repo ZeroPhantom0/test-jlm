@@ -15,7 +15,9 @@ class InvoiceUpdated implements ShouldBroadcastNow
     public function __construct(
         public string $action,
         public ?int $invoiceId = null
-    ) {}
+    ) {
+        \App\Http\Controllers\AdminNotificationController::flushCache();
+    }
 
     public function broadcastOn(): array
     {

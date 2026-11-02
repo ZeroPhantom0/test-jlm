@@ -17,7 +17,9 @@ class MaintenanceUpdated implements ShouldBroadcastNow
         public string $action,
         public ?int $requestId = null,
         public ?int $tenantId = null
-    ) {}
+    ) {
+        \App\Http\Controllers\AdminNotificationController::flushCache();
+    }
 
     public function broadcastOn(): array
     {

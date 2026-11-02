@@ -57,8 +57,9 @@ import TenantSettingsAccordions from "./pages/Settings/SettingsAccordions";
     window.Pusher = Pusher;
 
     const cfg = window.__appConfig?.broadcast || {};
-    const key     = cfg.key     || import.meta.env.VITE_PUSHER_APP_KEY;
-    const cluster = cfg.cluster || import.meta.env.VITE_PUSHER_APP_CLUSTER || "ap1";
+    const key = cfg.key || import.meta.env.VITE_PUSHER_APP_KEY;
+    const cluster =
+        cfg.cluster || import.meta.env.VITE_PUSHER_APP_CLUSTER || "ap1";
 
     if (!key) {
         console.warn("[Echo] Pusher key missing — real-time disabled.");
@@ -76,7 +77,10 @@ import TenantSettingsAccordions from "./pages/Settings/SettingsAccordions";
             auth: {
                 headers: {
                     "X-CSRF-TOKEN":
-                        document.querySelector('meta[name="csrf-token"]')?.getAttribute("content") || window.__appConfig?.csrf,
+                        document
+                            .querySelector('meta[name="csrf-token"]')
+                            ?.getAttribute("content") ||
+                        window.__appConfig?.csrf,
                     Accept: "application/json",
                     "X-Requested-With": "XMLHttpRequest",
                 },
@@ -103,7 +107,7 @@ import TenantSettingsAccordions from "./pages/Settings/SettingsAccordions";
         });
 
         // ── SHARED CHANNEL HELPERS ──
-        
+
         window.LiveAdminChannels = {
             reservations: (handler) => {
                 const ch = window.Echo.private("admin.reservations");
@@ -136,7 +140,7 @@ import TenantSettingsAccordions from "./pages/Settings/SettingsAccordions";
                 const ch = window.Echo.private("admin.messages");
                 ch.listen(".message.sent", handler);
                 return () => ch.stopListening(".message.sent", handler);
-            }
+            },
         };
 
         window.LiveTenantChannels = {
@@ -171,7 +175,7 @@ import TenantSettingsAccordions from "./pages/Settings/SettingsAccordions";
                 const ch = window.Echo.private(`tenant.${tenantId}.messages`);
                 ch.listen(".message.sent", handler);
                 return () => ch.stopListening(".message.sent", handler);
-            }
+            },
         };
 
         console.info("[Echo] Initialized (single instance).");
@@ -196,7 +200,6 @@ if (import.meta.hot) {
 // EXISTING REACT COMPONENT MOUNTER (Tenant & Admin portals)
 // ============================================================
 function mountReact() {
-
     const tenantHeader = document.querySelector('[data-react="top-header"]');
     if (tenantHeader && !tenantHeader.dataset.mounted) {
         const props = JSON.parse(tenantHeader.dataset.props || "{}");
@@ -204,7 +207,9 @@ function mountReact() {
         tenantHeader.dataset.mounted = "true";
     }
 
-    const adminHeader = document.querySelector('[data-react="admin-top-header"]');
+    const adminHeader = document.querySelector(
+        '[data-react="admin-top-header"]',
+    );
     if (adminHeader && !adminHeader.dataset.mounted) {
         const props = JSON.parse(adminHeader.dataset.props || "{}");
         createRoot(adminHeader).render(<AdminTopHeader {...props} />);
@@ -219,7 +224,6 @@ function mountReact() {
         }
     };
 
-    // ---------- ADMIN MODALS ----------
     mountIfExists("admin-rooms-modals", RoomsModals);
     mountIfExists("admin-tenants-modals", TenantsModals);
     mountIfExists("admin-services-modals", ServicesModals);
@@ -233,35 +237,22 @@ function mountReact() {
     mountIfExists("admin-scenes-modals", ScenesModals);
     mountIfExists("admin-messages-root", MessagesModals);
 
-    // ---------- TENANT SERVICE MODALS ----------
     mountIfExists("tenant-maintenance-modals", TenantMaintenanceModals);
     mountIfExists("services-room-change-root", TenantRoomChangeModals);
     mountIfExists("services-stay-extension-root", TenantStayExtensionModals);
 
-    // ---------- TENANT BILLING MODAL ----------
     mountIfExists("payment-modal-root", PaymentModal);
-
-    // ---------- TENANT RESERVATIONS MODAL ----------
     mountIfExists("tenant-reservations-modals", TenantReservationsModal);
-
-    // ---------- TENANT ANNOUNCEMENTS MODAL ----------
     mountIfExists("tenant-announcements-modals", TenantAnnouncementsModals);
-
-    // ---------- TENANT HISTORY MODAL ----------
     mountIfExists("tenant-history-modals", TenantHistoryModals);
-
-    // ---------- TENANT SETTINGS ACCORDIONS ----------
     mountIfExists("tenant-settings-accordions", TenantSettingsAccordions);
 
-       // ---------- GLOBAL LOGOUT MODAL ----------
     let logoutModalRoot = document.getElementById("global-logout-modal-root");
     if (!logoutModalRoot) {
         logoutModalRoot = document.createElement("div");
         logoutModalRoot.id = "global-logout-modal-root";
         document.body.appendChild(logoutModalRoot);
     }
-    
-    // Mount only if it hasn't been mounted yet
     if (!logoutModalRoot.dataset.mounted) {
         createRoot(logoutModalRoot).render(<LogoutModal />);
         logoutModalRoot.dataset.mounted = "true";
@@ -275,3 +266,13 @@ if (document.readyState === "loading") {
 }
 
 window.mountReact = mountReact;
+
+// ── Re-mount React on Livewire SPA navigation ──
+// Without this, wire:navigate swaps the body, destroys all React roots,
+// and leaves every [data-react] div empty → header disappears, modals dead.
+document.addEventListener("livewire:navigated", mountReact);
+
+// Re-mount if the browser restores from back/forward cache
+window.addEventListener("pageshow", (e) => {
+    if (e.persisted) mountReact();
+});

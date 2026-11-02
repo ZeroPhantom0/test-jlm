@@ -489,9 +489,10 @@
             `{{ route('admin.reports.export') }}?range=${encodeURIComponent(range)}&section=${encodeURIComponent(section)}`;
     });
 
-    /* -------------------- Export PDF (Placeholder) -------------------- */
+        /* -------------------- Export PDF -------------------- */
     document.getElementById('export-pdf').addEventListener('click', () => {
-        window.print();
+        const range = document.getElementById('range-input').value || 'monthly';
+        window.location.href = `{{ route('admin.reports.export-pdf') }}?range=${encodeURIComponent(range)}`;
     });
 })();
 </script>

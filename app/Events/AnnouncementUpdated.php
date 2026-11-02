@@ -16,7 +16,9 @@ class AnnouncementUpdated implements ShouldBroadcastNow
     public function __construct(
         public string $action,
         public int $announcementId,
-    ) {}
+    ) {
+        \App\Http\Controllers\AdminNotificationController::flushCache();
+    }
 
     /**
      * Both channels — admin + tenants.

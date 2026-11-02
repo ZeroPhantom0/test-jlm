@@ -16,7 +16,9 @@ class ServiceRequestUpdated implements ShouldBroadcastNow
         public string $type,
         public string $action,
         public ?int $requestId = null
-    ) {}
+    ) {
+        \App\Http\Controllers\AdminNotificationController::flushCache();
+    }
 
     public function broadcastOn(): array
     {

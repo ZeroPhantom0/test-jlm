@@ -97,6 +97,7 @@ class TenantDashboardController extends Controller
                 ->merge($this->historyMaintenance($tenant))
                 ->merge($this->historyRoomChanges($tenant))
                 ->merge($this->historyStayExtensions($tenant))
+                ->reject(fn($item) => $item['status'] === 'pending')
                 ->sortByDesc('timestamp')
                 ->take(4)
                 ->values();

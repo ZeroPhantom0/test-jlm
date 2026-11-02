@@ -8,6 +8,7 @@ use App\Services\AuditLogger;
 use App\Services\ReportsService;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\StreamedResponse;
+use Barryvdh\DomPDF\Facade\Pdf;
 
 class ReportsController extends Controller
 {
@@ -20,12 +21,9 @@ class ReportsController extends Controller
         $range = $request->query('range', 'monthly');
 
         $summary = $this->reports->summaryMetrics($range);
-
         $occupancyTrend     = $this->reports->occupancyTrend($range);
         $occupancyByType    = $this->reports->occupancyByRoomType();
-
         $revenueBreakdown   = $this->reports->revenueBreakdown($range);
-
         $serviceByCategory  = $this->reports->serviceRequestsByCategory($range);
 
         $serviceMax = 1;
@@ -49,6 +47,38 @@ class ReportsController extends Controller
             'paymentSummary',
             'range'
         ));
+    }
+
+    /**
+     * Export the reports as a styled PDF.
+     */
+    public function exportPdf(Request $request)
+    {
+        $range = $request->query('range', 'monthly');
+
+        $summary = $this->reports->summaryMetrics($range);
+        $occupancyByType    = $this->reports->occupancyByRoomType();
+        $revenueBreakdown   = $this->reports->revenueBreakdown($range);
+        $serviceByCategory  = $this->reports->serviceRequestsByCategory($range);
+        $paymentSummary     = $this->reports->paymentStatusSummary();
+
+        AuditLogger::log([
+            'action'      => 'EXPORT',
+            'module'      => 'REPORTS',
+            'description' => 'Exported PDF report (range: ' . $range . ')',
+            'status'      => 'success',
+        ]);
+
+        $pdf = Pdf::loadView('admin.reports-pdf', compact(
+            'summary',
+            'occupancyByType',
+            'revenueBreakdown',
+            'serviceByCategory',
+            'paymentSummary',
+            'range'
+        ))->setPaper('a4', 'portrait');
+
+        return $pdf->download('jlm-reports-' . $range . '-' . now()->format('Y-m-d') . '.pdf');
     }
 
     /**

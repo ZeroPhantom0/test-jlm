@@ -183,10 +183,13 @@
         {{-- Brand --}}
         <div class="flex items-center justify-between shrink-0 whitespace-nowrap px-[18px] pt-5 pb-3.5">
             <div class="flex items-center gap-3 min-w-0">
-                <div class="rounded-full bg-white flex items-center justify-center text-[#f97316] shadow-[0_2px_4px_rgba(0,0,0,0.15)] shrink-0"
-                    style="width: 38px; height: 38px; font-size: 18px;">
-                    <i class="fa-solid fa-house-key"></i>
+
+                {{-- REPLACED LOGO HERE --}}
+                <div class="rounded-full bg-white flex items-center justify-center shadow-[0_2px_4px_rgba(0,0,0,0.15)] shrink-0 overflow-hidden"
+                    style="width: 38px; height: 38px;">
+                    <img src="{{ asset('images/jlm-logo.png') }}" alt="JLM Logo" class="w-full h-full object-cover">
                 </div>
+
                 <div class="overflow-hidden min-w-0">
                     <h3 class="font-bold leading-tight text-white" style="font-size: 15px;">JLM Cozy Cabin</h3>
                     <p class="text-[#8fa0b5]" style="font-size: 11px;">Admin Portal</p>

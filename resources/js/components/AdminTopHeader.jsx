@@ -7,16 +7,22 @@ const MAX_VISIBLE = 5;
 
 // 🚫 Notifications of these types/ids/links are hidden from the bell
 const HIDDEN_TYPES = new Set(["report", "report-export", "export", "reports"]);
-const HIDDEN_IDS   = new Set(["report-export", "report-export-ready", "reports-ready"]);
+const HIDDEN_IDS = new Set([
+    "report-export",
+    "report-export-ready",
+    "reports-ready",
+]);
 
 function isHiddenNotification(n) {
     if (!n) return true;
     if (HIDDEN_TYPES.has(n.type)) return true;
     if (HIDDEN_IDS.has(n.id)) return true;
-    if (typeof n.link === "string" && (
-        n.link.includes("/admin/reports") ||
-        n.link.includes("/reports/export")
-    )) return true;
+    if (
+        typeof n.link === "string" &&
+        (n.link.includes("/admin/reports") ||
+            n.link.includes("/reports/export"))
+    )
+        return true;
     return false;
 }
 
@@ -46,14 +52,16 @@ function timeAgo(dateStr) {
 }
 
 function csrfToken() {
-    return document
-        .querySelector('meta[name="csrf-token"]')
-        ?.getAttribute("content") || "";
+    return (
+        document
+            .querySelector('meta[name="csrf-token"]')
+            ?.getAttribute("content") || ""
+    );
 }
 
 /* Reusable avatar block */
 function UserAvatar({ src, name = "User", size = 36 }) {
-    if (src && typeof src === 'string' && src.trim() !== "" && src !== "null") {
+    if (src && typeof src === "string" && src.trim() !== "" && src !== "null") {
         return (
             <img
                 src={src}
@@ -75,27 +83,27 @@ function UserAvatar({ src, name = "User", size = 36 }) {
 }
 
 export default function AdminTopHeader({
-    title         = "Dashboard",
-    userName      = "Administrator",
-    userRole      = "Admin",
-    userEmail     = "",
-    avatar        = null,
+    title = "Dashboard",
+    userName = "Administrator",
+    userRole = "Admin",
+    userEmail = "",
+    avatar = null,
     showHamburger = false,
 }) {
     const [dropdownOpen, setDropdownOpen] = useState(false);
-    const [notifOpen, setNotifOpen]       = useState(false);
+    const [notifOpen, setNotifOpen] = useState(false);
 
     // Store all fetched notifications from the server
     const [rawNotifications, setRawNotifications] = useState([]);
 
     // Keep track of locally read IDs and dismissed IDs
     const [locallyRead, setLocallyRead] = useState(new Set());
-    const [dismissed, setDismissed]     = useState(() => readDismissed());
+    const [dismissed, setDismissed] = useState(() => readDismissed());
 
     const [loading, setLoading] = useState(false);
 
     const dropdownRef = useRef(null);
-    const notifRef    = useRef(null);
+    const notifRef = useRef(null);
 
     // 1. Process notifications:
     //    - Drop report/export notifications
@@ -104,16 +112,21 @@ export default function AdminTopHeader({
     //    - Limit to FIFO 5
     const processedNotifications = rawNotifications
         .filter((n) => !isHiddenNotification(n))
-        .map(n => ({
+        .map((n) => ({
             ...n,
-            isUnread: n.unread && !locallyRead.has(n.id) && !dismissed.has(n.id)
+            isUnread:
+                n.unread && !locallyRead.has(n.id) && !dismissed.has(n.id),
         }))
-        .filter(n => !dismissed.has(n.id))
+        .filter((n) => !dismissed.has(n.id))
         .slice(0, MAX_VISIBLE); // FIFO: take the first 5 (newest)
 
     const unreadCount = processedNotifications.filter((n) => n.isUnread).length;
 
+    const fetchingRef = useRef(false);
+
     const fetchNotifications = async () => {
+        if (fetchingRef.current) return; // skip if already in flight
+        fetchingRef.current = true;
         try {
             setLoading(true);
             const res = await fetch("/admin/notifications/feed", {
@@ -128,20 +141,72 @@ export default function AdminTopHeader({
 
             // Filter once at the source so no report items ever enter state
             const filtered = (data.notifications || []).filter(
-                (n) => !isHiddenNotification(n)
+                (n) => !isHiddenNotification(n),
             );
             setRawNotifications(filtered);
         } catch (err) {
             console.error(err);
         } finally {
             setLoading(false);
+            fetchingRef.current = false;
         }
     };
 
-    // Initial + polling every 5s
-    useEffect(() => {
+    // Initial fetch + fallback poll (only when Echo is NOT live)
+useEffect(() => {
+    fetchNotifications();
+
+    const intervalId = setInterval(() => {
+        if (document.visibilityState !== "visible") return;
+
+        // If Echo is connected, it will push updates instantly —
+        // polling here would just be duplicate requests.
+        if (window.__liveAvailable === true) return;
+
         fetchNotifications();
-    }, []);
+    }, 60000); // 60s fallback when socket is down
+
+    const onVisible = () => {
+        if (document.visibilityState === "visible") fetchNotifications();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+
+    return () => {
+        clearInterval(intervalId);
+        document.removeEventListener("visibilitychange", onVisible);
+    };
+}, []);
+
+    // ── Real-time: refetch whenever any admin-side event fires ──
+useEffect(() => {
+    if (!window.Echo) return;
+
+    const chans = window.LiveAdminChannels;
+    if (!chans) return;
+
+    const handler = () => fetchNotifications();
+
+    // Every domain event the admin bell cares about already broadcasts
+    // on one of these channels — subscribing to all of them means we
+    // don't need to add a new event type just for the bell.
+    const unsubs = [
+        chans.reservations(handler),   // new / approved / rejected / cancelled reservations
+        chans.billing(handler),        // payment submitted / verified / rejected
+        chans.services(handler),       // maintenance / room-change / stay-extension
+        chans.messages(handler),       // new message from tenant
+        chans.announcements(handler),  // new announcement
+    ];
+
+    // When the socket reconnects, pull a fresh snapshot so we
+    // don't miss anything that fired while disconnected.
+    const onReconnected = () => fetchNotifications();
+    document.addEventListener("echo:connected", onReconnected);
+
+    return () => {
+        unsubs.forEach((fn) => fn && fn());
+        document.removeEventListener("echo:connected", onReconnected);
+    };
+}, []);
 
     // Refetch on open
     useEffect(() => {
@@ -150,7 +215,10 @@ export default function AdminTopHeader({
 
     useEffect(() => {
         const handleClickOutside = (e) => {
-            if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+            if (
+                dropdownRef.current &&
+                !dropdownRef.current.contains(e.target)
+            ) {
                 setDropdownOpen(false);
             }
             if (notifRef.current && !notifRef.current.contains(e.target)) {
@@ -158,11 +226,12 @@ export default function AdminTopHeader({
             }
         };
         document.addEventListener("mousedown", handleClickOutside);
-        return () => document.removeEventListener("mousedown", handleClickOutside);
+        return () =>
+            document.removeEventListener("mousedown", handleClickOutside);
     }, []);
 
     const markAsRead = (id) => {
-        setLocallyRead(prev => {
+        setLocallyRead((prev) => {
             const next = new Set(prev);
             next.add(id);
             return next;
@@ -170,9 +239,9 @@ export default function AdminTopHeader({
     };
 
     const markAllAsRead = () => {
-        setLocallyRead(prev => {
+        setLocallyRead((prev) => {
             const next = new Set(prev);
-            processedNotifications.forEach(n => next.add(n.id));
+            processedNotifications.forEach((n) => next.add(n.id));
             return next;
         });
     };
@@ -217,13 +286,19 @@ export default function AdminTopHeader({
                 {showHamburger && (
                     <button
                         className="md:hidden text-slate-700 text-lg p-1"
-                        onClick={() => window.dispatchEvent(new Event("open-mobile-sidebar"))}
+                        onClick={() =>
+                            window.dispatchEvent(
+                                new Event("open-mobile-sidebar"),
+                            )
+                        }
                         aria-label="Open menu"
                     >
                         <i className="fa-solid fa-bars"></i>
                     </button>
                 )}
-                <h1 className="text-[20px] md:text-[22px] font-bold text-slate-900">{title}</h1>
+                <h1 className="text-[20px] md:text-[22px] font-bold text-slate-900">
+                    {title}
+                </h1>
             </div>
 
             <div className="flex items-center gap-5 relative">
@@ -280,7 +355,8 @@ export default function AdminTopHeader({
                             </div>
 
                             <div className="max-h-[380px] overflow-y-auto">
-                                {loading && processedNotifications.length === 0 ? (
+                                {loading &&
+                                processedNotifications.length === 0 ? (
                                     <div className="py-12 text-center text-[12px] text-slate-500">
                                         Loading…
                                     </div>
@@ -298,16 +374,26 @@ export default function AdminTopHeader({
                                         <a
                                             key={n.id}
                                             href={n.link}
-                                            onClick={() => handleClickNotification(n)}
+                                            onClick={() =>
+                                                handleClickNotification(n)
+                                            }
                                             className={`flex items-start gap-3 px-4 py-3 border-b border-slate-50 last:border-b-0 hover:bg-slate-50 transition ${
-                                                n.isUnread ? "bg-orange-50/40" : ""
+                                                n.isUnread
+                                                    ? "bg-orange-50/40"
+                                                    : ""
                                             }`}
                                         >
-                                            <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${n.color}`}>
-                                                <i className={`${n.icon} text-[13px]`}></i>
+                                            <div
+                                                className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${n.color}`}
+                                            >
+                                                <i
+                                                    className={`${n.icon} text-[13px]`}
+                                                ></i>
                                             </div>
                                             <div className="flex-1 min-w-0">
-                                                <p className={`text-[12.5px] leading-tight ${n.isUnread ? 'font-bold text-slate-900' : 'font-medium text-slate-600'}`}>
+                                                <p
+                                                    className={`text-[12.5px] leading-tight ${n.isUnread ? "font-bold text-slate-900" : "font-medium text-slate-600"}`}
+                                                >
                                                     {n.title}
                                                 </p>
                                                 <p className="text-[11.5px] text-slate-500 mt-0.5 truncate">
@@ -338,7 +424,9 @@ export default function AdminTopHeader({
                             <h4 className="text-[13px] font-bold text-slate-900 leading-tight">
                                 {userName}
                             </h4>
-                            <p className="text-[11px] text-slate-500">{userRole}</p>
+                            <p className="text-[11px] text-slate-500">
+                                {userRole}
+                            </p>
                         </div>
                         <UserAvatar src={avatar} name={userName} size={36} />
                         <i
@@ -349,9 +437,15 @@ export default function AdminTopHeader({
                     {dropdownOpen && (
                         <div className="absolute right-0 mt-3 w-[270px] bg-white rounded-2xl border border-slate-200 shadow-xl z-[2000] overflow-hidden">
                             <div className="p-4 bg-slate-50 border-b border-slate-100 flex items-center gap-3">
-                                <UserAvatar src={avatar} name={userName} size={42} />
+                                <UserAvatar
+                                    src={avatar}
+                                    name={userName}
+                                    size={42}
+                                />
                                 <div className="overflow-hidden">
-                                    <h4 className="text-[13.5px] font-bold text-slate-900 leading-tight">{userName}</h4>
+                                    <h4 className="text-[13.5px] font-bold text-slate-900 leading-tight">
+                                        {userName}
+                                    </h4>
                                     <p className="text-[11px] text-slate-500 mt-0.5 truncate">
                                         {userEmail || "admin@jlmcozycabin.com"}
                                     </p>
@@ -361,15 +455,25 @@ export default function AdminTopHeader({
                                 </div>
                             </div>
                             <div className="p-2 flex flex-col gap-0.5">
-                                <a href="/admin/settings" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-medium text-slate-700 hover:bg-slate-100 transition">
+                                <a
+                                    href="/admin/settings"
+                                    className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-medium text-slate-700 hover:bg-slate-100 transition"
+                                >
                                     <i className="fa-regular fa-circle-user w-4 text-center text-slate-500"></i>
                                     <span>Account Settings</span>
                                 </a>
-                                <a href="#" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-medium text-slate-700 hover:bg-slate-100 transition">
+                                <a
+                                    href="#"
+                                    className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-medium text-slate-700 hover:bg-slate-100 transition"
+                                >
                                     <i className="fa-solid fa-user-clock w-4 text-center text-slate-500"></i>
                                     <span>My Activity Log</span>
                                 </a>
-                                <button type="button" onClick={(e) => logout(e)} className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-medium text-rose-600 hover:bg-rose-50 transition border-t border-slate-100 mt-1 rounded-b-lg w-full text-left">
+                                <button
+                                    type="button"
+                                    onClick={(e) => logout(e)}
+                                    className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-medium text-rose-600 hover:bg-rose-50 transition border-t border-slate-100 mt-1 rounded-b-lg w-full text-left"
+                                >
                                     <i className="fa-solid fa-arrow-right-from-bracket w-4 text-center text-rose-600"></i>
                                     <span>Logout</span>
                                 </button>

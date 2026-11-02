@@ -24,22 +24,22 @@ class ReportsService
             case 'daily':
                 $start = now()->startOfDay();
                 $labelFormat = 'h:i A';
-                $limit = 24; // 24 hours
+                $limit = 24;
                 break;
             case 'weekly':
                 $start = now()->startOfWeek();
-                $labelFormat = 'D'; // Mon, Tue, etc.
+                $labelFormat = 'D';
                 $limit = 7;
                 break;
             case 'monthly':
                 $start = now()->startOfMonth();
-                $labelFormat = 'W'; // Week 1, Week 2, etc.
+                $labelFormat = 'W';
                 $limit = 5;
                 break;
             case 'yearly':
             default:
                 $start = now()->startOfYear();
-                $labelFormat = 'M'; // Jan, Feb, etc.
+                $labelFormat = 'M';
                 $limit = 12;
                 break;
         }
@@ -143,28 +143,41 @@ class ReportsService
     }
 
     /**
-     * Occupancy trend chart.
+     * Occupancy trend chart (historical data).
      */
     public function occupancyTrend(string $range): array
     {
         $buckets = $this->generateBuckets($range);
-        $total = max(Room::count(), 1);
-
-        // Get current actual occupancy
-        $currentOccupied = Room::where('status', 'Occupied')->count();
-        $currentReserved = Room::where('status', 'Reserved')->count();
-        $currentVacant = Room::where('status', 'Available')->count();
-
+        $totalRooms = max(Room::count(), 1);
         $out = [];
+
         foreach ($buckets as $bucket) {
-            // Note: For a real production system, you would query historical 
-            // snapshots for each specific bucket time. 
-            // Here, we show the current actual state to avoid fake data.
+            // Calculate actual state at the END of the bucket
+            $activeReservations = Reservation::where('status', 'Approved')
+                ->where('check_in', '<=', $bucket['end'])
+                ->where(function ($q) use ($bucket) {
+                    $q->whereNull('check_out')
+                      ->orWhere('check_out', '>=', $bucket['start']);
+                })
+                ->count();
+
+            $reservedOnly = Reservation::where('status', 'Pending')
+                ->where('check_in', '<=', $bucket['end'])
+                ->where(function ($q) use ($bucket) {
+                    $q->whereNull('check_out')
+                      ->orWhere('check_out', '>=', $bucket['start']);
+                })
+                ->count();
+
+            $occupiedPct = round(($activeReservations / $totalRooms) * 100);
+            $reservedPct = round(($reservedOnly / $totalRooms) * 100);
+            $vacantPct   = max(0, 100 - $occupiedPct - $reservedPct);
+
             $out[] = [
                 'label'    => $bucket['label'],
-                'occupied' => round(($currentOccupied / $total) * 100),
-                'reserved' => round(($currentReserved / $total) * 100),
-                'vacant'   => round(($currentVacant / $total) * 100),
+                'occupied' => $occupiedPct,
+                'reserved' => $reservedPct,
+                'vacant'   => $vacantPct,
             ];
         }
 
@@ -198,7 +211,7 @@ class ReportsService
     }
 
     /**
-     * Revenue breakdown chart.
+     * Revenue breakdown chart (historical data).
      */
     public function revenueBreakdown(string $range): array
     {
@@ -213,11 +226,12 @@ class ReportsService
             $rent = 0.0;
             $util = 0.0;
             $other = 0.0;
+            
             foreach ($invoices as $inv) {
                 $desc = strtolower($inv->description ?? '');
                 if (str_contains($desc, 'util') || str_contains($desc, 'electric') || str_contains($desc, 'water')) {
                     $util += (float) $inv->amount_paid;
-                } elseif (str_contains($desc, 'other')) {
+                } elseif (str_contains($desc, 'other') || str_contains($desc, 'fee')) {
                     $other += (float) $inv->amount_paid;
                 } else {
                     $rent += (float) $inv->amount_paid;
@@ -237,39 +251,26 @@ class ReportsService
     }
 
     /**
-     * Service Requests grouped by category.
+     * Service Requests grouped by category (historical data).
      */
     public function serviceRequestsByCategory(string $range): array
     {
         $buckets = $this->generateBuckets($range);
         $rows = [];
 
-        $start = $buckets[0]['start'];
-        $end = end($buckets)['end'];
-
-        $requests = MaintenanceRequest::where('status', '!=', 'Cancelled')
-            ->whereBetween('created_at', [$start, $end])
-            ->get();
-
         foreach ($buckets as $bucket) {
-            $bucketRequests = $requests->filter(function ($r) use ($bucket) {
-                return $r->created_at >= $bucket['start'] && $r->created_at <= $bucket['end'];
-            });
+            $requests = MaintenanceRequest::where('status', '!=', 'Cancelled')
+                ->whereBetween('created_at', [$bucket['start'], $bucket['end']])
+                ->get();
 
             $rows[] = [
                 'label'      => $bucket['label'],
-                'plumbing'   => $bucketRequests->filter(fn($r) => stripos($r->category ?? '', 'plumb') !== false)->count(),
-                'electrical' => $bucketRequests->filter(fn($r) => stripos($r->category ?? '', 'elect') !== false)->count(),
-                'hvac'       => $bucketRequests->filter(fn($r) => stripos($r->category ?? '', 'hvac') !== false
-                    || stripos($r->category ?? '', 'aircon') !== false
-                    || stripos($r->category ?? '', 'air con') !== false)->count(),
-                'general'    => $bucketRequests->filter(function ($r) {
+                'plumbing'   => $requests->filter(fn($r) => stripos($r->category ?? '', 'plumb') !== false)->count(),
+                'electrical' => $requests->filter(fn($r) => stripos($r->category ?? '', 'elect') !== false)->count(),
+                'hvac'       => $requests->filter(fn($r) => stripos($r->category ?? '', 'hvac') !== false || stripos($r->category ?? '', 'aircon') !== false)->count(),
+                'general'    => $requests->filter(function ($r) {
                     $cat = strtolower($r->category ?? '');
-                    return !str_contains($cat, 'plumb')
-                        && !str_contains($cat, 'elect')
-                        && !str_contains($cat, 'hvac')
-                        && !str_contains($cat, 'aircon')
-                        && !str_contains($cat, 'air con');
+                    return !str_contains($cat, 'plumb') && !str_contains($cat, 'elect') && !str_contains($cat, 'hvac') && !str_contains($cat, 'aircon');
                 })->count(),
             ];
         }
