@@ -3,8 +3,8 @@
 
 namespace App\Events;
 
-use Illuminate\Broadcasting\Channel;
 use Illuminate\Broadcasting\InteractsWithSockets;
+use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
@@ -16,22 +16,17 @@ class MaintenanceUpdated implements ShouldBroadcastNow
     public function __construct(
         public string $action,
         public ?int $requestId = null,
-        public ?int $tenantId = null // <-- Added this
+        public ?int $tenantId = null
     ) {}
 
     public function broadcastOn(): array
     {
-        $channels = [
-            new Channel('admin.services'),
+        // We ignore $this->tenantId here and always broadcast to the 
+        // general channels so that any connected admin or tenant page updates.
+        return [
+            new PrivateChannel('admin.services'),
+            new PrivateChannel('tenant.services'),
         ];
-
-        if ($this->tenantId) {
-            $channels[] = new Channel('tenant.' . $this->tenantId . '.services');
-        } else {
-            $channels[] = new Channel('tenant.services');
-        }
-
-        return $channels;
     }
 
     public function broadcastAs(): string

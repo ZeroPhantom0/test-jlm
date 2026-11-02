@@ -156,54 +156,152 @@
 @push('scripts')
     <script>
         (function() {
-            const tbody = document.getElementById('res-tbody');
-            const searchInput = document.getElementById('res-search');
-            const statusFilter = document.getElementById('res-status-filter');
+            window.addEventListener('load', () => {
+                const tbody = document.getElementById('res-tbody');
+                const searchInput = document.getElementById('res-search');
+                
+                // --- Filter Logic ---
+                function applyFilters() {
+                    const q = (searchInput?.value || '').toLowerCase().trim();
+                    tbody.querySelectorAll('.res-row').forEach((row) => {
+                        const searchMatch = !q || row.dataset.search.includes(q);
+                        row.style.display = searchMatch ? '' : 'none';
+                    });
+                }
+                searchInput?.addEventListener('input', applyFilters);
 
-            function bindActions() {
-                tbody.querySelectorAll('.icon-approve').forEach((el) => el.onclick = () => window.dispatchEvent(
-                    new CustomEvent('reservation:approve', {
-                        detail: {
-                            id: +el.dataset.resId
-                        }
-                    })));
-                tbody.querySelectorAll('.icon-reject').forEach((el) => el.onclick = () => window.dispatchEvent(
-                    new CustomEvent('reservation:reject', {
-                        detail: {
-                            id: +el.dataset.resId
-                        }
-                    })));
-                tbody.querySelectorAll('.icon-view').forEach((el) => el.onclick = () => window.dispatchEvent(
-                    new CustomEvent('reservation:view', {
-                        detail: {
-                            key: el.dataset.resKey
-                        }
-                    })));
-            }
+                // --- Event Delegation for Buttons ---
+                tbody.addEventListener('click', (e) => {
+                    const approveBtn = e.target.closest('.icon-approve');
+                    if (approveBtn) {
+                        window.dispatchEvent(new CustomEvent('reservation:approve', { detail: { id: +approveBtn.dataset.resId } }));
+                        return;
+                    }
 
-            function applyFilters() {
-                const q = (searchInput?.value || '').toLowerCase().trim();
-                const status = (statusFilter?.value || '').trim();
-                let visible = 0;
+                    const rejectBtn = e.target.closest('.icon-reject');
+                    if (rejectBtn) {
+                        window.dispatchEvent(new CustomEvent('reservation:reject', { detail: { id: +rejectBtn.dataset.resId } }));
+                        return;
+                    }
 
-                tbody.querySelectorAll('.res-row').forEach((row) => {
-                    const searchMatch = !q || row.dataset.search.includes(q);
-                    const statusMatch = !status || row.dataset.status === status;
-                    const show = searchMatch && statusMatch;
-                    row.style.display = show ? '' : 'none';
-                    if (show) visible++;
+                    const viewBtn = e.target.closest('.icon-view');
+                    if (viewBtn) {
+                        window.dispatchEvent(new CustomEvent('reservation:view', { detail: { key: viewBtn.dataset.resKey } }));
+                        return;
+                    }
                 });
-            }
 
-            searchInput?.addEventListener('input', applyFilters);
-            statusFilter?.addEventListener('change', applyFilters);
-            bindActions();
+                // --- Silent Fetch & Render ---
+                async function refreshReservations() {
+                    try {
+                        const res = await fetch('/admin/reservations/data', {
+                            headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                            cache: 'no-store'
+                        });
+                        if (!res.ok) return;
+                        
+                        const data = await res.json();
 
-            // Real-time only. No initial fetch.
-            if (window.Echo) {
-                window.Echo.channel('admin.reservations').listen('.reservation.updated', () => window.location
-                    .reload());
-            }
+                        // 1. Update Metrics
+                        if (data.metrics) {
+                            const elTotal = document.getElementById('metric-total');
+                            const elPending = document.getElementById('metric-pending');
+                            const elExpired = document.getElementById('metric-expired');
+                            if (elTotal) elTotal.textContent = data.metrics.pending;
+                            if (elPending) elPending.textContent = data.metrics.pending;
+                            if (elExpired) elExpired.textContent = data.metrics.expired;
+                        }
+
+                        // 2. Update Table Rows
+                        if (data.rows && data.rows.length > 0) {
+                            tbody.innerHTML = data.rows.map(r => `
+                                <tr class="res-row border-b border-slate-50 last:border-0" data-id="${r.id}" data-status="${r.status}" data-search="${(r.tenant_name + ' ' + r.email + ' ' + r.phone + ' ' + r.desired_room + ' ' + r.reference_no).toLowerCase()}">
+                                    <td class="py-3.5 px-4">
+                                        <div class="flex items-center gap-3">
+                                            <div class="w-8 h-8 rounded-full ${r.avatar_bg} ${r.avatar_color} flex items-center justify-center text-[12px] font-bold">
+                                                ${r.tenant_initial}
+                                            </div>
+                                            <div>
+                                                <div class="font-semibold text-slate-900 text-[13.5px]">${r.tenant_name}</div>
+                                                <div class="text-[11px] text-slate-400 mt-0.5">${r.reference_no}</div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td class="py-3.5 px-4">
+                                        <div class="text-[12.5px] text-slate-700">${r.email}</div>
+                                        <div class="text-[11px] text-slate-400 mt-0.5">${r.phone}</div>
+                                    </td>
+                                    <td class="py-3.5 px-4">
+                                        <div class="text-[12.5px] font-medium text-slate-700">${r.desired_room}</div>
+                                    </td>
+                                    <td class="py-3.5 px-4">
+                                        <div class="flex items-center gap-2 text-[12.5px] text-slate-700">
+                                            <i class="fa-regular fa-calendar text-slate-400 text-[11px]"></i> ${r.formatted_check_in}
+                                        </div>
+                                    </td>
+                                    <td class="py-3.5 px-4">
+                                        <div class="flex items-center gap-2 text-[12.5px] ${r.check_out_is_null ? 'text-slate-400 italic' : 'text-slate-700'}">
+                                            <i class="fa-regular fa-calendar-xmark text-slate-400 text-[11px]"></i> ${r.formatted_check_out}
+                                        </div>
+                                    </td>
+                                    <td class="py-3.5 px-4">
+                                        <div class="font-bold text-emerald-600 text-[13px] tracking-tight">${r.formatted_fee}</div>
+                                    </td>
+                                    <td class="py-3.5 px-4 text-[12.5px] text-slate-600 whitespace-nowrap">${r.created_at}</td>
+                                    <td class="py-3.5 px-4">
+                                        <span class="inline-flex items-center gap-1.5 ${r.status_class} px-2.5 py-1 rounded-full text-[10.5px] font-bold whitespace-nowrap">
+                                            <i class="${r.status_icon}"></i> ${r.status}
+                                        </span>
+                                    </td>
+                                    <td class="py-3.5 px-4">
+                                        <div class="flex items-center justify-end gap-3">
+                                            ${r.status === 'Pending' ? `
+                                                <i class="fa-regular fa-circle-check text-emerald-500 icon-approve" data-res-id="${r.id}"></i>
+                                                <i class="fa-regular fa-circle-xmark text-rose-500 icon-reject" data-res-id="${r.id}"></i>
+                                            ` : ''}
+                                            <i class="fa-regular fa-eye text-slate-400 icon-view" data-res-key="${r.reference_no}"></i>
+                                        </div>
+                                    </td>
+                                </tr>
+                            `).join('');
+                        } else {
+                            tbody.innerHTML = `
+                                <tr>
+                                    <td colspan="9" class="py-12 text-center text-slate-400">
+                                        <div class="flex flex-col items-center justify-center gap-3">
+                                            <div class="w-14 h-14 rounded-full bg-slate-100 flex items-center justify-center">
+                                                <i class="fa-regular fa-calendar-xmark text-slate-400 text-xl"></i>
+                                            </div>
+                                            <div class="text-[13px] font-medium">No pending reservations found.</div>
+                                        </div>
+                                    </td>
+                                </tr>
+                            `;
+                        }
+
+                        // 3. Update React Modal's data
+                        const modalRoot = document.getElementById('admin-reservations-modals');
+                        if (modalRoot && data.react) {
+                            modalRoot.dataset.reservations = JSON.stringify(data.react);
+                            window.dispatchEvent(new CustomEvent('reservation:data-updated', { detail: data.react }));
+                        }
+
+                        applyFilters();
+                    } catch (e) {
+                        console.error('Failed to refresh admin reservations', e);
+                    }
+                }
+
+                // --- WebSocket Listener ---
+                if (window.Echo) {
+                    window.Echo.private('admin.reservations')
+                        .listen('.reservation.updated', () => {
+                            setTimeout(() => refreshReservations(), 800);
+                        });
+                }
+                
+                window.addEventListener("reservation:refresh", refreshReservations);
+            });
         })();
     </script>
 @endpush

@@ -322,6 +322,8 @@ class BillingController extends Controller
 
     public function verifyPayment(Request $request, Invoice $invoice)
     {
+        session()->save();
+
         if ($invoice->status !== 'Pending') {
             return response()->json([
                 'message' => 'Invoice is not pending verification.',
@@ -380,6 +382,8 @@ class BillingController extends Controller
 
     public function rejectPayment(Request $request, Invoice $invoice)
     {
+        session()->save(); 
+        
         $validated = $request->validate([
             'admin_notes' => ['required', 'string', 'max:1000'],
         ]);

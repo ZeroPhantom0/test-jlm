@@ -121,94 +121,104 @@
 @push('scripts')
 <script>
 (function () {
-    const DATA_URL = "{{ route('admin.services.maintenance.data') }}";
-    const tbody    = document.getElementById('maintenance-tbody');
-    const modalsEl = document.getElementById('admin-services-modals');
+    window.addEventListener('load', () => {
+        const DATA_URL = "{{ route('admin.services.maintenance.data') }}";
+        const tbody    = document.getElementById('maintenance-tbody');
+        const modalsEl = document.getElementById('admin-services-modals');
 
-    const escapeHtml = (str) => {
-        if (!str) return '';
-        return String(str)
-            .replace(/&/g, "&amp;")
-            .replace(/</g, "&lt;")
-            .replace(/>/g, "&gt;")
-            .replace(/"/g, "&quot;")
-            .replace(/'/g, "&#039;");
-    };
+        const escapeHtml = (str) => {
+            if (!str) return '';
+            return String(str)
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        };
 
-    async function refresh() {
-        try {
-            const res = await fetch(DATA_URL, { headers: { 'Accept': 'application/json' } });
-            if (!res.ok) return;
-            const data = await res.json();
-
-            // Update metrics
-            for (const [key, val] of Object.entries(data.metrics)) {
-                const el = document.getElementById(`metric-${key}`);
-                if (el) el.textContent = val;
-            }
-
-            // Re-render rows
-            const active = data.rows.filter(r => !r.is_finalized);
-            let html = '';
-
-            if (active.length === 0) {
-                html = `<tr>
-                    <td colspan="6" class="py-12 text-center text-slate-400 text-[13px]">
-                        <i class="fa-solid fa-inbox text-3xl mb-3 block opacity-30"></i>
-                        No active maintenance requests found.
-                    </td>
-                </tr>`;
-            } else {
-                active.forEach(r => {
-                    const staff = r.assigned_staff 
-                        ? `<span class="text-slate-600 font-medium text-[13px]">${escapeHtml(r.assigned_staff)}</span>` 
-                        : `<span class="text-slate-400 italic text-[13px]">Unassigned</span>`;
-
-                    html += `
-                        <tr class="border-b border-slate-50 last:border-0">
-                            <td class="py-4 px-5">
-                                <div class="font-bold text-slate-900 text-sm">${escapeHtml(r.title)}</div>
-                                <div class="flex items-center gap-2 mt-1">
-                                    <span class="text-[10px] font-extrabold px-1.5 py-0.5 rounded uppercase tracking-wide ${r.priority_class}">${escapeHtml(r.priority)}</span>
-                                    <span class="text-[12px] text-slate-400">${escapeHtml(r.category)}</span>
-                                </div>
-                            </td>
-                            <td class="py-4 px-5">
-                                <div class="font-semibold text-slate-700 text-[13px]">${escapeHtml(r.room_number)}</div>
-                                <div class="text-xs text-slate-400 mt-0.5">${escapeHtml(r.tenant_name)}</div>
-                            </td>
-                            <td class="py-4 px-5">${staff}</td>
-                            <td class="py-4 px-5"><span class="inline-block px-3 py-1 rounded-full text-xs font-semibold ${r.status_class}">${escapeHtml(r.status)}</span></td>
-                            <td class="py-4 px-5 text-[13px] text-slate-500">${escapeHtml(r.date)}</td>
-                            <td class="py-4 px-5">
-                                <button data-request-id="${r.id}" class="text-emerald-600 hover:text-emerald-700 text-[13px] font-semibold inline-flex items-center gap-1.5 admin-view-request-btn">
-                                    <i class="fa-regular fa-eye"></i> View
-                                </button>
-                            </td>
-                        </tr>`;
+        // --- Silent Fetch & Render ---
+        async function refreshTable() {
+            try {
+                const res = await fetch(DATA_URL, { 
+                    headers: { 'Accept': 'application/json' },
+                    cache: 'no-store'
                 });
-            }
+                if (!res.ok) return;
+                const data = await res.json();
 
-            tbody.innerHTML = html;
+                // Update metrics
+                for (const [key, val] of Object.entries(data.metrics)) {
+                    const el = document.getElementById(`metric-${key}`);
+                    if (el) el.textContent = val;
+                }
 
-            // Keep the React modal mount in sync
-            if (modalsEl) {
-                modalsEl.dataset.requests = JSON.stringify(data.rows);
-                window.dispatchEvent(new CustomEvent('maintenance:data-updated', { detail: data.rows }));
+                // Re-render rows
+                const active = data.rows.filter(r => !r.is_finalized);
+                let html = '';
+
+                if (active.length === 0) {
+                    html = `<tr>
+                        <td colspan="6" class="py-12 text-center text-slate-400 text-[13px]">
+                            <i class="fa-solid fa-inbox text-3xl mb-3 block opacity-30"></i>
+                            No active maintenance requests found.
+                        </td>
+                    </tr>`;
+                } else {
+                    active.forEach(r => {
+                        const staff = r.assigned_staff 
+                            ? `<span class="text-slate-600 font-medium text-[13px]">${escapeHtml(r.assigned_staff)}</span>` 
+                            : `<span class="text-slate-400 italic text-[13px]">Unassigned</span>`;
+
+                        html += `
+                            <tr class="border-b border-slate-50 last:border-0">
+                                <td class="py-4 px-5">
+                                    <div class="font-bold text-slate-900 text-sm">${escapeHtml(r.title)}</div>
+                                    <div class="flex items-center gap-2 mt-1">
+                                        <span class="text-[10px] font-extrabold px-1.5 py-0.5 rounded uppercase tracking-wide ${r.priority_class}">${escapeHtml(r.priority)}</span>
+                                        <span class="text-[12px] text-slate-400">${escapeHtml(r.category)}</span>
+                                    </div>
+                                </td>
+                                <td class="py-4 px-5">
+                                    <div class="font-semibold text-slate-700 text-[13px]">${escapeHtml(r.room_number)}</div>
+                                    <div class="text-xs text-slate-400 mt-0.5">${escapeHtml(r.tenant_name)}</div>
+                                </td>
+                                <td class="py-4 px-5">${staff}</td>
+                                <td class="py-4 px-5"><span class="inline-block px-3 py-1 rounded-full text-xs font-semibold ${r.status_class}">${escapeHtml(r.status)}</span></td>
+                                <td class="py-4 px-5 text-[13px] text-slate-500">${escapeHtml(r.date)}</td>
+                                <td class="py-4 px-5">
+                                    <button data-request-id="${r.id}" class="text-emerald-600 hover:text-emerald-700 text-[13px] font-semibold inline-flex items-center gap-1.5 admin-view-request-btn">
+                                        <i class="fa-regular fa-eye"></i> View
+                                    </button>
+                                </td>
+                            </tr>`;
+                    });
+                }
+
+                tbody.innerHTML = html;
+
+                // Update React modal state
+                if (modalsEl) {
+                    modalsEl.dataset.requests = JSON.stringify(data.rows);
+                    window.dispatchEvent(new CustomEvent('maintenance:data-updated', { detail: data.rows }));
+                }
+            } catch (e) {
+                console.error('Admin Refresh Error:', e);
             }
-        } catch (e) {
-            console.error('Admin Refresh Error:', e);
         }
-    }
 
-    // Real-time Echo Listener
-    if (window.Echo) {
-        window.Echo.channel('admin.services')
-            .listen('.maintenance.updated', () => refresh());
-    }
+        // --- WebSocket Listener ---
+        if (window.Echo) {
+            window.Echo.private('admin.services')
+                .listen('.maintenance.updated', () => {
+                    console.log('[Live] Admin Maintenance updated, refreshing...');
+                    // Delay slightly to let the DB transaction finish
+                    setTimeout(refreshTable, 800);
+                });
+        }
 
-    // Local refresh
-    window.addEventListener('maintenance:refresh', () => refresh());
+        // --- Local Refresh Event ---
+        window.addEventListener('maintenance:refresh', refreshTable);
+    });
 })();
 </script>
 @endpush

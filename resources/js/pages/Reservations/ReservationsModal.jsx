@@ -32,7 +32,6 @@ const FALLBACK_ROOM = {
     is_male_only: false,
 };
 
-// ── Due-date tiers (mirrors computeDueDate() on the server) ──
 const TIER_1_MAX_DAYS = 1;
 const TIER_2_MAX_DAYS = 6;
 const TIER_3_MAX_DAYS = 31;
@@ -91,12 +90,10 @@ function describeDueRule(days) {
     return "3 months after check-in";
 }
 
-// ── sessionStorage helpers for modal state persistence ──
 const STORAGE_KEY = "reservation_modal_state";
 
 function saveModalState(state) {
     try {
-        // Don't persist File objects (they can't be serialized)
         const { receipt, ...rest } = state.form;
         sessionStorage.setItem(
             STORAGE_KEY,
@@ -105,7 +102,6 @@ function saveModalState(state) {
                 showReserve: state.showReserve,
                 room: state.room,
                 form: rest,
-                // Track that receipt needs re-upload
                 hadReceipt: !!receipt,
             }),
         );
@@ -135,8 +131,6 @@ export default function ReservationsModal() {
     const [showReserve, setShowReserve] = useState(false);
     const [showCancel, setShowCancel] = useState(false);
     const [cancelTarget, setCancelTarget] = useState(null);
-
-    // State for the Reservation Policy modal
     const [showPolicyModal, setShowPolicyModal] = useState(false);
 
     const [room, setRoom] = useState(FALLBACK_ROOM);
@@ -161,14 +155,11 @@ export default function ReservationsModal() {
         agreed_to_terms: false,
     });
 
-    // Track whether we need to warn about re-uploading receipt
     const [needsReceiptReupload, setNeedsReceiptReupload] = useState(false);
 
-    // 1. Read default payload on mount AND restore any saved modal state
     useEffect(() => {
         const el = document.getElementById("tenant-reservations-modals");
 
-        // Initial load
         if (el?.dataset?.reservations) {
             try {
                 setReservationsData(JSON.parse(el.dataset.reservations));
@@ -177,7 +168,6 @@ export default function ReservationsModal() {
             }
         }
 
-        // ── Restore saved modal state (from before navigating to tour) ──
         const saved = loadModalState();
         if (saved) {
             if (saved.room) setRoom({ ...FALLBACK_ROOM, ...saved.room });
@@ -191,11 +181,9 @@ export default function ReservationsModal() {
                     setNeedsReceiptReupload(true);
                 }
             }
-            // Clear after restoring so a fresh reload doesn't re-open
             clearModalState();
         }
 
-        // ── Live update listener ──
         const handleLiveUpdate = (e) => {
             if (e.detail) {
                 setReservationsData(e.detail);
@@ -216,7 +204,6 @@ export default function ReservationsModal() {
         };
     }, []);
 
-    // 2. Refetch data dynamically from the server without a page reload
     useEffect(() => {
         const handleRefetch = async () => {
             try {
@@ -239,9 +226,7 @@ export default function ReservationsModal() {
             }
         };
 
-        // Listen for local submissions
         window.addEventListener("reservation:refresh", handleRefetch);
-        // Listen for remote updates coming via WebSockets
         window.addEventListener("reservation:remote-updated", handleRefetch);
 
         return () => {
@@ -253,14 +238,12 @@ export default function ReservationsModal() {
         };
     }, []);
 
-    // 3. Persist modal state whenever it changes (so tour navigation can restore it)
     useEffect(() => {
         if (showDetails || showReserve) {
             saveModalState({ showDetails, showReserve, room, form });
         }
     }, [showDetails, showReserve, room, form]);
 
-    // 4. Global click listener (Open Details, Open Reserve, Open Cancel)
     useEffect(() => {
         const handler = (e) => {
             const detailsBtn = e.target.closest(".open-room-details-btn");
@@ -313,7 +296,6 @@ export default function ReservationsModal() {
         return () => document.removeEventListener("click", handler);
     }, [reservationsData]);
 
-    // ── Close helpers — also clear saved state ──
     const closeDetails = () => {
         setShowDetails(false);
         clearModalState();
@@ -339,9 +321,6 @@ export default function ReservationsModal() {
     const updateField = (key, value) =>
         setForm((f) => ({ ...f, [key]: value }));
 
-    // ============================================================
-    // Derived charge calculations
-    // ============================================================
     const roomRate = Number(room.price) || 0;
     const companionFee = form.has_companion ? 150 : 0;
 
@@ -360,9 +339,6 @@ export default function ReservationsModal() {
     const payNow = form.payment_option === "half" ? halfPayment : totalCharges;
     const remaining = totalCharges - payNow;
 
-    // ============================================================
-    // 24-hour minimum enforcement (client side)
-    // ============================================================
     const minCheckOutDate = useMemo(() => {
         if (!form.check_in_date) return "";
         const inD = new Date(form.check_in_date + "T00:00:00");
@@ -391,9 +367,6 @@ export default function ReservationsModal() {
         form.check_out_time,
     ]);
 
-    // ============================================================
-    // Due-date preview
-    // ============================================================
     const dueDatePreview = useMemo(
         () =>
             computeDueDatePreview(
@@ -410,20 +383,52 @@ export default function ReservationsModal() {
         ],
     );
 
-    // ============================================================
-    // Open 360° tour — same tab, with `from` back-link
-    // ============================================================
     const openTour = () => {
         if (!room.tourId) return;
-        // Persist current state so the tour's back button can restore it
         saveModalState({ showDetails, showReserve, room, form });
         const from = encodeURIComponent(window.location.pathname);
         window.location.href = `/tour/${room.tourId}?from=${from}`;
     };
 
-    // ============================================================
-    // Submit reservation
-    // ============================================================
+    // --- MISSING FUNCTIONS FIXED HERE ---
+    const handleCopyGCash = () => {
+        navigator.clipboard?.writeText("0917-123-4567");
+        alert("GCash number copied!");
+    };
+
+    const confirmCancelReservation = async () => {
+        if (!cancelTarget) return;
+        if (cancelInFlightRef.current) return;
+
+        cancelInFlightRef.current = true;
+        setSaving(true);
+
+        try {
+            const res = await fetch(
+                `/tenants/reservations/${cancelTarget.id}/cancel`,
+                {
+                    method: "POST",
+                    headers: {
+                        Accept: "application/json",
+                        "X-CSRF-TOKEN": csrf(),
+                    },
+                },
+            );
+            const result = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(result.message || "Failed to cancel.");
+
+            setShowCancel(false);
+            setCancelTarget(null);
+            window.dispatchEvent(new Event("reservation:refresh"));
+        } catch (err) {
+            alert(err.message);
+        } finally {
+            cancelInFlightRef.current = false;
+            setSaving(false);
+        }
+    };
+    // ------------------------------------
+
     const handleSubmit = async () => {
         if (inFlightRef.current || saving) return;
         inFlightRef.current = true;
@@ -478,8 +483,6 @@ export default function ReservationsModal() {
         }
 
         setSaving(true);
-
-        // Use the actual DOM element, not the React component
         const modalEl = document.getElementById("tenant-reservations-modals");
         if (modalEl) modalEl.dataset.saving = "true";
 
@@ -518,9 +521,13 @@ export default function ReservationsModal() {
             setShowReserve(false);
             clearModalState();
             setNeedsReceiptReupload(false);
-            window.dispatchEvent(new Event("reservation:refresh"));
 
-            // Keep the lock for 2 seconds so WebSockets don't trigger a double-refresh
+            // DELAY the local refresh by 600ms so the DB and WebSocket can finish
+            setTimeout(() => {
+                window.dispatchEvent(new Event("reservation:refresh"));
+            }, 600);
+
+            // Keep the lock for 2 seconds so the WebSocket doesn't double-fire
             setTimeout(() => {
                 inFlightRef.current = false;
                 setSaving(false);
@@ -531,6 +538,10 @@ export default function ReservationsModal() {
             inFlightRef.current = false;
             setSaving(false);
             if (modalEl) delete modalEl.dataset.saving;
+        }finally {
+            // After the POST finishes, force a local refresh just in case 
+            // the WebSocket event arrived while we were saving
+            window.dispatchEvent(new Event("reservation:refresh"));
         }
     };
 

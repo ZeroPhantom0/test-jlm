@@ -1,6 +1,6 @@
 // resources/js/pages/Admin/RoomChangeModals.jsx
-import React, { useState, useEffect } from 'react';
-import Modal from '../../components/Modal';
+import React, { useState, useEffect } from "react";
+import Modal from "../../components/Modal";
 
 const csrf = () =>
     document.querySelector('meta[name="csrf-token"]')?.content ||
@@ -11,7 +11,7 @@ export default function RoomChangeModals() {
     const [showDelete, setShowDelete] = useState(false);
     const [request, setRequest] = useState(null);
     const [deleteTarget, setDeleteTarget] = useState(null);
-    const [adminNotes, setAdminNotes] = useState('');
+    const [adminNotes, setAdminNotes] = useState("");
     const [saving, setSaving] = useState(false);
     const [requestsData, setRequestsData] = useState({});
 
@@ -19,19 +19,19 @@ export default function RoomChangeModals() {
     const [showApprove, setShowApprove] = useState(false);
     const [showReject, setShowReject] = useState(false);
     const [actionTarget, setActionTarget] = useState(null);
-    const [rejectNotes, setRejectNotes] = useState('');
+    const [rejectNotes, setRejectNotes] = useState("");
 
     // ============================================================
     // LIVE DATA — read once, then listen for polling/Echo updates
     // ============================================================
     const readRequestsFromDom = () => {
-        const el = document.getElementById('admin-room-change-modals');
+        const el = document.getElementById("admin-room-change-modals");
         if (!el?.dataset?.requests) return;
         try {
             const parsed = JSON.parse(el.dataset.requests);
-            if (parsed && typeof parsed === 'object') setRequestsData(parsed);
+            if (parsed && typeof parsed === "object") setRequestsData(parsed);
         } catch (e) {
-            console.error('Invalid requests JSON', e);
+            console.error("Invalid requests JSON", e);
         }
     };
 
@@ -40,15 +40,16 @@ export default function RoomChangeModals() {
 
         const handler = (e) => {
             const fresh = e?.detail;
-            if (fresh && typeof fresh === 'object') {
+            if (fresh && typeof fresh === "object") {
                 setRequestsData(fresh);
             } else {
                 readRequestsFromDom();
             }
         };
 
-        window.addEventListener('room-change:data-updated', handler);
-        return () => window.removeEventListener('room-change:data-updated', handler);
+        window.addEventListener("room-change:data-updated", handler);
+        return () =>
+            window.removeEventListener("room-change:data-updated", handler);
     }, []);
 
     // Sync open request with fresh data
@@ -64,7 +65,7 @@ export default function RoomChangeModals() {
         ) {
             setRequest(fresh);
             if (fresh.admin_notes !== undefined && !saving) {
-                setAdminNotes(fresh.admin_notes || '');
+                setAdminNotes(fresh.admin_notes || "");
             }
         }
     }, [requestsData]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -75,20 +76,20 @@ export default function RoomChangeModals() {
     useEffect(() => {
         const handler = (e) => {
             // View details — opens modal
-            const viewBtn = e.target.closest('.open-details-btn');
+            const viewBtn = e.target.closest(".open-details-btn");
             if (viewBtn) {
                 const id = viewBtn.dataset.requestId;
                 const data = requestsData[id];
                 if (data) {
                     setRequest(data);
-                    setAdminNotes(data.admin_notes || '');
+                    setAdminNotes(data.admin_notes || "");
                     setShowDetails(true);
                 }
                 return;
             }
 
             // Approve — from row (opens confirmation modal)
-            const approveBtn = e.target.closest('.icon-approve');
+            const approveBtn = e.target.closest(".icon-approve");
             if (approveBtn) {
                 const id = approveBtn.dataset.requestId;
                 const data = requestsData[id];
@@ -100,27 +101,27 @@ export default function RoomChangeModals() {
             }
 
             // Reject — from row (opens confirmation modal)
-            const rejectBtn = e.target.closest('.icon-reject');
+            const rejectBtn = e.target.closest(".icon-reject");
             if (rejectBtn) {
                 const id = rejectBtn.dataset.requestId;
                 const data = requestsData[id];
                 if (data) {
                     setActionTarget(data);
-                    setRejectNotes('');
+                    setRejectNotes("");
                     setShowReject(true);
                 }
                 return;
             }
         };
 
-        document.addEventListener('click', handler);
-        return () => document.removeEventListener('click', handler);
+        document.addEventListener("click", handler);
+        return () => document.removeEventListener("click", handler);
     }, [requestsData]);
 
     const closeModal = () => {
         setShowDetails(false);
         setRequest(null);
-        setAdminNotes('');
+        setAdminNotes("");
     };
 
     // ============================================================
@@ -136,7 +137,7 @@ export default function RoomChangeModals() {
     const handleReject = () => {
         if (!request) return;
         setActionTarget({ ...request, admin_notes: adminNotes });
-        setRejectNotes('');
+        setRejectNotes("");
         setShowReject(true);
     };
 
@@ -147,21 +148,30 @@ export default function RoomChangeModals() {
         if (!actionTarget) return;
         setSaving(true);
         try {
-            const res = await fetch(`/admin/services/room-change/${actionTarget.id}/approve`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    'X-CSRF-TOKEN': csrf(),
+            const res = await fetch(
+                `/admin/services/room-change/${actionTarget.id}/approve`,
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        Accept: "application/json",
+                        "X-CSRF-TOKEN": csrf(),
+                    },
+                    body: JSON.stringify({
+                        admin_notes:
+                            actionTarget.admin_notes || adminNotes || "",
+                    }),
                 },
-                body: JSON.stringify({ admin_notes: actionTarget.admin_notes || adminNotes || '' }),
-            });
+            );
             const data = await res.json();
-            if (!res.ok) throw new Error(data.message || 'Failed to approve.');
+            if (!res.ok) throw new Error(data.message || "Failed to approve.");
+
             setShowApprove(false);
             setActionTarget(null);
             closeModal();
-            window.location.reload();
+
+            // REMOVED window.location.reload()
+            window.dispatchEvent(new CustomEvent("room-change:refresh"));
         } catch (err) {
             alert(err.message);
         } finally {
@@ -172,27 +182,33 @@ export default function RoomChangeModals() {
     const confirmReject = async () => {
         if (!actionTarget) return;
         if (!rejectNotes.trim()) {
-            alert('Please provide a reason for rejection.');
+            alert("Please provide a reason for rejection.");
             return;
         }
         setSaving(true);
         try {
-            const res = await fetch(`/admin/services/room-change/${actionTarget.id}/reject`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    'X-CSRF-TOKEN': csrf(),
+            const res = await fetch(
+                `/admin/services/room-change/${actionTarget.id}/reject`,
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        Accept: "application/json",
+                        "X-CSRF-TOKEN": csrf(),
+                    },
+                    body: JSON.stringify({ admin_notes: rejectNotes }),
                 },
-                body: JSON.stringify({ admin_notes: rejectNotes }),
-            });
+            );
             const data = await res.json();
-            if (!res.ok) throw new Error(data.message || 'Failed to reject.');
+            if (!res.ok) throw new Error(data.message || "Failed to reject.");
+
             setShowReject(false);
             setActionTarget(null);
-            setRejectNotes('');
+            setRejectNotes("");
             closeModal();
-            window.location.reload();
+
+            // REMOVED window.location.reload()
+            window.dispatchEvent(new CustomEvent("room-change:refresh"));
         } catch (err) {
             alert(err.message);
         } finally {
@@ -210,7 +226,7 @@ export default function RoomChangeModals() {
         if (saving) return;
         setShowReject(false);
         setActionTarget(null);
-        setRejectNotes('');
+        setRejectNotes("");
     };
 
     // ============================================================
@@ -238,19 +254,22 @@ export default function RoomChangeModals() {
         if (!deleteTarget) return;
         setSaving(true);
         try {
-            const res = await fetch(`/admin/services/room-change/${deleteTarget.id}`, {
-                method: 'DELETE',
-                headers: {
-                    'Accept': 'application/json',
-                    'X-CSRF-TOKEN': csrf(),
+            const res = await fetch(
+                `/admin/services/room-change/${deleteTarget.id}`,
+                {
+                    method: "DELETE",
+                    headers: {
+                        Accept: "application/json",
+                        "X-CSRF-TOKEN": csrf(),
+                    },
                 },
-            });
+            );
             const data = await res.json();
-            if (!res.ok) throw new Error(data.message || 'Failed to delete.');
+            if (!res.ok) throw new Error(data.message || "Failed to delete.");
             setShowDelete(false);
             setDeleteTarget(null);
             closeModal();
-            window.location.reload();
+            window.dispatchEvent(new CustomEvent('room-change:refresh'));
         } catch (err) {
             alert(err.message);
         } finally {
@@ -298,25 +317,45 @@ export default function RoomChangeModals() {
     // Status badge config
     // ============================================================
     const statusConfig = {
-        Pending:  { class: 'bg-yellow-100 text-amber-700',    icon: 'fa-regular fa-clock' },
-        Approved: { class: 'bg-emerald-100 text-emerald-600', icon: 'fa-regular fa-circle-check' },
-        Rejected: { class: 'bg-rose-100 text-rose-600',       icon: 'fa-regular fa-circle-xmark' },
-    }[request.status] || { class: 'bg-slate-100 text-slate-500', icon: 'fa-regular fa-circle' };
+        Pending: {
+            class: "bg-yellow-100 text-amber-700",
+            icon: "fa-regular fa-clock",
+        },
+        Approved: {
+            class: "bg-emerald-100 text-emerald-600",
+            icon: "fa-regular fa-circle-check",
+        },
+        Rejected: {
+            class: "bg-rose-100 text-rose-600",
+            icon: "fa-regular fa-circle-xmark",
+        },
+    }[request.status] || {
+        class: "bg-slate-100 text-slate-500",
+        icon: "fa-regular fa-circle",
+    };
 
-    const isPending = request.status === 'Pending';
+    const isPending = request.status === "Pending";
 
     const availabilityConfig = {
-        AVAILABLE: { class: 'bg-emerald-100 text-emerald-600', label: 'AVAILABLE' },
-        OCCUPIED:  { class: 'bg-rose-100 text-rose-600',       label: 'OCCUPIED' },
-        RESERVED:  { class: 'bg-indigo-100 text-indigo-700',   label: 'RESERVED' },
-    }[request.availability] || { class: 'bg-slate-100 text-slate-500', label: request.availability };
+        AVAILABLE: {
+            class: "bg-emerald-100 text-emerald-600",
+            label: "AVAILABLE",
+        },
+        OCCUPIED: { class: "bg-rose-100 text-rose-600", label: "OCCUPIED" },
+        RESERVED: { class: "bg-indigo-100 text-indigo-700", label: "RESERVED" },
+    }[request.availability] || {
+        class: "bg-slate-100 text-slate-500",
+        label: request.availability,
+    };
 
     return (
         <>
             <Modal onClose={closeModal} maxWidth="max-w-[520px]">
                 {/* ============ HEADER ============ */}
                 <div className="p-5 pb-4 flex items-center justify-between border-b border-slate-100">
-                    <h3 className="text-lg font-bold text-slate-900">Room Change Request Details</h3>
+                    <h3 className="text-lg font-bold text-slate-900">
+                        Room Change Request Details
+                    </h3>
                     <button
                         onClick={closeModal}
                         className="text-slate-400 hover:text-slate-700 text-lg"
@@ -327,7 +366,6 @@ export default function RoomChangeModals() {
 
                 {/* ============ BODY ============ */}
                 <div className="p-6 overflow-y-auto flex flex-col gap-4">
-
                     {/* Tenant + Status */}
                     <div className="flex items-center justify-between">
                         <div>
@@ -338,8 +376,11 @@ export default function RoomChangeModals() {
                                 {request.reference_no}
                             </div>
                         </div>
-                        <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold ${statusConfig.class}`}>
-                            <i className={statusConfig.icon}></i> {request.status}
+                        <span
+                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold ${statusConfig.class}`}
+                        >
+                            <i className={statusConfig.icon}></i>{" "}
+                            {request.status}
                         </span>
                     </div>
 
@@ -347,27 +388,35 @@ export default function RoomChangeModals() {
                     <div className="bg-slate-50 rounded-xl p-4 flex flex-col gap-2.5">
                         <div className="flex items-center justify-center gap-4">
                             <div className="flex-1 bg-white border border-slate-200 rounded-[10px] py-2.5 text-center">
-                                <div className="text-[11px] text-slate-400">Current Room</div>
+                                <div className="text-[11px] text-slate-400">
+                                    Current Room
+                                </div>
                                 <div className="text-xl font-extrabold text-slate-800 mt-1">
                                     {request.current_room}
                                 </div>
                             </div>
                             <i className="fa-solid fa-arrow-right text-slate-400 text-sm"></i>
                             <div className="flex-1 bg-white border border-slate-200 rounded-[10px] py-2.5 text-center">
-                                <div className="text-[11px] text-slate-400">Requested Room</div>
+                                <div className="text-[11px] text-slate-400">
+                                    Requested Room
+                                </div>
                                 <div className="text-xl font-extrabold text-indigo-700 mt-1">
                                     {request.requested_room}
                                 </div>
                             </div>
                         </div>
-                        <span className={`self-end text-[10px] font-bold px-2 py-0.5 rounded tracking-wide ${availabilityConfig.class}`}>
+                        <span
+                            className={`self-end text-[10px] font-bold px-2 py-0.5 rounded tracking-wide ${availabilityConfig.class}`}
+                        >
                             {availabilityConfig.label}
                         </span>
                     </div>
 
                     {/* Reason */}
                     <div>
-                        <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Reason</div>
+                        <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">
+                            Reason
+                        </div>
                         <div className="bg-slate-50 rounded-xl p-4 text-[13.5px] text-slate-700 leading-snug">
                             {request.reason}
                         </div>
@@ -473,7 +522,9 @@ function ApproveRoomChangeModal({ target, saving, onClose, onConfirm }) {
     return (
         <Modal onClose={onClose} maxWidth="max-w-[460px]">
             <div className="p-5 pb-4 flex items-center justify-between border-b border-slate-100 shrink-0">
-                <h3 className="text-lg font-bold text-slate-900">Approve Room Change</h3>
+                <h3 className="text-lg font-bold text-slate-900">
+                    Approve Room Change
+                </h3>
                 <button
                     onClick={onClose}
                     disabled={saving}
@@ -491,24 +542,31 @@ function ApproveRoomChangeModal({ target, saving, onClose, onConfirm }) {
                     Approve this room change?
                 </h4>
                 <p className="text-slate-500 text-[13px] mb-4">
-                    This will transfer the tenant to the requested room and update both rooms&rsquo; bed assignments.
+                    This will transfer the tenant to the requested room and
+                    update both rooms&rsquo; bed assignments.
                 </p>
 
                 <div className="bg-slate-50 rounded-xl p-4 text-left flex flex-col gap-2.5 mb-4">
                     <div className="flex justify-between text-xs">
                         <span className="text-slate-500">Tenant</span>
-                        <span className="font-bold text-slate-900">{target.tenant}</span>
+                        <span className="font-bold text-slate-900">
+                            {target.tenant}
+                        </span>
                     </div>
                     <div className="flex justify-between text-xs">
                         <span className="text-slate-500">Reference</span>
-                        <span className="font-bold text-slate-900">{target.reference_no}</span>
+                        <span className="font-bold text-slate-900">
+                            {target.reference_no}
+                        </span>
                     </div>
                     <div className="flex justify-between text-xs">
                         <span className="text-slate-500">Room Transfer</span>
                         <span className="font-bold text-slate-900">
                             {target.current_room}
                             <i className="fa-solid fa-arrow-right text-slate-400 text-[9px] mx-1.5"></i>
-                            <span className="text-indigo-700">{target.requested_room}</span>
+                            <span className="text-indigo-700">
+                                {target.requested_room}
+                            </span>
                         </span>
                     </div>
                 </div>
@@ -516,7 +574,8 @@ function ApproveRoomChangeModal({ target, saving, onClose, onConfirm }) {
                 <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-left">
                     <p className="text-[12px] text-emerald-800 leading-snug">
                         <i className="fa-solid fa-circle-info mr-1"></i>
-                        The tenant will be notified that their room change request has been approved.
+                        The tenant will be notified that their room change
+                        request has been approved.
                     </p>
                 </div>
             </div>
@@ -554,11 +613,20 @@ function ApproveRoomChangeModal({ target, saving, onClose, onConfirm }) {
 // ============================================================
 // REJECT CONFIRMATION SUBCOMPONENT
 // ============================================================
-function RejectRoomChangeModal({ target, saving, notes, onNotesChange, onClose, onConfirm }) {
+function RejectRoomChangeModal({
+    target,
+    saving,
+    notes,
+    onNotesChange,
+    onClose,
+    onConfirm,
+}) {
     return (
         <Modal onClose={onClose} maxWidth="max-w-[460px]">
             <div className="p-5 pb-4 flex items-center justify-between border-b border-slate-100 shrink-0">
-                <h3 className="text-lg font-bold text-slate-900">Reject Room Change</h3>
+                <h3 className="text-lg font-bold text-slate-900">
+                    Reject Room Change
+                </h3>
                 <button
                     onClick={onClose}
                     disabled={saving}
@@ -577,31 +645,39 @@ function RejectRoomChangeModal({ target, saving, notes, onNotesChange, onClose, 
                         Reject this room change?
                     </h4>
                     <p className="text-slate-500 text-[13px]">
-                        The tenant will remain in their current room and will be notified of the rejection.
+                        The tenant will remain in their current room and will be
+                        notified of the rejection.
                     </p>
                 </div>
 
                 <div className="bg-slate-50 rounded-xl p-4 text-left flex flex-col gap-2.5 mb-4">
                     <div className="flex justify-between text-xs">
                         <span className="text-slate-500">Tenant</span>
-                        <span className="font-bold text-slate-900">{target.tenant}</span>
+                        <span className="font-bold text-slate-900">
+                            {target.tenant}
+                        </span>
                     </div>
                     <div className="flex justify-between text-xs">
                         <span className="text-slate-500">Reference</span>
-                        <span className="font-bold text-slate-900">{target.reference_no}</span>
+                        <span className="font-bold text-slate-900">
+                            {target.reference_no}
+                        </span>
                     </div>
                     <div className="flex justify-between text-xs">
                         <span className="text-slate-500">Room Transfer</span>
                         <span className="font-bold text-slate-900">
                             {target.current_room}
                             <i className="fa-solid fa-arrow-right text-slate-400 text-[9px] mx-1.5"></i>
-                            <span className="text-indigo-700">{target.requested_room}</span>
+                            <span className="text-indigo-700">
+                                {target.requested_room}
+                            </span>
                         </span>
                     </div>
                 </div>
 
                 <label className="block text-[13px] font-semibold text-slate-700 mb-1.5">
-                    Reason for rejection <span className="text-rose-500">*</span>
+                    Reason for rejection{" "}
+                    <span className="text-rose-500">*</span>
                 </label>
                 <textarea
                     value={notes}
@@ -610,7 +686,8 @@ function RejectRoomChangeModal({ target, saving, notes, onNotesChange, onClose, 
                     className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-[13px] outline-none resize-y min-h-[90px] focus:border-slate-400"
                 />
                 <p className="text-[11px] text-slate-400 mt-1">
-                    The tenant will see this reason on their room change request details.
+                    The tenant will see this reason on their room change request
+                    details.
                 </p>
             </div>
 
@@ -649,7 +726,9 @@ function DeleteRoomChangeModal({ target, saving, onClose, onConfirm }) {
     return (
         <Modal onClose={onClose} maxWidth="max-w-[460px]">
             <div className="p-5 pb-4 flex items-center justify-between border-b border-slate-100">
-                <h3 className="text-lg font-bold text-slate-900">Delete Room Change Request</h3>
+                <h3 className="text-lg font-bold text-slate-900">
+                    Delete Room Change Request
+                </h3>
                 <button
                     onClick={onClose}
                     disabled={saving}
@@ -663,7 +742,9 @@ function DeleteRoomChangeModal({ target, saving, onClose, onConfirm }) {
                 <div className="w-16 h-16 mx-auto rounded-full bg-rose-50 flex items-center justify-center mb-4">
                     <i className="fa-solid fa-trash-can text-rose-500 text-2xl"></i>
                 </div>
-                <h4 className="text-lg font-bold text-slate-900 mb-2">Are you sure?</h4>
+                <h4 className="text-lg font-bold text-slate-900 mb-2">
+                    Are you sure?
+                </h4>
                 <p className="text-slate-500 text-[13px] mb-2">
                     You are about to permanently delete:
                 </p>
@@ -673,13 +754,18 @@ function DeleteRoomChangeModal({ target, saving, onClose, onConfirm }) {
                 <p className="text-[13px] text-slate-600 mb-4">
                     <span className="font-semibold">{target.current_room}</span>
                     <i className="fa-solid fa-arrow-right text-slate-400 text-[10px] mx-2"></i>
-                    <span className="font-semibold text-indigo-700">{target.requested_room}</span>
-                    <span className="text-slate-400 ml-2">({target.reference_no})</span>
+                    <span className="font-semibold text-indigo-700">
+                        {target.requested_room}
+                    </span>
+                    <span className="text-slate-400 ml-2">
+                        ({target.reference_no})
+                    </span>
                 </p>
                 <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-left">
                     <p className="text-[12px] text-amber-800 leading-snug">
                         <i className="fa-solid fa-circle-info mr-1"></i>
-                        This will permanently remove the room change request and its history.{' '}
+                        This will permanently remove the room change request and
+                        its history.{" "}
                         <strong>This action cannot be undone.</strong>
                     </p>
                 </div>

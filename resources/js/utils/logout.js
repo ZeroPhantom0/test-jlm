@@ -1,46 +1,36 @@
 // resources/js/utils/logout.js
 
-/**
- * Dispatch a custom event to open the logout modal.
- * The actual logout logic lives in the LogoutModal component.
- */
-export function logout() {
-    // Clear client-side caches that could leak stale state back in.
-    try {
-        sessionStorage.clear();
-    } catch {
-        // Ignore storage access errors (private mode, etc.)
-    }
-
-    window.dispatchEvent(new Event("open-logout-modal"));
+export function logout(e) {
+    if (e && e.preventDefault) e.preventDefault();
+    // Opens the confirmation modal
+    window.dispatchEvent(new Event('open-logout-modal'));
 }
 
-/**
- * Perform the actual logout after the user confirms.
- *
- * 1. Submits the hidden `#logout-form` (CSRF-protected POST to /logout).
- * 2. After the server redirects, we use `location.replace()` to swap
- *    the current history entry with /login so pressing Back does NOT
- *    restore the logged-in page from bfcache.
- */
 export function confirmLogout() {
-    const form = document.getElementById('logout-form');
+    // 1. Grab the CSRF token from the meta tag in the head
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
 
-    if (!form) {
-        // Fallback: no form — just hard-redirect to /login
-        window.location.replace('/login');
-        return;
-    }
-
-    form.submit();
-
-    // Belt-and-suspenders: after the POST completes, the server will
-    // have redirected us. Replace the history entry as a safety net.
-    setTimeout(() => {
-        try {
-            window.location.replace('/login');
-        } catch {
-            /* ignore */
+    // 2. Send a POST request to the Laravel logout route
+    fetch('/logout', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': csrfToken,
+            'Accept': 'application/json',
+        },
+    })
+    .then((res) => {
+        if (res.redirected) {
+            // Laravel sends a redirect to '/login', so let's follow it
+            window.location.href = res.url;
+        } else {
+            // Fallback if there is no redirect
+            window.location.href = '/login';
         }
-    }, 50);
+    })
+    .catch((err) => {
+        console.error('Logout failed:', err);
+        // Force reload to login page just in case
+        window.location.href = '/login';
+    });
 }

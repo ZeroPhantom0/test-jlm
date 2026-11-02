@@ -195,7 +195,7 @@ export default function Sidebar({
 
                 {/* Footer (Only Logout now) */}
                 <div className="p-3 border-t border-white/5 flex flex-col gap-0.5 shrink-0">
-                    <button type="button" onClick={logout}
+                    <button type="button" onClick={(e) => logout(e)}
                             className={`flex items-center py-2.5 px-3 rounded-lg text-[13.5px] font-medium text-[#8fa0b5] hover:text-white transition-colors w-full ${collapsed ? "md:justify-center md:px-0" : ""}`}>
                         <div className={`flex items-center gap-3 ${collapsed ? "md:gap-0" : ""}`}>
                             <i className="fa-solid fa-right-from-bracket w-[18px] text-center text-[15px] shrink-0" />

@@ -141,8 +141,6 @@ export default function AdminTopHeader({
     // Initial + polling every 5s
     useEffect(() => {
         fetchNotifications();
-        const id = setInterval(fetchNotifications, 3000);
-        return () => clearInterval(id);
     }, []);
 
     // Refetch on open
@@ -371,7 +369,7 @@ export default function AdminTopHeader({
                                     <i className="fa-solid fa-user-clock w-4 text-center text-slate-500"></i>
                                     <span>My Activity Log</span>
                                 </a>
-                                <button type="button" onClick={logout} className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-medium text-rose-600 hover:bg-rose-50 transition border-t border-slate-100 mt-1 rounded-b-lg w-full text-left">
+                                <button type="button" onClick={(e) => logout(e)} className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-medium text-rose-600 hover:bg-rose-50 transition border-t border-slate-100 mt-1 rounded-b-lg w-full text-left">
                                     <i className="fa-solid fa-arrow-right-from-bracket w-4 text-center text-rose-600"></i>
                                     <span>Logout</span>
                                 </button>

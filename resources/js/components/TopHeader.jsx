@@ -122,8 +122,6 @@ export default function TopHeader({
 
     useEffect(() => {
         fetchNotifications();
-        const id = setInterval(fetchNotifications, 3000);
-        return () => clearInterval(id);
     }, []);
 
     useEffect(() => {
@@ -348,7 +346,7 @@ export default function TopHeader({
 
                             <button
                                 type="button"
-                                onClick={logout}
+                                onClick={(e) => logout(e)}
                                 className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-medium text-red-600 hover:bg-red-50 transition-colors w-full text-left"
                             >
                                 <i className="fa-solid fa-right-from-bracket w-[18px] text-center text-sm" />

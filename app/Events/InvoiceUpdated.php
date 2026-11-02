@@ -2,8 +2,8 @@
 
 namespace App\Events;
 
-use Illuminate\Broadcasting\Channel;
 use Illuminate\Broadcasting\InteractsWithSockets;
+use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
@@ -13,15 +13,15 @@ class InvoiceUpdated implements ShouldBroadcastNow
     use Dispatchable, InteractsWithSockets, SerializesModels;
 
     public function __construct(
-        public string $action,     // created | verified | rejected | updated | paid
+        public string $action,
         public ?int $invoiceId = null
     ) {}
 
     public function broadcastOn(): array
     {
         return [
-            new Channel('admin.billing'),
-            new Channel('tenant.billing'),
+            new PrivateChannel('admin.billing'),
+            new PrivateChannel('tenant.billing'),
         ];
     }
 

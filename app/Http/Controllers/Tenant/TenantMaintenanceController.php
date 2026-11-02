@@ -90,7 +90,7 @@ class TenantMaintenanceController extends Controller
         ]);
 
         // Notify admin bell + refresh admin page
-        event(new MaintenanceUpdated('created', $maintenanceRequest->id, $tenant->id));
+        event(new MaintenanceUpdated('created', $maintenanceRequest->id));
 
         return response()->json([
             'success' => true,
@@ -124,7 +124,7 @@ class TenantMaintenanceController extends Controller
         ]);
 
         // Notify admin bell — admin sees "tenant cancelled maintenance request"
-        event(new MaintenanceUpdated('cancelled', $maintenanceRequest->id, $maintenanceRequest->tenant_id));
+        event(new MaintenanceUpdated('cancelled', $maintenanceRequest->id));
 
         return response()->json([
             'success' => true,

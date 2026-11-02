@@ -138,6 +138,8 @@ class TenantBillingController extends Controller
 
     public function pay(Request $request)
     {
+        session()->save(); 
+        
         $validated = $request->validate([
             'invoice_ref'      => ['required', 'string'],
             'payment_method'   => ['required', 'in:gcash,bank,counter,GCash,Bank Transfer,Over The Counter'],

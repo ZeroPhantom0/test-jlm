@@ -5,11 +5,11 @@ namespace App\Events;
 use App\Models\Reservation;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PrivateChannel; // <-- FIXED IMPORT
-use Illuminate\Contracts\Broadcasting\ShouldBroadcast; // <-- CHANGED TO QUEUED BROADCAST
+use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
 
-class ReservationUpdated implements ShouldBroadcast
+class ReservationUpdated implements ShouldBroadcastNow
 {
     use Dispatchable, InteractsWithSockets, SerializesModels;
 

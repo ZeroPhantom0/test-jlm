@@ -99,7 +99,7 @@ class MaintenanceController extends Controller
         $maintenanceRequest->update($validated);
 
         // Broadcast so tenant bell / pages refresh in real time
-        event(new MaintenanceUpdated('updated', $maintenanceRequest->id, $maintenanceRequest->tenant_id));
+        event(new MaintenanceUpdated('updated', $maintenanceRequest->id)); 
 
         return response()->json([
             'success' => true,
@@ -152,7 +152,7 @@ class MaintenanceController extends Controller
         $id = $maintenanceRequest->id;
         $maintenanceRequest->delete();
 
-        event(new MaintenanceUpdated('deleted', $id, $maintenanceRequest->tenant_id));
+        event(new MaintenanceUpdated('deleted', $id)); 
 
         return response()->json([
             'success' => true,

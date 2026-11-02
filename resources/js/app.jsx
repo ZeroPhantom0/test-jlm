@@ -78,6 +78,7 @@ import TenantSettingsAccordions from "./pages/Settings/SettingsAccordions";
                     "X-CSRF-TOKEN":
                         document.querySelector('meta[name="csrf-token"]')?.getAttribute("content") || window.__appConfig?.csrf,
                     Accept: "application/json",
+                    "X-Requested-With": "XMLHttpRequest",
                 },
             },
         });
@@ -131,7 +132,6 @@ import TenantSettingsAccordions from "./pages/Settings/SettingsAccordions";
                     ch.stopListening(".stay-extension.updated", wrapped);
                 };
             },
-            // 🟢 NEW: Admin Messages
             messages: (handler) => {
                 const ch = window.Echo.private("admin.messages");
                 ch.listen(".message.sent", handler);
@@ -167,7 +167,6 @@ import TenantSettingsAccordions from "./pages/Settings/SettingsAccordions";
                     ch.stopListening(".stay-extension.updated", wrapped);
                 };
             },
-            // 🟢 NEW: Tenant Messages (uses tenant ID to scope)
             messages: (tenantId, handler) => {
                 const ch = window.Echo.private(`tenant.${tenantId}.messages`);
                 ch.listen(".message.sent", handler);
@@ -254,13 +253,15 @@ function mountReact() {
     // ---------- TENANT SETTINGS ACCORDIONS ----------
     mountIfExists("tenant-settings-accordions", TenantSettingsAccordions);
 
-    // ---------- GLOBAL LOGOUT MODAL ----------
+       // ---------- GLOBAL LOGOUT MODAL ----------
     let logoutModalRoot = document.getElementById("global-logout-modal-root");
     if (!logoutModalRoot) {
         logoutModalRoot = document.createElement("div");
         logoutModalRoot.id = "global-logout-modal-root";
         document.body.appendChild(logoutModalRoot);
     }
+    
+    // Mount only if it hasn't been mounted yet
     if (!logoutModalRoot.dataset.mounted) {
         createRoot(logoutModalRoot).render(<LogoutModal />);
         logoutModalRoot.dataset.mounted = "true";
@@ -274,7 +275,3 @@ if (document.readyState === "loading") {
 }
 
 window.mountReact = mountReact;
-
-document.addEventListener('livewire:navigated', () => {
-    window.mountReact();
-});

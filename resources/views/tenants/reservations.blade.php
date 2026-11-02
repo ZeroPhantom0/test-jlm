@@ -215,23 +215,53 @@
 @push('scripts')
 <script>
 (function () {
-    if (!window.Echo) return;
+    // Wait for Echo to be available before trying to subscribe
+    function initEcho() {
+        if (!window.Echo) {
+            setTimeout(initEcho, 50); // wait 50ms and try again
+            return;
+        }
 
-    // 1. Listen to the private channel using Echo
-    window.Echo.private('tenant.reservations')
-        .listen('.reservation.updated', () => {
-            // Ignore if the React modal is currently saving
-            // This prevents the browser from hanging during submission
-            const modalEl = document.getElementById('tenant-reservations-modals');
-            if (modalEl && modalEl.dataset.saving === 'true') {
-                return; 
-            }
-            
-            // Notify React and the page to fetch new data WITHOUT reloading
-            window.dispatchEvent(new Event('reservation:remote-updated'));
-        });
+        console.log('[Live] Echo found. Subscribing to tenant.reservations...');
 
-    // 2. A helper to render the server-rendered Blade cards dynamically
+        window.Echo.private('tenant.reservations')
+            .listen('.reservation.updated', (e) => {
+                const modalEl = document.getElementById('tenant-reservations-modals');
+                if (modalEl && modalEl.dataset.saving === 'true') return; 
+                
+                setTimeout(() => {
+                    refreshReservations();
+                }, 800);
+            });
+    }
+    
+    initEcho();
+
+    function refreshReservations() {
+        console.log('[Live] Fetching new reservation data...');
+        fetch('/tenants/reservations/data', { 
+            headers: { Accept: 'application/json', Connection: 'close' },
+            cache: 'no-store'
+        })
+            .then(r => r.ok ? r.json() : null)
+            .then(data => {
+                if (!data) return;
+
+                if (data.myReservations) {
+                    renderReservationCards(data.myReservations);
+                }
+                
+                const el = document.getElementById('tenant-reservations-modals');
+                if (el && data.reservations) {
+                    el.dataset.reservations = JSON.stringify(data.reservations);
+                    window.dispatchEvent(new CustomEvent('reservation:data-updated', {
+                        detail: data.reservations,
+                    }));
+                }
+            })
+            .catch(console.error);
+    }
+
     function renderReservationCards(list) {
         const container = document.getElementById('my-reservations-list');
         if (!container) return;
@@ -271,23 +301,7 @@
         `).join('');
     }
 
-    // 3. Hook the React dispatch to also update the Blade cards
-    let refetchTimer = null;
-    window.addEventListener('reservation:remote-updated', () => {
-        clearTimeout(refetchTimer);
-        refetchTimer = setTimeout(() => {
-            fetch('/tenants/reservations/data', { 
-                headers: { Accept: 'application/json', Connection: 'close' } 
-            })
-                .then(r => r.ok ? r.json() : null)
-                .then(data => {
-                    if (data && data.myReservations) {
-                        renderReservationCards(data.myReservations);
-                    }
-                })
-                .catch(() => {});
-        }, 500);
-    });
+    window.addEventListener("reservation:refresh", refreshReservations);
 })();
 </script>
 @endpush

@@ -262,7 +262,7 @@ export default function AdminSidebar({
                 {/* Single logout button */}
                 <button
                     type="button"
-                    onClick={logout}
+                    onClick={(e) => logout(e)}
                     className={`text-[#8fa0b5] hover:text-white transition cursor-pointer shrink-0 ${collapsed ? "md:flex" : "hidden md:block"}`}
                     style={{ fontSize: "16px" }}
                     title="Logout"

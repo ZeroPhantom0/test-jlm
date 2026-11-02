@@ -160,7 +160,7 @@ export default function StayExtensionModals() {
             setShowApprove(false);
             setActionTarget(null);
             closeModal();
-            window.location.reload();
+            window.dispatchEvent(new CustomEvent('stay-extension:refresh'));
         } catch (err) {
             alert(err.message);
         } finally {
@@ -191,7 +191,7 @@ export default function StayExtensionModals() {
             setActionTarget(null);
             setRejectNotes('');
             closeModal();
-            window.location.reload();
+            window.dispatchEvent(new CustomEvent('stay-extension:refresh'));
         } catch (err) {
             alert(err.message);
         } finally {
@@ -250,7 +250,7 @@ export default function StayExtensionModals() {
             setShowDelete(false);
             setDeleteTarget(null);
             closeModal();
-            window.location.reload();
+            window.dispatchEvent(new CustomEvent('stay-extension:refresh'));
         } catch (err) {
             alert(err.message);
         } finally {

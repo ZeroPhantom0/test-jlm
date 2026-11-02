@@ -95,10 +95,77 @@
 @push('scripts')
 <script>
 (function () {
-    if (window.Echo) {
-        window.Echo.channel('tenant.services')
-            .listen('.room-change.updated', () => window.location.reload());
-    }
+    window.addEventListener('load', () => {
+        async function refresh() {
+            try {
+                const res = await fetch("{{ route('tenants.services.room-change.data') }}", {
+                    headers: { 'Accept': 'application/json' },
+                    cache: 'no-store'
+                });
+                if (!res.ok) return;
+                const data = await res.json();
+
+                const container = document.getElementById('tenant-room-change-container');
+                const countEl = document.querySelector('.text-\\[13\\.5px\\].text-slate-500');
+                const active = data.rows.filter(r => r.is_pending);
+
+                if (countEl) {
+                    countEl.textContent = `${active.length} active request${active.length === 1 ? '' : 's'}`;
+                }
+
+                if (active.length === 0) {
+                    container.innerHTML = `
+                        <div class="text-center py-12 text-slate-400 text-sm">
+                            <i class="fa-solid fa-inbox text-3xl mb-3"></i>
+                            <p>No active room change requests.</p>
+                        </div>`;
+                } else {
+                    container.innerHTML = `<div class="flex flex-col gap-4">` + active.map(r => `
+                        <div class="bg-slate-50 border border-slate-200 rounded-xl p-5 relative">
+                            <div class="flex items-center gap-2 mb-2.5">
+                                <div class="text-[15px] font-bold text-slate-900">
+                                    ${r.current_room}
+                                    <span class="text-slate-400 font-normal mx-0.5">&rarr;</span>
+                                    <span class="text-emerald-600">${r.requested_room}</span>
+                                </div>
+                                <span class="bg-amber-100 text-amber-700 text-[11px] font-semibold px-2 py-0.5 rounded-full inline-flex items-center gap-1">
+                                    <i class="fa-regular fa-clock"></i> Pending
+                                </span>
+                            </div>
+                            <div class="absolute right-5 top-4 flex gap-3 text-slate-400 text-sm">
+                                <i class="fa-regular fa-eye cursor-pointer hover:text-slate-600 view-room-change-details-btn" data-request-id="${r.id}" title="View Details"></i>
+                                <i class="fa-regular fa-circle-xmark cursor-pointer hover:text-rose-600 cancel-room-change-btn" data-request-id="${r.id}" title="Cancel Request"></i>
+                            </div>
+                            <div class="text-slate-600 text-[13.5px] mb-3">${r.reason}</div>
+                            <div class="flex gap-4 text-xs text-slate-400">
+                                <span class="flex items-center gap-1.5">
+                                    <i class="fa-regular fa-calendar"></i> ${r.date}
+                                </span>
+                                <span>Availability: ${r.availability}</span>
+                            </div>
+                        </div>
+                    `).join('') + `</div>`;
+                }
+
+                const modalEl = document.getElementById('services-room-change-root');
+                if (modalEl && data.react) {
+                    modalEl.dataset.requests = JSON.stringify(data.react);
+                    window.dispatchEvent(new CustomEvent('room-change:data-updated', { detail: data.react }));
+                }
+            } catch (e) {
+                console.error('Failed to refresh room changes:', e);
+            }
+        }
+
+        if (window.Echo) {
+            window.Echo.private('tenant.services')
+                .listen('.room-change.updated', () => {
+                    setTimeout(refresh, 800);
+                });
+        }
+
+        window.addEventListener('room-change:refresh', refresh);
+    });
 })();
 </script>
 @endpush

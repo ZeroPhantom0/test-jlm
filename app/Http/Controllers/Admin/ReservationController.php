@@ -198,6 +198,8 @@ class ReservationController extends Controller
 
     public function approve(Request $request, Reservation $reservation)
     {
+        session()->save();
+
         $validated = $request->validate([
             'admin_notes' => ['nullable', 'string'],
         ]);
@@ -287,6 +289,8 @@ class ReservationController extends Controller
 
     public function reject(Request $request, Reservation $reservation)
     {
+        session()->save();
+        
         $validated = $request->validate([
             'admin_notes' => ['nullable', 'string'],
         ]);

@@ -7,7 +7,7 @@ const csrf = () =>
     document.querySelector('input[name="_token"]')?.value;
 
 const FALLBACK = {
-    tn: "", // Changed from "tn-000" to empty string to prevent false matches
+    tn: "",
     description: "No description",
     tenant: "Unknown",
     room: "N/A",
@@ -75,17 +75,17 @@ export default function BillingModals() {
 
         const handleAction = (e, type) => {
             const tn = e.detail.tn;
-            
-            setInvoicesData(prev => {
+
+            setInvoicesData((prev) => {
                 const data = prev[tn] || FALLBACK;
                 setInvoice(data);
 
-                if (type === 'edit')   setShowEdit(true);
-                if (type === 'view')   setShowSummary(true);
-                if (type === 'view-payment') setShowReceipt(true);
-                if (type === 'remind') handleSendReminder(data);
-                if (type === 'verify') setShowVerify(true);
-                if (type === 'reject') {
+                if (type === "edit") setShowEdit(true);
+                if (type === "view") setShowSummary(true);
+                if (type === "view-payment") setShowReceipt(true);
+                if (type === "remind") handleSendReminder(data);
+                if (type === "verify") setShowVerify(true);
+                if (type === "reject") {
                     setRejectNotes("");
                     setShowReject(true);
                 }
@@ -93,12 +93,12 @@ export default function BillingModals() {
             });
         };
 
-        const handleEdit   = (e) => handleAction(e, 'edit');
-        const handleView   = (e) => handleAction(e, 'view');
-        const handlePay    = (e) => handleAction(e, 'view-payment');
-        const handleRemind = (e) => handleAction(e, 'remind');
-        const handleVerify = (e) => handleAction(e, 'verify');
-        const handleReject = (e) => handleAction(e, 'reject');
+        const handleEdit = (e) => handleAction(e, "edit");
+        const handleView = (e) => handleAction(e, "view");
+        const handlePay = (e) => handleAction(e, "view-payment");
+        const handleRemind = (e) => handleAction(e, "remind");
+        const handleVerify = (e) => handleAction(e, "verify");
+        const handleReject = (e) => handleAction(e, "reject");
 
         window.addEventListener("billing:data-updated", handleLiveUpdate);
         window.addEventListener("billing:edit", handleEdit);
@@ -109,7 +109,10 @@ export default function BillingModals() {
         window.addEventListener("billing:reject", handleReject);
 
         return () => {
-            window.removeEventListener("billing:data-updated", handleLiveUpdate);
+            window.removeEventListener(
+                "billing:data-updated",
+                handleLiveUpdate,
+            );
             window.removeEventListener("billing:edit", handleEdit);
             window.removeEventListener("billing:view", handleView);
             window.removeEventListener("billing:payment", handlePay);
@@ -138,7 +141,8 @@ export default function BillingModals() {
                 headers: { Accept: "application/json", "X-CSRF-TOKEN": csrf() },
             });
             const result = await res.json();
-            if (!res.ok) throw new Error(result.message || "Failed to send reminder.");
+            if (!res.ok)
+                throw new Error(result.message || "Failed to send reminder.");
             alert(result.message || "Reminder sent.");
         } catch (err) {
             alert(err.message);
@@ -149,10 +153,9 @@ export default function BillingModals() {
         if (!invoice || !invoice.tn) return;
         setSaving(true);
         try {
-            // CRITICAL FIX: Pass the transaction_no in the body so Laravel can bind the model
             const payload = {
                 ...formData,
-                transaction_no: invoice.tn 
+                transaction_no: invoice.tn,
             };
 
             const res = await fetch(`/admin/billing/${invoice.tn}`, {
@@ -167,7 +170,9 @@ export default function BillingModals() {
             const data = await res.json();
             if (!res.ok) throw new Error(data.message || "Failed to update.");
             closeAll();
-            window.location.reload();
+
+            // DO NOT RELOAD - Just fetch new data
+            window.dispatchEvent(new Event("billing:refresh"));
         } catch (err) {
             alert(err.message);
         } finally {
@@ -178,56 +183,49 @@ export default function BillingModals() {
     const confirmVerify = async () => {
         if (!invoice || !invoice.tn) return;
         setSaving(true);
+        const modalRoot = document.getElementById("admin-billing-modals");
+        if (modalRoot) modalRoot.dataset.saving = "true";
+
         try {
-            const res = await fetch(`/admin/billing/${invoice.tn}/verify-payment`, {
-                method: "POST",
-                headers: {
-                    Accept: "application/json",
-                    "X-CSRF-TOKEN": csrf(),
+            const res = await fetch(
+                `/admin/billing/${invoice.tn}/verify-payment`,
+                {
+                    method: "POST",
+                    headers: {
+                        Accept: "application/json",
+                        "X-CSRF-TOKEN": csrf(),
+                    },
                 },
-            });
+            );
             const result = await res.json();
-            
+
             if (!res.ok) {
-                if (res.status === 422 && result.message.includes("not pending")) {
-                    alert(result.message + "\n\nThe page will now refresh to show the latest status.");
-                    window.location.reload();
+                if (
+                    res.status === 422 &&
+                    result.message.includes("not pending")
+                ) {
+                    alert(result.message);
+                    closeAll();
+                    window.dispatchEvent(new Event("billing:refresh"));
                     return;
                 }
                 throw new Error(result.message || "Verification failed.");
             }
 
+            // Close modal instantly
             closeAll();
-
-            const row = document.querySelector(`tr[data-tn="${invoice.tn}"]`);
-            if (!row) {
-                window.location.reload();
-                return;
-            }
-
-            if (result.status === "Paid") {
-                row.style.display = "none";
-            } else if (result.status === "Partial") {
-                const statusBadge = row.querySelector(".px-3\\.5.py-1");
-                if (statusBadge) {
-                    statusBadge.className =
-                        "inline-block px-3.5 py-1 rounded-full text-[11px] font-bold bg-yellow-100 text-yellow-700";
-                    statusBadge.innerText = "Partial";
-                }
-
-                const actionDiv = row.querySelector(".flex.items-center.gap-3");
-                if (actionDiv) {
-                    actionDiv.innerHTML = `
-                        <i class="fa-solid fa-pen text-slate-700 text-[15px] cursor-pointer hover:text-orange-500 transition icon-edit" title="Edit Invoice"></i>
-                        <i class="fa-solid fa-bell text-slate-700 text-[15px] cursor-pointer hover:text-orange-500 transition icon-remind" title="Send Reminder"></i>
-                        <i class="fa-solid fa-eye text-slate-700 text-[15px] cursor-pointer hover:text-orange-500 transition icon-view" title="View Summary"></i>
-                    `;
-                }
-            }
+            setTimeout(
+                () => window.dispatchEvent(new Event("billing:refresh")),
+                600,
+            );
         } catch (err) {
             alert(err.message);
         } finally {
             setSaving(false);
+            // ADD THIS
+            setTimeout(() => {
+                if (modalRoot) delete modalRoot.dataset.saving;
+            }, 2000);
         }
     };
 
@@ -238,46 +236,66 @@ export default function BillingModals() {
             return;
         }
         setSaving(true);
+        const modalRoot = document.getElementById("admin-billing-modals");
+        if (modalRoot) modalRoot.dataset.saving = "true";
+
         try {
-            const res = await fetch(`/admin/billing/${invoice.tn}/reject-payment`, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    Accept: "application/json",
-                    "X-CSRF-TOKEN": csrf(),
+            const res = await fetch(
+                `/admin/billing/${invoice.tn}/reject-payment`,
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        Accept: "application/json",
+                        "X-CSRF-TOKEN": csrf(),
+                    },
+                    body: JSON.stringify({ admin_notes: rejectNotes }),
                 },
-                body: JSON.stringify({ admin_notes: rejectNotes }),
-            });
+            );
             const result = await res.json();
-            
+
             if (!res.ok) {
-                if (res.status === 422 && result.message.includes("not pending")) {
-                    alert(result.message + "\n\nThe page will now refresh to show the latest status.");
-                    window.location.reload();
+                if (
+                    res.status === 422 &&
+                    result.message.includes("not pending")
+                ) {
+                    alert(result.message);
+                    closeAll();
+                    window.dispatchEvent(new Event("billing:refresh"));
                     return;
                 }
                 throw new Error(result.message || "Rejection failed.");
             }
 
+            // Close modal instantly
             closeAll();
-            window.location.reload();
+            setTimeout(
+                () => window.dispatchEvent(new Event("billing:refresh")),
+                600,
+            );
         } catch (err) {
             alert(err.message);
         } finally {
             setSaving(false);
+            // ADD THIS
+            setTimeout(() => {
+                if (modalRoot) delete modalRoot.dataset.saving;
+            }, 2000);
         }
     };
 
     const data = invoice || FALLBACK;
-    const displayDatePaid = data.date_paid && data.date_paid !== "-" ? data.date_paid : "-";
+    const displayDatePaid =
+        data.date_paid && data.date_paid !== "-" ? data.date_paid : "-";
 
-    const statusBadgeClass = {
-        Unpaid: "bg-amber-100 text-amber-700",
-        Overdue: "bg-rose-100 text-rose-600",
-        Partial: "bg-yellow-100 text-yellow-700",
-        Pending: "bg-blue-100 text-blue-600",
-        Paid: "bg-green-100 text-green-600",
-    }[data.status] || "bg-slate-100 text-slate-500";
+    const statusBadgeClass =
+        {
+            Unpaid: "bg-amber-100 text-amber-700",
+            Overdue: "bg-rose-100 text-rose-600",
+            Partial: "bg-yellow-100 text-yellow-700",
+            Pending: "bg-blue-100 text-blue-600",
+            Paid: "bg-green-100 text-green-600",
+        }[data.status] || "bg-slate-100 text-slate-500";
 
     const verifyWillBePartial = willBePartial(invoice);
     const verifyRemaining = projectedRemaining(invoice);
@@ -317,7 +335,9 @@ export default function BillingModals() {
                             <span className="text-xs text-slate-400">
                                 {data.tn}
                             </span>
-                            <span className={`px-3 py-1 rounded-full text-[11px] font-bold ${statusBadgeClass}`}>
+                            <span
+                                className={`px-3 py-1 rounded-full text-[11px] font-bold ${statusBadgeClass}`}
+                            >
                                 {data.status}
                             </span>
                         </div>
@@ -331,7 +351,9 @@ export default function BillingModals() {
                             </div>
                             <div className="flex justify-center gap-5 text-[11px] text-slate-400 mt-1.5">
                                 <span>{data.days}</span>
-                                <span>{data.rate.replace("₱ ", "")} per day</span>
+                                <span>
+                                    {data.rate.replace("₱ ", "")} per day
+                                </span>
                             </div>
                         </div>
 
@@ -344,20 +366,33 @@ export default function BillingModals() {
                                 ["Amount Paid", data.paid],
                                 ["Balance", data.balance],
                             ].map(([label, val], i) => (
-                                <div key={i} className="bg-slate-50 rounded-xl p-3">
-                                    <div className="text-[11px] text-slate-400">{label}</div>
-                                    <div className="text-[13px] font-bold text-slate-900 mt-0.5">{val}</div>
+                                <div
+                                    key={i}
+                                    className="bg-slate-50 rounded-xl p-3"
+                                >
+                                    <div className="text-[11px] text-slate-400">
+                                        {label}
+                                    </div>
+                                    <div className="text-[13px] font-bold text-slate-900 mt-0.5">
+                                        {val}
+                                    </div>
                                 </div>
                             ))}
                             <div className="bg-slate-50 rounded-xl p-3 col-span-2">
-                                <div className="text-[11px] text-slate-400">Due Date</div>
-                                <div className="text-[13px] font-bold text-slate-900 mt-0.5">{data.due}</div>
+                                <div className="text-[11px] text-slate-400">
+                                    Due Date
+                                </div>
+                                <div className="text-[13px] font-bold text-slate-900 mt-0.5">
+                                    {data.due}
+                                </div>
                             </div>
                         </div>
 
                         {data.status === "Pending" && data.receipt_url && (
                             <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
-                                <div className="text-xs font-semibold text-slate-700 mb-2">Proof of Payment</div>
+                                <div className="text-xs font-semibold text-slate-700 mb-2">
+                                    Proof of Payment
+                                </div>
                                 <a
                                     href={data.receipt_url}
                                     target="_blank"
