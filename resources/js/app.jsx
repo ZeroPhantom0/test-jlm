@@ -49,6 +49,10 @@ import TenantHistoryModals from "./pages/History/HistoryModals";
 // Tenant settings accordion
 import TenantSettingsAccordions from "./pages/Settings/SettingsAccordions";
 
+import AdminSidebar from "./components/AdminSidebar";
+
+import Sidebar from "./components/Sidebar";
+
 // ============================================================
 // ECHO (REAL-TIME) BOOTSTRAP
 // ============================================================
@@ -223,6 +227,20 @@ function mountReact() {
             el.dataset.mounted = "true";
         }
     };
+
+    const tenantSidebar = document.getElementById("tenant-sidebar-root");
+    if (tenantSidebar && !tenantSidebar.dataset.mounted) {
+        const props = JSON.parse(tenantSidebar.dataset.props || "{}");
+        createRoot(tenantSidebar).render(<Sidebar {...props} />);
+        tenantSidebar.dataset.mounted = "true";
+    }
+
+    const adminSidebar = document.getElementById("admin-sidebar-root");
+    if (adminSidebar && !adminSidebar.dataset.mounted) {
+        const props = JSON.parse(adminSidebar.dataset.props || "{}");
+        createRoot(adminSidebar).render(<AdminSidebar {...props} />);
+        adminSidebar.dataset.mounted = "true";
+    }
 
     mountIfExists("admin-rooms-modals", RoomsModals);
     mountIfExists("admin-tenants-modals", TenantsModals);

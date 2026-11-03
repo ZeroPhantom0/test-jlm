@@ -6,6 +6,7 @@ namespace App\Services;
 use App\Models\Invoice;
 use App\Models\Reservation;
 use App\Models\Tenant;
+use Illuminate\Support\Facades\Storage;
 
 class BillingService
 {
@@ -181,5 +182,48 @@ class BillingService
             'status'         => 'Unpaid',
         ]);
     }
-    
+
+    // ============================================================
+    // RECEIPT ARCHIVING (soft-delete support)
+    // ============================================================
+
+    /**
+     * Move a receipt/proof file from the public disk into a private
+     * archive directory instead of deleting it.
+     *
+     * Returns the new relative path (inside storage/app/private/rejected/)
+     * or null if the source file didn't exist.
+     *
+     * Safe to call repeatedly — if the file is already gone, returns null.
+     */
+    public static function archiveReceipt(?string $path): ?string
+    {
+        if (!$path) {
+            return null;
+        }
+
+        $public = Storage::disk('public');
+
+        if (!$public->exists($path)) {
+            return null;
+        }
+
+        $filename = basename($path);
+        $archived = 'rejected/' . now()->format('Y/m') . '/' . $filename;
+
+        // Copy contents to private disk, then remove from public.
+        Storage::disk('local')->put($archived, $public->get($path));
+        $public->delete($path);
+
+        return $archived;
+    }
+
+    /**
+     * Archive a reservation's uploaded proof-of-payment file.
+     * Delegates to archiveReceipt() so both use the same archive layout.
+     */
+    public static function archiveProofOfPayment(?string $path): ?string
+    {
+        return self::archiveReceipt($path);
+    }
 }

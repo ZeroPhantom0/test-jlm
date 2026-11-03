@@ -129,9 +129,10 @@
 
         <div class="flex justify-between items-center text-[13.5px] text-slate-500 font-medium">
             <span id="records-count">Showing {{ $events->count() }} of {{ $events->count() }} total records</span>
-            <a href="#" class="text-emerald-500 font-semibold flex items-center gap-1.5 hover:text-emerald-600">
+            <button type="button" id="export-history-btn"
+                class="text-emerald-500 font-semibold flex items-center gap-1.5 hover:text-emerald-600 outline-none">
                 <i class="fa-solid fa-download text-sm"></i> Export History
-            </a>
+            </button>
         </div>
 
         {{-- History List --}}
@@ -357,9 +358,32 @@
             // Sort dropdown
             sortSelect.addEventListener('change', applyFilters);
 
+            // ============================================================
+            // 4. EXPORT LOGIC
+            // ============================================================
+            const exportBtn = document.getElementById('export-history-btn');
+            if (exportBtn) {
+                exportBtn.addEventListener('click', () => {
+                    // Get the current search term
+                    const query = (searchInput.value || '').trim();
+
+                    // Build the URL with the current filters
+                    const url = new URL('{{ route('admin.history.export') }}', window.location.origin);
+
+                    if (currentCategory && currentCategory !== 'all') {
+                        url.searchParams.set('category', currentCategory);
+                    }
+
+                    if (query !== '') {
+                        url.searchParams.set('search', query);
+                    }
+
+                    // Trigger the download
+                    window.location.href = url.toString();
+                });
+            }
+
             // Initial trigger (in case the page loads with a pre-selected filter from PHP)
-            // Note: The PHP loop already rendered the correct visual state, 
-            // but this ensures the DOM count is strictly accurate on load.
             applyFilters();
 
         })();

@@ -47,7 +47,10 @@ use App\Models\VirtualTour;
 // PUBLIC ROUTES
 // ============================================================
 
-Route::get('/', [LandingController::class, 'index'])->name('landing');
+// Prevent back cache ensures the server checks auth status on back button
+Route::get('/', [LandingController::class, 'index'])
+    ->middleware('prevent.back.cache')
+    ->name('landing');
 
 Route::get('/tour/{virtualTour}', [PublicTourViewerController::class, 'show'])
     ->name('tour.viewer');
@@ -65,6 +68,20 @@ Route::get('/tour-scene-data/{scene}', function (TourScene $scene) {
 // ============================================================
 
 Route::middleware('guest')->group(function () {
+    // --- ADMIN LOGIN ---
+    Route::get('/admin/login',  [AuthController::class, 'showAdminLogin'])->name('admin.login');
+    Route::post('/admin/login', [AuthController::class, 'adminLogin']);
+    
+    // Wrap Admin verification routes in cache prevention
+    Route::middleware('prevent.back.cache')->group(function () {
+        Route::get('/admin/login/verify',  [AuthController::class, 'showAdminVerify'])->name('admin.login.verify');
+        Route::post('/admin/login/verify', [AuthController::class, 'adminVerify'])->name('admin.login.verify.submit');
+    });
+    
+    Route::post('/admin/login/resend', [AuthController::class, 'adminResendCode'])->name('admin.login.resend');
+    Route::post('/admin/login/cancel', [AuthController::class, 'adminCancelVerification'])->name('admin.login.cancel');
+
+    // --- TENANT LOGIN ---
     Route::get('/login',  [AuthController::class, 'showLogin'])->name('login');
     Route::post('/login', [AuthController::class, 'login']);
 
@@ -74,8 +91,12 @@ Route::middleware('guest')->group(function () {
     Route::get('/auth/google',          [AuthController::class, 'redirectToGoogle'])->name('auth.google');
     Route::get('/auth/google/callback', [AuthController::class, 'handleGoogleCallback'])->name('auth.google.callback');
 
-    Route::get('/login/verify',  [AuthController::class, 'showVerify'])->name('login.verify');
-    Route::post('/login/verify', [AuthController::class, 'verify'])->name('login.verify.submit');
+    // Wrap Tenant verification routes in cache prevention
+    Route::middleware('prevent.back.cache')->group(function () {
+        Route::get('/login/verify',  [AuthController::class, 'showVerify'])->name('login.verify');
+        Route::post('/login/verify', [AuthController::class, 'verify'])->name('login.verify.submit');
+    });
+    
     Route::post('/login/resend', [AuthController::class, 'resendCode'])->name('login.resend');
     Route::post('/login/cancel', [AuthController::class, 'cancelVerification'])->name('login.cancel');
 
@@ -149,6 +170,8 @@ Route::middleware(['auth', 'onboarding.complete', 'prevent.back.cache'])
         Route::get('/announcements/data', [TenantAnnouncementController::class, 'data'])->name('announcements.data');
         Route::get('/announcements',      [TenantAnnouncementController::class, 'index'])->name('announcements');
         Route::get('/history',            [TenantHistoryController::class, 'index'])->name('history');
+        Route::get('/history/export',  [TenantHistoryController::class, 'export'])->name('history.export');
+        Route::get('/history/export-pdf', [TenantHistoryController::class, 'exportPdf'])->name('history.export-pdf');
 
         // ---------- Settings ----------
         Route::get('/settings',          [TenantSettingsController::class, 'index'])->name('settings');
@@ -246,6 +269,7 @@ Route::middleware(['auth', 'admin', 'prevent.back.cache'])->prefix('admin')->nam
 
     // ---------- History / Reports ----------
     Route::get('/history',        [HistoryController::class, 'index'])->name('history');
+    Route::get('/history/export', [HistoryController::class, 'export'])->name('history.export');
     Route::get('/reports',        [ReportsController::class, 'index'])->name('reports');
     Route::get('/reports/export', [ReportsController::class, 'export'])->name('reports.export');
     Route::get('/reports/export-pdf', [ReportsController::class, 'exportPdf'])->name('reports.export-pdf');

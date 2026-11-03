@@ -195,7 +195,7 @@ export default function PaymentModal() {
                 throw new Error(result.message || "Failed to cancel payment.");
             setShowCancel(false);
             setCancelTarget(null);
-            window.location.reload();
+            window.dispatchEvent(new Event("billing:refresh"));
         } catch (err) {
             alert(err.message);
         } finally {

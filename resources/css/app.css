@@ -1248,4 +1248,14 @@ input::-webkit-strong-password-auto-fill-button {
             animation: none !important;
         }
     }
+
+    /* Hide default browser headers/footers when printing */
+    @media print {
+        @page {
+            margin: 0;
+        }
+        body {
+            margin: 1.6cm; /* Add margin back so content isn't cut off */
+        }
+    }
 }

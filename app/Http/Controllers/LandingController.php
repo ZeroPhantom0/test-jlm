@@ -1,26 +1,52 @@
 <?php
+// app/Http/Controllers/LandingController.php
 
 namespace App\Http\Controllers;
 
 use App\Models\Room;
 use Inertia\Inertia;
+use Illuminate\Support\Facades\Auth;
 
 class LandingController extends Controller
 {
     public function index()
     {
+        // 1. Check if the user is logged in
+        if (Auth::check()) {
+            /** @var \App\Models\User $user */
+            $user = Auth::user();
+
+            // 2. If they are an Admin, send them to the Admin Dashboard
+            if ($user->isAdmin()) {
+                return redirect()->route('admin.dashboard');
+            }
+
+            // 3. If they are a Tenant, check onboarding status
+            if ($user->isTenant()) {
+                $hasPersonal = $user->personalInformation()->exists();
+                $hasIdentity = $user->identityVerification()->exists();
+
+                if ($hasPersonal && $hasIdentity) {
+                    return redirect()->route('tenants.dashboard');
+                }
+
+                return redirect()->route('personal-information');
+            }
+        }
+
+        // 4. If not logged in, show the landing page as normal
         $rooms = Room::with(['virtualTour' => function ($q) {
                 $q->where('status', 'Published');
             }])
             ->orderByRaw("FIELD(status, 'Available', 'Reserved', 'Occupied')")
             ->orderBy('room_number')
             ->get()
-            // 1. Filter out rooms that DO NOT have a Published tour
+            // Filter out rooms that DO NOT have a Published tour
             ->filter(function ($room) {
                 return $room->virtualTour !== null && $room->virtualTour->status === 'Published';
             })
             ->map(function ($room) {
-                // 2. Since we filtered, we know virtualTour is guaranteed to be Published here
+                // Since we filtered, we know virtualTour is guaranteed to be Published here
                 $publishedTour = $room->virtualTour;
 
                 return [

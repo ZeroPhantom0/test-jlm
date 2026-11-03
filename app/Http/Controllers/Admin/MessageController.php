@@ -131,7 +131,7 @@ class MessageController extends Controller
         ]);
 
         if ($tenant->user && $tenant->user->phone) {
-            $msg = "JLM Cozy Cabin: You have received a new message from the administrator. Log in to your account and visit the Messages section to view and reply.";
+            $msg = "You have received a new message from the administrator. Log in to your account and visit the Messages section to view and reply.";
             SmsService::send($tenant->user->phone, $msg);
         }
 
@@ -173,7 +173,7 @@ class MessageController extends Controller
 
         $conversation->load('tenant.user');
         if ($conversation->tenant?->user?->phone) {
-            $msg = "JLM Cozy Cabin: You have received a new message from the administrator. Log in to your account and visit the Messages section to view and reply.";
+            $msg = "You have received a new message from the administrator. Log in to your account and visit the Messages section to view and reply.";
             SmsService::send($conversation->tenant->user->phone, $msg);
         }
 

@@ -75,20 +75,60 @@ class DashboardController extends Controller
         // 7. Reservations
         $reservations = Reservation::whereDate('created_at', $selectedDate)->count();
 
-        // 8. Financial Chart Data (Last 6 Months)
+        // 8. Financial Chart Data — DYNAMIC based on timeframe
+        $timeframe = $request->query('timeframe', 'weekly'); // Default to weekly
+        
         $chartLabels   = [];
         $chartIncome   = [];
         $chartExpenses = [];
 
-        for ($i = 5; $i >= 0; $i--) {
-            $month = now()->subMonths($i);
-            $chartLabels[] = $month->format('M');
-            $income = Invoice::where('status', 'Paid')
-                ->whereMonth('date_paid', $month->month)
-                ->whereYear('date_paid', $month->year)
-                ->sum('amount_paid');
-            $chartIncome[]   = (float) $income;
-            $chartExpenses[] = 0;
+        if ($timeframe === 'weekly') {
+            // Last 7 Days
+            for ($i = 6; $i >= 0; $i--) {
+                $day = now()->subDays($i);
+                $chartLabels[] = $day->format('D');
+                $income = Invoice::where('status', 'Paid')
+                    ->whereDate('date_paid', $day)
+                    ->sum('amount_paid');
+                $chartIncome[]   = (float) $income;
+                $chartExpenses[] = 0;
+            }
+        } elseif ($timeframe === 'monthly') {
+            // Last 4 Weeks
+            for ($i = 3; $i >= 0; $i--) {
+                $weekStart = now()->subWeeks($i)->startOfWeek();
+                $weekEnd = now()->subWeeks($i)->endOfWeek();
+                $chartLabels[] = 'Week ' . (4 - $i);
+                $income = Invoice::where('status', 'Paid')
+                    ->whereBetween('date_paid', [$weekStart, $weekEnd])
+                    ->sum('amount_paid');
+                $chartIncome[]   = (float) $income;
+                $chartExpenses[] = 0;
+            }
+        } elseif ($timeframe === 'yearly') {
+            // Last 12 Months
+            for ($i = 11; $i >= 0; $i--) {
+                $month = now()->subMonths($i);
+                $chartLabels[] = $month->format('M');
+                $income = Invoice::where('status', 'Paid')
+                    ->whereMonth('date_paid', $month->month)
+                    ->whereYear('date_paid', $month->year)
+                    ->sum('amount_paid');
+                $chartIncome[]   = (float) $income;
+                $chartExpenses[] = 0;
+            }
+        } else {
+            // Default: Semi-Annual (Last 6 Months)
+            for ($i = 5; $i >= 0; $i--) {
+                $month = now()->subMonths($i);
+                $chartLabels[] = $month->format('M');
+                $income = Invoice::where('status', 'Paid')
+                    ->whereMonth('date_paid', $month->month)
+                    ->whereYear('date_paid', $month->year)
+                    ->sum('amount_paid');
+                $chartIncome[]   = (float) $income;
+                $chartExpenses[] = 0;
+            }
         }
 
         // 9. Calendar Math
@@ -122,6 +162,7 @@ class DashboardController extends Controller
         return [
             'selectedDate'          => $selectedDate,
             'selectedDateStr'       => $selectedDate->toDateString(),
+            'timeframe'             => $timeframe, // Pass this so the frontend knows which is selected
             'revenue'               => (float) $revenue,
             'activeTenants'         => $activeTenants,
             'serviceRequests'       => $totalServiceRequests,

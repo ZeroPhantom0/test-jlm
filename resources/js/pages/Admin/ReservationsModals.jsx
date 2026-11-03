@@ -267,7 +267,7 @@ export default function ReservationsModals() {
         try {
             await sendAction(data.id, "delete");
             closeModal();
-            window.location.reload();
+            window.dispatchEvent(new Event("reservation:refresh"));
         } catch (err) {
             alert(err.message);
         } finally {

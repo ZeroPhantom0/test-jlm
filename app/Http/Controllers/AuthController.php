@@ -23,7 +23,7 @@ use Laravel\Socialite\Facades\Socialite;
 
 class AuthController extends Controller
 {
-    // ============ LOGIN (STEP 1) ============
+    // ============ TENANT LOGIN (STEP 1) ============
     public function showLogin()
     {
         return Inertia::render('Auth/Login', [
@@ -59,7 +59,58 @@ class AuthController extends Controller
 
         $user = User::where('email', $credentials['email'])->firstOrFail();
 
+        // 🛑 BLOCK ADMINS from using the tenant login
+        if ($user->isAdmin()) {
+            return back()->withErrors([
+                'email' => 'Administrators must use the admin login portal.',
+            ])->onlyInput('email');
+        }
+
         return $this->beginVerification($user, $remember, 'password');
+    }
+
+    // ============ ADMIN LOGIN (STEP 1) ============
+    public function showAdminLogin()
+    {
+        return Inertia::render('Auth/AdminLogin', [
+            'flash' => [
+                'error' => session('error'),
+            ],
+        ]);
+    }
+
+    public function adminLogin(Request $request)
+    {
+        $credentials = $request->validate([
+            'email'    => ['required', 'email'],
+            'password' => ['required'],
+        ]);
+
+        if (! Auth::validate($credentials)) {
+            AuditLogger::log([
+                'action'      => 'LOGIN FAILED',
+                'module'      => 'AUTHENTICATION',
+                'description' => 'Failed admin login attempt for ' . $request->input('email'),
+                'status'      => 'error',
+                'user_name'   => 'Unknown',
+                'user_role'   => 'Unknown',
+            ]);
+
+            return back()->withErrors([
+                'email' => 'The provided credentials do not match our records.',
+            ])->onlyInput('email');
+        }
+
+        $user = User::where('email', $credentials['email'])->firstOrFail();
+
+        // 🛑 BLOCK NON-ADMINS from using the admin login
+        if (! $user->isAdmin()) {
+            return back()->withErrors([
+                'email' => 'You do not have administrator access.',
+            ])->onlyInput('email');
+        }
+
+        return $this->beginAdminVerification($user);
     }
 
     // ============ GOOGLE OAUTH ============
@@ -131,8 +182,12 @@ class AuthController extends Controller
                 'subject_id'   => $user->id,
             ]);
 
-            // Send welcome email — non-blocking
             $this->sendWelcomeEmail($user);
+        }
+
+        // Block admins from Google Login if they try
+        if ($user->isAdmin()) {
+            return redirect()->route('admin.login')->with('error', 'Administrators must log in via the admin portal.');
         }
 
         $remember = (bool) $request->session()->pull('google_remember', false);
@@ -140,7 +195,7 @@ class AuthController extends Controller
         return $this->beginVerification($user, $remember, 'google');
     }
 
-    // ============ VERIFICATION CODE (STEP 2) ============
+    // ============ TENANT VERIFICATION CODE (STEP 2) ============
     private function beginVerification(User $user, bool $remember, string $method)
     {
         $verification = LoginVerificationCode::generateFor($user);
@@ -167,15 +222,16 @@ class AuthController extends Controller
     {
         $pending = session('login_pending');
 
+        // If there's no pending session, they shouldn't be here.
         if (! $pending) {
-            return redirect()->route('login');
+            return redirect()->route('login')->with('error', 'Your session expired. Please sign in again.');
         }
 
         $user = User::find($pending['user_id']);
 
         if (! $user) {
             $request->session()->forget('login_pending');
-            return redirect()->route('login');
+            return redirect()->route('login')->with('error', 'User not found. Please sign in again.');
         }
 
         return Inertia::render('Auth/VerifyCode', [
@@ -183,7 +239,6 @@ class AuthController extends Controller
             'method' => $pending['method'],
         ]);
     }
-
     public function verify(Request $request)
     {
         $pending = session('login_pending');
@@ -266,10 +321,135 @@ class AuthController extends Controller
         return redirect()->route('login');
     }
 
+    // ============ ADMIN VERIFICATION CODE (STEP 2) ============
+    private function beginAdminVerification(User $user)
+    {
+        $verification = LoginVerificationCode::generateFor($user);
+
+        session([
+            'admin_login_pending' => [
+                'user_id'  => $user->id,
+                'token'    => $verification->token,
+            ],
+        ]);
+
+        try {
+            Mail::to($user->email)->send(new LoginVerificationCodeMail($verification));
+        } catch (\Throwable $e) {
+            report($e);
+        }
+
+        return redirect()->route('admin.login.verify');
+    }
+
+    public function showAdminVerify(Request $request)
+    {
+        $pending = session('admin_login_pending');
+
+        if (! $pending) {
+            return redirect()->route('admin.login')->with('error', 'Your session expired. Please sign in again.');
+        }
+
+        $user = User::find($pending['user_id']);
+
+        if (! $user) {
+            $request->session()->forget('admin_login_pending');
+            return redirect()->route('admin.login')->with('error', 'User not found. Please sign in again.');
+        }
+
+        return Inertia::render('Auth/AdminVerifyCode', [
+            'email'  => $this->maskEmail($user->email),
+        ]);
+    }
+
+    public function adminVerify(Request $request)
+    {
+        $pending = session('admin_login_pending');
+
+        if (! $pending) {
+            return redirect()->route('admin.login')->with('error', 'Your session expired. Please sign in again.');
+        }
+
+        $validated = $request->validate([
+            'code' => ['required', 'string', 'size:6'],
+        ]);
+
+        $verification = LoginVerificationCode::where('token', $pending['token'])
+            ->where('user_id', $pending['user_id'])
+            ->first();
+
+        if (! $verification || ! $verification->isValid()) {
+            return back()->withErrors(['code' => 'This code has expired. Please request a new one.']);
+        }
+
+        if (! hash_equals($verification->code, $validated['code'])) {
+            return back()->withErrors(['code' => 'The code you entered is incorrect.']);
+        }
+
+        $verification->update(['verified_at' => now()]);
+
+        $user = User::findOrFail($pending['user_id']);
+
+        Auth::login($user, false); // No remember me for admin
+        $request->session()->regenerate();
+        $request->session()->forget('admin_login_pending');
+
+        AuditLogger::log([
+            'action'      => 'LOGIN',
+            'module'      => 'AUTHENTICATION',
+            'description' => 'Admin logged in successfully',
+        ]);
+
+        return Inertia::location('/admin');
+    }
+
+    public function adminResendCode(Request $request)
+    {
+        $pending = session('admin_login_pending');
+
+        if (! $pending) {
+            return redirect()->route('admin.login')->with('error', 'Your session expired. Please sign in again.');
+        }
+
+        $user = User::find($pending['user_id']);
+
+        if (! $user) {
+            $request->session()->forget('admin_login_pending');
+            return redirect()->route('admin.login');
+        }
+
+        $verification = LoginVerificationCode::generateFor($user);
+
+        session([
+            'admin_login_pending' => [
+                ...$pending,
+                'token' => $verification->token,
+            ],
+        ]);
+
+        try {
+            Mail::to($user->email)->send(new LoginVerificationCodeMail($verification));
+        } catch (\Throwable $e) {
+            report($e);
+            return back()->with('error', 'Could not send a new code. Please try again.');
+        }
+
+        return back()->with('success', 'A new code has been sent to your email.');
+    }
+
+    public function adminCancelVerification(Request $request)
+    {
+        $request->session()->forget('admin_login_pending');
+        return redirect()->route('admin.login');
+    }
+
     private function redirectAfterLogin(User $user)
     {
+        // If they are an admin, they shouldn't be using the tenant login.
         if ($user->isAdmin()) {
-            return Inertia::location('/admin');
+            Auth::logout();
+            session()->flash('error', 'Please use the Administrator login page.');
+            return Inertia::location('/admin/login');
         }
 
         $hasPersonal = $user->personalInformation()->exists();

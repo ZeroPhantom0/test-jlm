@@ -12,6 +12,7 @@ use App\Models\StayExtensionRequest;
 use App\Models\Tenant;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class TenantHistoryController extends Controller
 {
@@ -68,19 +69,153 @@ class TenantHistoryController extends Controller
         $paidInvoices = $items
             ->where('cat', 'payments')
             ->where('status', 'paid')
-            ->filter(fn ($i) => ($i['payment_state'] ?? null) === 'Paid');
+            ->filter(fn($i) => ($i['payment_state'] ?? null) === 'Paid');
 
         $pastReservations = $items->where('cat', 'reservation');
         $serviceRequests  = $items->where('cat', 'maintenance')->where('status', 'completed');
 
         $metrics = [
-            'total_paid'        => (float) $paidInvoices->sum(fn ($i) => $this->numericAmount($i['amount'] ?? 0)),
+            'total_paid'        => (float) $paidInvoices->sum(fn($i) => $this->numericAmount($i['amount'] ?? 0)),
             'total_paid_count'  => $paidInvoices->count(),
             'past_reservations' => $pastReservations->count(),
             'service_requests'  => $serviceRequests->count(),
         ];
 
         return view('tenants.history', compact('historyItems', 'metrics'));
+    }
+
+    /**
+     * Export the tenant's activity history as a CSV file.
+     */
+    public function export(Request $request): StreamedResponse
+    {
+        /** @var \App\Models\User $user */
+        $user = Auth::user();
+
+        $filters = $request->only(['search', 'category']);
+
+        $tenant = Tenant::with(['room', 'approvedReservation'])
+            ->where('user_id', $user->id)
+            ->first();
+
+        if (!$tenant) {
+            $events = collect();
+        } else {
+            $events = collect()
+                ->merge($this->payments($tenant))
+                ->merge($this->paidReservations($tenant, $user->id))
+                ->merge($this->maintenance($tenant))
+                ->merge($this->roomChanges($tenant))
+                ->merge($this->stayExtensions($tenant))
+                ->merge($this->reservations($tenant, $user->id))
+                ->sortByDesc('timestamp')
+                ->values();
+
+            // Apply the same filters the UI uses
+            $category = $filters['category'] ?? 'all';
+            if ($category !== 'all') {
+                $events = $events->where('cat', $category);
+            }
+
+            $search = trim($filters['search'] ?? '');
+            if ($search !== '') {
+                $needle = mb_strtolower($search);
+                $events = $events->filter(function ($item) use ($needle) {
+                    $haystack = mb_strtolower(implode(' ', [
+                        $item['title']  ?? '',
+                        $item['desc']   ?? '',
+                        $item['date']   ?? '',
+                        $item['status'] ?? '',
+                        $item['cat']    ?? '',
+                    ]));
+                    return str_contains($haystack, $needle);
+                });
+            }
+        }
+
+        $events = $events->values();
+
+        $filename = 'history-' . ($filters['category'] ?? 'all') . '-' . now()->format('Y-m-d_His') . '.csv';
+
+        return response()->streamDownload(function () use ($events) {
+            $handle = fopen('php://output', 'w');
+
+            // UTF-8 BOM so Excel renders ₱ correctly
+            fwrite($handle, "\xEF\xBB\xBF");
+
+            fputcsv($handle, [
+                'Date',
+                'Category',
+                'Title',
+                'Description',
+                'Status',
+                'Amount',
+            ]);
+
+            foreach ($events as $event) {
+                fputcsv($handle, [
+                    $event['date'] ?? '',
+                    ucfirst(str_replace('-', ' ', $event['cat'] ?? '')),
+                    $event['title'] ?? '',
+                    $event['desc']  ?? '',
+                    ucfirst($event['status'] ?? ''),
+                    $event['amount'] ?? '—',
+                ]);
+            }
+
+            fclose($handle);
+        }, $filename, ['Content-Type' => 'text/csv; charset=UTF-8']);
+    }
+
+    /**
+     * Export the tenant's payment history as a styled PDF.
+     */
+    public function exportPdf(Request $request)
+    {
+        /** @var \App\Models\User $user */
+        $user = Auth::user();
+
+        $filters = $request->only(['search', 'category']);
+
+        $tenant = Tenant::with(['room', 'approvedReservation'])
+            ->where('user_id', $user->id)
+            ->first();
+
+        if (!$tenant) {
+            $events = collect();
+        } else {
+            // Fetch all payments
+            $events = collect()
+                ->merge($this->payments($tenant))
+                ->merge($this->paidReservations($tenant, $user->id))
+                ->sortByDesc('timestamp')
+                ->values();
+
+            // Apply search if provided
+            $search = trim($filters['search'] ?? '');
+            if ($search !== '') {
+                $needle = mb_strtolower($search);
+                $events = $events->filter(function ($item) use ($needle) {
+                    // Combine all possible text fields into one string to search
+                    $haystack = mb_strtolower(implode(' ', [
+                        $item['title']   ?? '',
+                        $item['desc']    ?? '',
+                        $item['date']    ?? '',
+                        $item['status']  ?? '',
+                        $item['receipt']['reference'] ?? '', // Match Invoice ID here
+                        $item['receipt']['description'] ?? '',
+                    ]));
+                    return str_contains($haystack, $needle);
+                });
+            }
+        }
+
+        $events = $events->values();
+
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('tenants.history-pdf', compact('user', 'events'))
+            ->setPaper('a4', 'portrait');
+
+        return $pdf->download('payment-history-' . now()->format('Y-m-d_His') . '.pdf');
     }
 
     // ============================================================
@@ -102,7 +237,7 @@ class TenantHistoryController extends Controller
 
                 $methodLabel = $inv->payment_method ?? 'Not Set';
                 $paidAmount  = (float) $inv->amount_paid;
-                $amountLabel = '₱' . number_format($paidAmount, 0);
+                $amountLabel = "\u{20B1}" . number_format($paidAmount, 0);
 
                 $desc = $inv->status === 'Paid'
                     ? 'Payment of ' . $amountLabel . ' via ' . strtolower($methodLabel)
@@ -116,8 +251,8 @@ class TenantHistoryController extends Controller
                     'title'         => $inv->description,
                     'desc'          => $desc,
                     'date'          => $inv->date_paid?->format('M d, Y')
-                                       ?? $inv->updated_at?->format('M d, Y · h:i A')
-                                       ?? $inv->created_at?->format('M d, Y · h:i A'),
+                        ?? $inv->updated_at?->format('M d, Y · h:i A')
+                        ?? $inv->created_at?->format('M d, Y · h:i A'),
                     'timestamp'     => $inv->date_paid ?? $inv->updated_at ?? $inv->created_at,
                     'amount'        => $inv->status === 'Paid' ? $amountLabel : null,
                     'status'        => $historyStatus,
@@ -152,9 +287,9 @@ class TenantHistoryController extends Controller
     private function paidReservations(Tenant $tenant, int $userId)
     {
         return Reservation::where(function ($q) use ($tenant, $userId) {
-                $q->where('user_id', $userId)
-                  ->orWhere('tenant_name', $tenant->user->name ?? '');
-            })
+            $q->where('user_id', $userId)
+                ->orWhere('tenant_name', $tenant->user->name ?? '');
+        })
             ->where('status', 'Approved')
             ->whereNotNull('proof_of_payment')
             ->latest()
@@ -171,8 +306,8 @@ class TenantHistoryController extends Controller
                     'title'         => 'Reservation Down-Payment — ' . $r->reference_no,
                     'desc'          => 'Paid ' . $amountLabel . ' reservation fee for unit ' . $r->desired_room,
                     'date'          => $r->processed_at?->format('M d, Y · h:i A')
-                                       ?? $r->updated_at?->format('M d, Y · h:i A')
-                                       ?? $r->created_at?->format('M d, Y · h:i A'),
+                        ?? $r->updated_at?->format('M d, Y · h:i A')
+                        ?? $r->created_at?->format('M d, Y · h:i A'),
                     'timestamp'     => $r->processed_at ?? $r->updated_at ?? $r->created_at,
                     'amount'        => $amountLabel,
                     'status'        => 'paid',
@@ -316,9 +451,9 @@ class TenantHistoryController extends Controller
     private function reservations(Tenant $tenant, int $userId)
     {
         return Reservation::where(function ($q) use ($tenant, $userId) {
-                $q->where('user_id', $userId)
-                  ->orWhere('tenant_name', $tenant->user->name ?? '');
-            })
+            $q->where('user_id', $userId)
+                ->orWhere('tenant_name', $tenant->user->name ?? '');
+        })
             ->whereIn('status', ['Approved', 'Rejected', 'Expired'])
             ->latest()
             ->get()

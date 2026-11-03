@@ -132,7 +132,7 @@ export default function AdminSidebar({
     active = "dashboard",
     userName = "Administrator",
     userRole = "Administrator",
-    avatar = null, // Changed default to null
+    avatar = null,
 }) {
     const [collapsed, setCollapsed] = useState(false);
     const [mobileOpen, setMobileOpen] = useState(false);
@@ -140,7 +140,6 @@ export default function AdminSidebar({
         active.startsWith("services"),
     );
 
-    // Ref to track the active link for scrolling
     const activeRef = useRef(null);
 
     useEffect(() => {
@@ -153,7 +152,6 @@ export default function AdminSidebar({
         if (active.startsWith("services")) setServicesOpen(true);
     }, [active]);
 
-    // Scroll to the active item when the component mounts or active state changes
     useEffect(() => {
         if (activeRef.current) {
             activeRef.current.scrollIntoView({
@@ -179,35 +177,24 @@ export default function AdminSidebar({
         <aside
             className={`
                 bg-[#02122b] text-white flex flex-col shrink-0 h-full z-[1000]
-                transition-all duration-300
-                fixed md:sticky md:top-0 top-0 left-0 overflow-x-hidden
+                transition-all duration-300 overflow-x-hidden
+                fixed md:sticky md:top-0 top-0 left-0
                 ${mobileOpen ? "translate-x-0" : "-translate-x-full"} md:translate-x-0
-                ${collapsed ? "md:w-20 w-65" : "w-62.5"}
+                ${collapsed ? "md:w-20 w-64" : "w-64"}
             `}
-            style={{ boxSizing: "border-box" }}
         >
             {/* Brand */}
             <div
-                className={`flex items-center justify-between shrink-0 whitespace-nowrap ${collapsed ? "md:justify-center md:px-2.5" : ""}`}
-                style={{
-                    paddingTop: "20px",
-                    paddingBottom: "14px",
-                    paddingLeft: "18px",
-                    paddingRight: "18px",
-                    boxSizing: "border-box",
-                }}
+                className={`flex items-center shrink-0 whitespace-nowrap px-[18px] pt-5 pb-3.5 ${collapsed ? "md:justify-center md:px-0" : "justify-between"}`}
             >
                 <div
                     className={`flex items-center gap-3 min-w-0 ${collapsed ? "md:hidden" : ""}`}
                 >
-                    <div
-                        className="rounded-full bg-white flex items-center justify-center shadow-[0_2px_4px_rgba(0,0,0,0.15)] shrink-0 overflow-hidden"
-                        style={{ width: "38px", height: "38px" }}
-                    >
+                    <div className="w-[38px] h-[38px] rounded-full bg-white flex items-center justify-center shadow-sm shrink-0 overflow-hidden p-0.5">
                         <img
                             src="/images/jlm-logo.png"
                             alt="JLM Cozy Cabin Logo"
-                            className="w-full h-full object-cover"
+                            className="w-full h-full object-contain"
                             onError={(e) => {
                                 e.currentTarget.style.display = "none";
                                 e.currentTarget.nextSibling.style.display =
@@ -236,7 +223,7 @@ export default function AdminSidebar({
                 </div>
                 <button
                     onClick={() => setCollapsed(!collapsed)}
-                    className="text-[#8fa0b5] hover:text-white rounded-md hover:bg-white/10 transition hidden md:block shrink-0"
+                    className={`text-[#8fa0b5] hover:text-white rounded-md hover:bg-white/10 transition hidden md:block shrink-0 ${collapsed ? "mx-auto" : ""}`}
                     style={{ fontSize: "18px", padding: "6px" }}
                     title="Toggle Navigation"
                 >
@@ -249,14 +236,11 @@ export default function AdminSidebar({
                 className={`
                     bg-[#f97316] text-white font-bold flex items-center shrink-0 whitespace-nowrap
                     rounded-xl shadow-[0_2px_6px_rgba(249,115,22,0.25)] transition-all
-                    ${collapsed ? "md:w-11 md:h-11 md:mx-3 md:p-0 md:justify-center md:rounded-full md:gap-0" : "gap-3"}
+                    ${collapsed ? "md:w-11 md:h-11 md:mx-auto md:p-0 md:justify-center md:rounded-full md:gap-0" : "gap-3 mx-[14px] mb-4 mt-1"}
                 `}
-                style={{
-                    margin: "4px 14px 16px 14px",
-                    padding: "10px 14px",
-                    fontSize: "14px",
-                    boxSizing: "border-box",
-                }}
+                style={
+                    !collapsed ? { padding: "10px 14px", fontSize: "14px" } : {}
+                }
             >
                 <i
                     className="fa-solid fa-shield-halved shrink-0"
@@ -268,14 +252,7 @@ export default function AdminSidebar({
             </div>
 
             {/* Nav */}
-            <ul
-                className="flex-1 overflow-y-auto overflow-x-hidden no-scrollbar flex flex-col min-h-0"
-                style={{
-                    padding: "0 10px",
-                    gap: "2px",
-                    boxSizing: "border-box",
-                }}
-            >
+            <ul className="flex-1 overflow-y-auto overflow-x-hidden no-scrollbar flex flex-col min-h-0 px-2.5 gap-0.5">
                 {NAV_ITEMS.map((item) => {
                     const isActive =
                         active === item.key ||
@@ -290,19 +267,14 @@ export default function AdminSidebar({
                                     ref={isActive ? activeRef : null}
                                     className={`
                                         flex items-center justify-between w-full rounded-[10px]
-                                        font-medium whitespace-nowrap transition-all
+                                        font-medium whitespace-nowrap transition-all py-2.5 px-3 text-[13.5px]
                                         ${
                                             isActive
                                                 ? "text-[#ffaa6e] bg-[#092042] font-semibold border-l-[3px] border-[#f97316]"
                                                 : "text-slate-400 hover:text-white hover:bg-white/5"
                                         }
-                                        ${collapsed ? "md:justify-center" : ""}
+                                        ${collapsed ? "md:justify-center md:px-0" : ""}
                                     `}
-                                    style={{
-                                        padding: "11px 12px",
-                                        fontSize: "13.5px",
-                                        boxSizing: "border-box",
-                                    }}
                                     title={item.label}
                                 >
                                     <div
@@ -352,7 +324,6 @@ export default function AdminSidebar({
                                             marginTop: "2px",
                                             marginBottom: "6px",
                                             gap: "2px",
-                                            boxSizing: "border-box",
                                         }}
                                     >
                                         {SERVICES_SUB.map((sub) => (
@@ -365,15 +336,9 @@ export default function AdminSidebar({
                                                             : null
                                                     }
                                                     className={`
-                                                        flex items-center rounded-lg w-full transition-all
+                                                        flex items-center rounded-lg w-full transition-all py-2 px-3 text-[13px] gap-2.5
                                                         ${active === sub.key ? "bg-[#f97316] text-white font-semibold" : "text-slate-400 hover:text-white hover:bg-white/5"}
                                                     `}
-                                                    style={{
-                                                        padding: "8px 12px",
-                                                        fontSize: "13px",
-                                                        gap: "10px",
-                                                        boxSizing: "border-box",
-                                                    }}
                                                 >
                                                     <i
                                                         className={`${sub.icon} shrink-0`}
@@ -397,20 +362,15 @@ export default function AdminSidebar({
                                 href={item.href}
                                 ref={isActive ? activeRef : null}
                                 className={`
-                                    flex items-center justify-between w-full rounded-[10px]
-                                    font-medium whitespace-nowrap transition-all
+                                    flex items-center w-full rounded-[10px]
+                                    font-medium whitespace-nowrap transition-all py-2.5 px-3 text-[13.5px]
                                     ${
                                         isActive
                                             ? "text-[#ffaa6e] bg-[#092042] font-semibold border-l-[3px] border-[#f97316]"
                                             : "text-slate-400 hover:text-white hover:bg-white/5"
                                     }
-                                    ${collapsed ? "md:justify-center" : ""}
+                                    ${collapsed ? "md:justify-center md:px-0" : ""}
                                 `}
-                                style={{
-                                    padding: "11px 12px",
-                                    fontSize: "13.5px",
-                                    boxSizing: "border-box",
-                                }}
                                 title={item.label}
                             >
                                 <div
@@ -439,12 +399,10 @@ export default function AdminSidebar({
             {/* Footer user card */}
             <div
                 className={`
-                    w-full flex items-center justify-between shrink-0
-                    bg-[#02122b] whitespace-nowrap overflow-hidden
-                    border-t border-white/10
-                    ${collapsed ? "md:justify-center" : ""}
+                    w-full flex items-center shrink-0 bg-[#02122b] whitespace-nowrap overflow-hidden
+                    border-t border-white/10 p-[14px]
+                    ${collapsed ? "md:justify-center" : "justify-between"}
                 `}
-                style={{ padding: "14px 14px", boxSizing: "border-box" }}
             >
                 <div
                     className={`flex items-center gap-3 min-w-0 flex-1 ${collapsed ? "md:hidden" : ""}`}
@@ -466,11 +424,10 @@ export default function AdminSidebar({
                     </div>
                 </div>
 
-                {/* Single logout button */}
                 <button
                     type="button"
                     onClick={(e) => logout(e)}
-                    className={`text-[#8fa0b5] hover:text-white transition cursor-pointer shrink-0 ${collapsed ? "md:flex" : "hidden md:block"}`}
+                    className={`text-[#8fa0b5] hover:text-white transition cursor-pointer shrink-0 ${collapsed ? "md:flex md:mx-auto" : "hidden md:block"}`}
                     style={{ fontSize: "16px" }}
                     title="Logout"
                 >

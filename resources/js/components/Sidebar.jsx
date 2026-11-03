@@ -145,7 +145,7 @@ export default function Sidebar({
                     transition-all duration-300
                     fixed md:sticky md:top-0 top-0 left-0 h-screen
                     ${mobileOpen ? "translate-x-0" : "-translate-x-full"} md:translate-x-0
-                    ${collapsed ? "md:w-20 w-65" : "w-62.5"}
+                    ${collapsed ? "md:w-20 w-64" : "w-64"}
                 `}
             >
                 {/* Brand & Toggle */}
