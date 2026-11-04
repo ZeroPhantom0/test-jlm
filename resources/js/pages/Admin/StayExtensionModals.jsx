@@ -1,17 +1,50 @@
 // resources/js/pages/Admin/StayExtensionModals.jsx
-import React, { useState, useEffect } from 'react';
-import Modal from '../../components/Modal';
+import React, { useState, useEffect } from "react";
+import Modal from "../../components/Modal";
 
 const csrf = () =>
     document.querySelector('meta[name="csrf-token"]')?.content ||
     document.querySelector('input[name="_token"]')?.value;
+
+// Convert either an array of rows or an object map into a keyed map
+const toKeyedMap = (input) => {
+    if (!input) return {};
+    if (Array.isArray(input)) {
+        const map = {};
+        input.forEach((r) => {
+            if (r && r.id !== undefined && r.id !== null) map[String(r.id)] = r;
+        });
+        return map;
+    }
+    if (typeof input === "object") {
+        const map = {};
+        Object.entries(input).forEach(([k, v]) => {
+            if (!v || typeof v !== "object") return;
+            const realKey =
+                v.id !== undefined && v.id !== null ? String(v.id) : String(k);
+            map[realKey] = v;
+        });
+        return map;
+    }
+    return {};
+};
+
+const findRequest = (map, id) => {
+    if (!map || id === undefined || id === null) return null;
+    const key = String(id);
+    if (map[key]) return map[key];
+    for (const v of Object.values(map)) {
+        if (v && String(v.id) === key) return v;
+    }
+    return null;
+};
 
 export default function StayExtensionModals() {
     const [showDetails, setShowDetails] = useState(false);
     const [showDelete, setShowDelete] = useState(false);
     const [request, setRequest] = useState(null);
     const [deleteTarget, setDeleteTarget] = useState(null);
-    const [adminNotes, setAdminNotes] = useState('');
+    const [adminNotes, setAdminNotes] = useState("");
     const [saving, setSaving] = useState(false);
     const [requestsData, setRequestsData] = useState({});
 
@@ -19,19 +52,19 @@ export default function StayExtensionModals() {
     const [showApprove, setShowApprove] = useState(false);
     const [showReject, setShowReject] = useState(false);
     const [actionTarget, setActionTarget] = useState(null);
-    const [rejectNotes, setRejectNotes] = useState('');
+    const [rejectNotes, setRejectNotes] = useState("");
 
     // ============================================================
     // LIVE DATA — read once, then listen for polling/Echo updates
     // ============================================================
     const readRequestsFromDom = () => {
-        const el = document.getElementById('admin-stay-extension-modals');
+        const el = document.getElementById("admin-stay-extension-modals");
         if (!el?.dataset?.requests) return;
         try {
             const parsed = JSON.parse(el.dataset.requests);
-            if (parsed && typeof parsed === 'object') setRequestsData(parsed);
+            setRequestsData(toKeyedMap(parsed));
         } catch (e) {
-            console.error('Invalid requests JSON', e);
+            console.error("Invalid requests JSON", e);
         }
     };
 
@@ -40,21 +73,22 @@ export default function StayExtensionModals() {
 
         const handler = (e) => {
             const fresh = e?.detail;
-            if (fresh && typeof fresh === 'object') {
-                setRequestsData(fresh);
+            if (fresh) {
+                setRequestsData(toKeyedMap(fresh));
             } else {
                 readRequestsFromDom();
             }
         };
 
-        window.addEventListener('stay-extension:data-updated', handler);
-        return () => window.removeEventListener('stay-extension:data-updated', handler);
+        window.addEventListener("stay-extension:data-updated", handler);
+        return () =>
+            window.removeEventListener("stay-extension:data-updated", handler);
     }, []);
 
     // Sync open request with fresh data
     useEffect(() => {
         if (!request) return;
-        const fresh = requestsData[request.id];
+        const fresh = requestsData[String(request.id)];
         if (!fresh) return;
         if (
             fresh.status !== request.status ||
@@ -64,7 +98,7 @@ export default function StayExtensionModals() {
         ) {
             setRequest(fresh);
             if (fresh.admin_notes !== undefined && !saving) {
-                setAdminNotes(fresh.admin_notes || '');
+                setAdminNotes(fresh.admin_notes || "");
             }
         }
     }, [requestsData]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -75,52 +109,68 @@ export default function StayExtensionModals() {
     useEffect(() => {
         const handler = (e) => {
             // View details
-            const viewBtn = e.target.closest('.open-details-btn');
+            const viewBtn = e.target.closest(".open-details-btn");
             if (viewBtn) {
-                const id = viewBtn.dataset.requestId;
-                const data = requestsData[id];
+                const id = String(viewBtn.dataset.requestId);
+                const data = findRequest(requestsData, id);
                 if (data) {
                     setRequest(data);
-                    setAdminNotes(data.admin_notes || '');
+                    setAdminNotes(data.admin_notes || "");
                     setShowDetails(true);
+                } else {
+                    console.warn(
+                        "[StayExtensionModals] No data for id",
+                        id,
+                        requestsData,
+                    );
                 }
                 return;
             }
 
             // Approve — from row (opens confirmation modal)
-            const approveBtn = e.target.closest('.row-approve-btn');
+            const approveBtn = e.target.closest(".row-approve-btn");
             if (approveBtn) {
-                const id = approveBtn.dataset.requestId;
-                const data = requestsData[id];
+                const id = String(approveBtn.dataset.requestId);
+                const data = findRequest(requestsData, id);
                 if (data) {
                     setActionTarget(data);
                     setShowApprove(true);
+                } else {
+                    console.warn(
+                        "[StayExtensionModals] No data for approve id",
+                        id,
+                    );
                 }
                 return;
             }
 
             // Reject — from row (opens confirmation modal)
-            const rejectBtn = e.target.closest('.row-reject-btn');
+            const rejectBtn = e.target.closest(".row-reject-btn");
             if (rejectBtn) {
-                const id = rejectBtn.dataset.requestId;
-                const data = requestsData[id];
+                const id = String(rejectBtn.dataset.requestId);
+                    const data = findRequest(requestsData, id);
                 if (data) {
                     setActionTarget(data);
-                    setRejectNotes('');
+                    setRejectNotes("");
                     setShowReject(true);
+                } else {
+                    console.warn(
+                        "[StayExtensionModals] No data for reject id",
+                        id,
+                    );
                 }
                 return;
             }
         };
 
-        document.addEventListener('click', handler);
-        return () => document.removeEventListener('click', handler);
+        document.addEventListener("click", handler);
+        return () => document.removeEventListener("click", handler);
     }, [requestsData]);
 
     const closeModal = () => {
         setShowDetails(false);
         setRequest(null);
-        setAdminNotes('');
+        setAdminNotes("");
     };
 
     // ============================================================
@@ -135,7 +185,7 @@ export default function StayExtensionModals() {
     const handleReject = () => {
         if (!request) return;
         setActionTarget({ ...request, admin_notes: adminNotes });
-        setRejectNotes('');
+        setRejectNotes("");
         setShowReject(true);
     };
 
@@ -146,21 +196,27 @@ export default function StayExtensionModals() {
         if (!actionTarget) return;
         setSaving(true);
         try {
-            const res = await fetch(`/admin/services/stay-extension/${actionTarget.id}/approve`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    'X-CSRF-TOKEN': csrf(),
+            const res = await fetch(
+                `/admin/services/stay-extension/${actionTarget.id}/approve`,
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        Accept: "application/json",
+                        "X-CSRF-TOKEN": csrf(),
+                    },
+                    body: JSON.stringify({
+                        admin_notes:
+                            actionTarget.admin_notes || adminNotes || "",
+                    }),
                 },
-                body: JSON.stringify({ admin_notes: actionTarget.admin_notes || adminNotes || '' }),
-            });
+            );
             const data = await res.json();
-            if (!res.ok) throw new Error(data.message || 'Failed to approve.');
+            if (!res.ok) throw new Error(data.message || "Failed to approve.");
             setShowApprove(false);
             setActionTarget(null);
             closeModal();
-            window.dispatchEvent(new CustomEvent('stay-extension:refresh'));
+            window.dispatchEvent(new CustomEvent("stay-extension:refresh"));
         } catch (err) {
             alert(err.message);
         } finally {
@@ -171,27 +227,30 @@ export default function StayExtensionModals() {
     const confirmReject = async () => {
         if (!actionTarget) return;
         if (!rejectNotes.trim()) {
-            alert('Please provide a reason for rejection.');
+            alert("Please provide a reason for rejection.");
             return;
         }
         setSaving(true);
         try {
-            const res = await fetch(`/admin/services/stay-extension/${actionTarget.id}/reject`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    'X-CSRF-TOKEN': csrf(),
+            const res = await fetch(
+                `/admin/services/stay-extension/${actionTarget.id}/reject`,
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        Accept: "application/json",
+                        "X-CSRF-TOKEN": csrf(),
+                    },
+                    body: JSON.stringify({ admin_notes: rejectNotes }),
                 },
-                body: JSON.stringify({ admin_notes: rejectNotes }),
-            });
+            );
             const data = await res.json();
-            if (!res.ok) throw new Error(data.message || 'Failed to reject.');
+            if (!res.ok) throw new Error(data.message || "Failed to reject.");
             setShowReject(false);
             setActionTarget(null);
-            setRejectNotes('');
+            setRejectNotes("");
             closeModal();
-            window.dispatchEvent(new CustomEvent('stay-extension:refresh'));
+            window.dispatchEvent(new CustomEvent("stay-extension:refresh"));
         } catch (err) {
             alert(err.message);
         } finally {
@@ -209,7 +268,7 @@ export default function StayExtensionModals() {
         if (saving) return;
         setShowReject(false);
         setActionTarget(null);
-        setRejectNotes('');
+        setRejectNotes("");
     };
 
     // ============================================================
@@ -238,19 +297,22 @@ export default function StayExtensionModals() {
         if (!deleteTarget) return;
         setSaving(true);
         try {
-            const res = await fetch(`/admin/services/stay-extension/${deleteTarget.id}`, {
-                method: 'DELETE',
-                headers: {
-                    'Accept': 'application/json',
-                    'X-CSRF-TOKEN': csrf(),
+            const res = await fetch(
+                `/admin/services/stay-extension/${deleteTarget.id}`,
+                {
+                    method: "DELETE",
+                    headers: {
+                        Accept: "application/json",
+                        "X-CSRF-TOKEN": csrf(),
+                    },
                 },
-            });
+            );
             const data = await res.json();
-            if (!res.ok) throw new Error(data.message || 'Failed to delete.');
+            if (!res.ok) throw new Error(data.message || "Failed to delete.");
             setShowDelete(false);
             setDeleteTarget(null);
             closeModal();
-            window.dispatchEvent(new CustomEvent('stay-extension:refresh'));
+            window.dispatchEvent(new CustomEvent("stay-extension:refresh"));
         } catch (err) {
             alert(err.message);
         } finally {
@@ -298,133 +360,151 @@ export default function StayExtensionModals() {
     // Status badge config
     // ============================================================
     const statusConfig = {
-        Pending:  { class: 'bg-yellow-100 text-amber-700',    icon: 'fa-regular fa-clock' },
-        Approved: { class: 'bg-emerald-100 text-emerald-600', icon: 'fa-regular fa-circle-check' },
-        Rejected: { class: 'bg-rose-100 text-rose-600',       icon: 'fa-regular fa-circle-xmark' },
-    }[request.status] || { class: 'bg-slate-100 text-slate-500', icon: 'fa-regular fa-circle' };
+        Pending: {
+            class: "bg-yellow-100 text-amber-700",
+            icon: "fa-regular fa-clock",
+        },
+        Approved: {
+            class: "bg-emerald-100 text-emerald-600",
+            icon: "fa-regular fa-circle-check",
+        },
+        Rejected: {
+            class: "bg-rose-100 text-rose-600",
+            icon: "fa-regular fa-circle-xmark",
+        },
+    }[request.status] || {
+        class: "bg-slate-100 text-slate-500",
+        icon: "fa-regular fa-circle",
+    };
 
-    const isPending = request.status === 'Pending';
+    const isPending = request.status === "Pending";
 
     return (
         <>
             <Modal onClose={closeModal} maxWidth="max-w-[500px]">
-                {/* ============ HEADER ============ */}
-                <div className="p-5 pb-4 flex items-center justify-between border-b border-slate-100">
-                    <h3 className="text-lg font-bold text-slate-900">Extension Request Details</h3>
-                    <button
-                        onClick={closeModal}
-                        className="text-slate-400 hover:text-slate-700 text-lg"
-                    >
-                        <i className="fa-solid fa-xmark"></i>
-                    </button>
-                </div>
+                <div className="flex flex-col max-h-[90vh] sm:max-h-[85vh]">
+                    {/* ============ HEADER ============ */}
+                    <div className="p-4 sm:p-5 pb-4 flex items-center justify-between border-b border-slate-100 shrink-0">
+                        <h3 className="text-base sm:text-lg font-bold text-slate-900 pr-4">
+                            Extension Request Details
+                        </h3>
+                        <button
+                            onClick={closeModal}
+                            className="text-slate-400 hover:text-slate-700 text-lg shrink-0"
+                        >
+                            <i className="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
 
-                {/* ============ BODY ============ */}
-                <div className="p-6 overflow-y-auto flex flex-col gap-4">
+                    {/* ============ BODY ============ */}
+                    <div className="p-4 sm:p-6 overflow-y-auto flex flex-col gap-4 flex-1">
+                        {/* Tenant + Status */}
+                        <div className="flex items-start justify-between gap-3 flex-wrap">
+                            <div className="min-w-0">
+                                <div className="text-[16px] sm:text-[17px] font-bold text-slate-900 break-words">
+                                    {request.tenant}
+                                </div>
+                                <div className="text-xs text-slate-400 mt-0.5 break-words">
+                                    {request.reference_no}
+                                </div>
+                            </div>
+                            <span
+                                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold shrink-0 ${statusConfig.class}`}
+                            >
+                                <i className={statusConfig.icon}></i>{" "}
+                                {request.status}
+                            </span>
+                        </div>
 
-                    {/* Tenant + Status */}
-                    <div className="flex items-center justify-between">
+                        {/* Lease Extension Card */}
+                        <div className="bg-purple-50 border border-purple-100 rounded-2xl p-4 sm:p-5 flex flex-col items-center gap-3">
+                            <div className="flex justify-around w-full gap-3">
+                                <div className="text-center min-w-0">
+                                    <div className="text-[11px] text-purple-500 font-medium mb-1">
+                                        Current Lease Ends
+                                    </div>
+                                    <div className="text-sm sm:text-base font-extrabold text-slate-900 break-words">
+                                        {request.current_end}
+                                    </div>
+                                </div>
+                                <div className="text-center min-w-0">
+                                    <div className="text-[11px] text-purple-500 font-medium mb-1">
+                                        Requested New End
+                                    </div>
+                                    <div className="text-sm sm:text-base font-extrabold text-purple-700 break-words">
+                                        {request.requested_end}
+                                    </div>
+                                </div>
+                            </div>
+                            <span className="bg-purple-100 text-purple-700 text-[11px] font-bold px-3.5 py-1 rounded-xl">
+                                {request.extension_days}
+                            </span>
+                        </div>
+
+                        {/* Reason */}
                         <div>
-                            <div className="text-[17px] font-bold text-slate-900">
-                                {request.tenant}
+                            <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">
+                                Reason
                             </div>
-                            <div className="text-xs text-slate-400 mt-0.5">
-                                {request.reference_no}
-                            </div>
-                        </div>
-                        <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold ${statusConfig.class}`}>
-                            <i className={statusConfig.icon}></i> {request.status}
-                        </span>
-                    </div>
-
-                    {/* Lease Extension Card */}
-                    <div className="bg-purple-50 border border-purple-100 rounded-2xl p-5 flex flex-col items-center gap-3">
-                        <div className="flex justify-around w-full">
-                            <div className="text-center">
-                                <div className="text-[11px] text-purple-500 font-medium mb-1">
-                                    Current Lease Ends
-                                </div>
-                                <div className="text-base font-extrabold text-slate-900">
-                                    {request.current_end}
-                                </div>
-                            </div>
-                            <div className="text-center">
-                                <div className="text-[11px] text-purple-500 font-medium mb-1">
-                                    Requested New End
-                                </div>
-                                <div className="text-base font-extrabold text-purple-700">
-                                    {request.requested_end}
-                                </div>
+                            <div className="bg-slate-50 rounded-xl p-4 text-[13.5px] text-slate-700 leading-snug break-words whitespace-pre-wrap">
+                                {request.reason}
                             </div>
                         </div>
-                        <span className="bg-purple-100 text-purple-700 text-[11px] font-bold px-3.5 py-1 rounded-xl">
-                            {request.extension_days}
-                        </span>
-                    </div>
 
-                    {/* Reason */}
-                    <div>
-                        <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Reason</div>
-                        <div className="bg-slate-50 rounded-xl p-4 text-[13.5px] text-slate-700 leading-snug">
-                            {request.reason}
+                        {/* Admin Notes */}
+                        <div>
+                            <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">
+                                Admin Notes
+                            </div>
+                            <textarea
+                                value={adminNotes}
+                                onChange={(e) => setAdminNotes(e.target.value)}
+                                placeholder="Add internal notes here..."
+                                className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-[13px] outline-none resize-y min-h-[70px] focus:border-slate-400"
+                            />
                         </div>
                     </div>
 
-                    {/* Admin Notes */}
-                    <div>
-                        <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">
-                            Admin Notes
-                        </div>
-                        <textarea
-                            value={adminNotes}
-                            onChange={(e) => setAdminNotes(e.target.value)}
-                            placeholder="Add internal notes here..."
-                            className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-[13px] outline-none resize-y min-h-[70px] focus:border-slate-400"
-                        />
+                    {/* ============ FOOTER ACTIONS ============ */}
+                    <div className="p-4 sm:p-5 border-t border-slate-100 flex items-center gap-2.5 shrink-0 flex-wrap">
+                        {isPending && (
+                            <>
+                                <button
+                                    onClick={handleApprove}
+                                    disabled={saving}
+                                    className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-3.5 sm:px-4 py-2.5 rounded-lg text-[13px] font-semibold inline-flex items-center gap-1.5"
+                                >
+                                    <i className="fa-regular fa-circle-check"></i>
+                                    Approve
+                                </button>
+                                <button
+                                    onClick={handleReject}
+                                    disabled={saving}
+                                    className="bg-rose-50 hover:bg-rose-100 disabled:opacity-50 text-rose-600 px-3.5 sm:px-4 py-2.5 rounded-lg text-[13px] font-semibold inline-flex items-center gap-1.5"
+                                >
+                                    <i className="fa-regular fa-circle-xmark"></i>
+                                    Reject
+                                </button>
+                            </>
+                        )}
+                        <button
+                            onClick={openDeleteModal}
+                            disabled={saving}
+                            className="text-rose-600 hover:text-rose-700 disabled:opacity-50 text-[13px] font-semibold px-3 py-2 sm:ml-auto"
+                        >
+                            Delete
+                        </button>
+                        <button
+                            onClick={closeModal}
+                            className="bg-[#02122c] text-white px-4 py-2.5 rounded-lg text-[13px] font-semibold ml-auto sm:ml-0"
+                        >
+                            Close
+                        </button>
                     </div>
-                </div>
-
-                {/* ============ FOOTER ACTIONS ============ */}
-                <div className="p-5 border-t border-slate-100 flex items-center gap-2.5">
-                    {isPending && (
-                        <>
-                            <button
-                                onClick={handleApprove}
-                                disabled={saving}
-                                className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-4 py-2.5 rounded-lg text-[13px] font-semibold inline-flex items-center gap-1.5"
-                            >
-                                <i className="fa-regular fa-circle-check"></i>
-                                Approve
-                            </button>
-                            <button
-                                onClick={handleReject}
-                                disabled={saving}
-                                className="bg-rose-50 hover:bg-rose-100 disabled:opacity-50 text-rose-600 px-4 py-2.5 rounded-lg text-[13px] font-semibold inline-flex items-center gap-1.5"
-                            >
-                                <i className="fa-regular fa-circle-xmark"></i>
-                                Reject
-                            </button>
-                        </>
-                    )}
-                    <button
-                        onClick={openDeleteModal}
-                        disabled={saving}
-                        className="text-rose-600 hover:text-rose-700 disabled:opacity-50 text-[13px] font-semibold px-3 py-2 ml-auto"
-                    >
-                        Delete
-                    </button>
-                    <button
-                        onClick={closeModal}
-                        className="bg-[#02122c] text-white px-4 py-2.5 rounded-lg text-[13px] font-semibold"
-                    >
-                        Close
-                    </button>
                 </div>
             </Modal>
 
-            {/* ============================================================ */}
             {/* APPROVE CONFIRMATION MODAL */}
-            {/* ============================================================ */}
             {showApprove && actionTarget && (
                 <ApproveStayExtensionModal
                     target={actionTarget}
@@ -434,9 +514,7 @@ export default function StayExtensionModals() {
                 />
             )}
 
-            {/* ============================================================ */}
             {/* REJECT CONFIRMATION MODAL */}
-            {/* ============================================================ */}
             {showReject && actionTarget && (
                 <RejectStayExtensionModal
                     target={actionTarget}
@@ -448,9 +526,7 @@ export default function StayExtensionModals() {
                 />
             )}
 
-            {/* ============================================================ */}
             {/* DELETE CONFIRMATION MODAL */}
-            {/* ============================================================ */}
             {showDelete && deleteTarget && (
                 <DeleteStayExtensionModal
                     target={deleteTarget}
@@ -469,80 +545,102 @@ export default function StayExtensionModals() {
 function ApproveStayExtensionModal({ target, saving, onClose, onConfirm }) {
     return (
         <Modal onClose={onClose} maxWidth="max-w-[460px]">
-            <div className="p-5 pb-4 flex items-center justify-between border-b border-slate-100 shrink-0">
-                <h3 className="text-lg font-bold text-slate-900">Approve Extension</h3>
-                <button
-                    onClick={onClose}
-                    disabled={saving}
-                    className="text-slate-400 hover:text-slate-700 text-lg disabled:opacity-50"
-                >
-                    <i className="fa-solid fa-xmark"></i>
-                </button>
-            </div>
-
-            <div className="p-6 text-center overflow-y-auto max-h-[60vh]">
-                <div className="w-16 h-16 mx-auto rounded-full bg-emerald-50 flex items-center justify-center mb-4">
-                    <i className="fa-solid fa-circle-check text-emerald-500 text-2xl"></i>
-                </div>
-                <h4 className="text-lg font-bold text-slate-900 mb-2">
-                    Approve this stay extension?
-                </h4>
-                <p className="text-slate-500 text-[13px] mb-4">
-                    This will extend the tenant&rsquo;s lease to the requested end date and update their billing cycle.
-                </p>
-
-                <div className="bg-slate-50 rounded-xl p-4 text-left flex flex-col gap-2.5 mb-4">
-                    <div className="flex justify-between text-xs">
-                        <span className="text-slate-500">Tenant</span>
-                        <span className="font-bold text-slate-900">{target.tenant}</span>
-                    </div>
-                    <div className="flex justify-between text-xs">
-                        <span className="text-slate-500">Reference</span>
-                        <span className="font-bold text-slate-900">{target.reference_no}</span>
-                    </div>
-                    <div className="flex justify-between text-xs">
-                        <span className="text-slate-500">Extension</span>
-                        <span className="font-bold text-purple-700">{target.extension_days}</span>
-                    </div>
-                    <div className="flex justify-between text-xs border-t border-slate-200 pt-2 mt-1">
-                        <span className="text-slate-500">New Lease Ends</span>
-                        <span className="font-bold text-emerald-600">{target.requested_end}</span>
-                    </div>
+            <div className="flex flex-col max-h-[90vh]">
+                <div className="p-4 sm:p-5 pb-4 flex items-center justify-between border-b border-slate-100 shrink-0">
+                    <h3 className="text-base sm:text-lg font-bold text-slate-900 pr-4">
+                        Approve Extension
+                    </h3>
+                    <button
+                        onClick={onClose}
+                        disabled={saving}
+                        className="text-slate-400 hover:text-slate-700 text-lg disabled:opacity-50 shrink-0"
+                    >
+                        <i className="fa-solid fa-xmark"></i>
+                    </button>
                 </div>
 
-                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-left">
-                    <p className="text-[12px] text-emerald-800 leading-snug">
-                        <i className="fa-solid fa-circle-info mr-1"></i>
-                        The tenant will be notified that their stay extension has been approved.
+                <div className="p-4 sm:p-6 text-center overflow-y-auto flex-1">
+                    <div className="w-16 h-16 mx-auto rounded-full bg-emerald-50 flex items-center justify-center mb-4">
+                        <i className="fa-solid fa-circle-check text-emerald-500 text-2xl"></i>
+                    </div>
+                    <h4 className="text-lg font-bold text-slate-900 mb-2">
+                        Approve this stay extension?
+                    </h4>
+                    <p className="text-slate-500 text-[13px] mb-4">
+                        This will extend the tenant&rsquo;s lease to the
+                        requested end date and update their billing cycle.
                     </p>
-                </div>
-            </div>
 
-            <div className="p-5 border-t border-slate-100 flex justify-end gap-3 shrink-0">
-                <button
-                    onClick={onClose}
-                    disabled={saving}
-                    className="text-slate-600 text-[13.5px] font-semibold px-4 py-2 disabled:opacity-50"
-                >
-                    Cancel
-                </button>
-                <button
-                    onClick={onConfirm}
-                    disabled={saving}
-                    className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-5 py-2.5 rounded-lg text-[13.5px] font-semibold inline-flex items-center gap-2 transition"
-                >
-                    {saving ? (
-                        <>
-                            <i className="fa-solid fa-spinner fa-spin"></i>
-                            Approving…
-                        </>
-                    ) : (
-                        <>
-                            <i className="fa-solid fa-check"></i>
-                            Yes, Approve
-                        </>
-                    )}
-                </button>
+                    <div className="bg-slate-50 rounded-xl p-4 text-left flex flex-col gap-2.5 mb-4">
+                        <div className="flex justify-between text-xs gap-3">
+                            <span className="text-slate-500 shrink-0">
+                                Tenant
+                            </span>
+                            <span className="font-bold text-slate-900 text-right break-words">
+                                {target.tenant}
+                            </span>
+                        </div>
+                        <div className="flex justify-between text-xs gap-3">
+                            <span className="text-slate-500 shrink-0">
+                                Reference
+                            </span>
+                            <span className="font-bold text-slate-900 text-right break-words">
+                                {target.reference_no}
+                            </span>
+                        </div>
+                        <div className="flex justify-between text-xs gap-3">
+                            <span className="text-slate-500 shrink-0">
+                                Extension
+                            </span>
+                            <span className="font-bold text-purple-700 text-right">
+                                {target.extension_days}
+                            </span>
+                        </div>
+                        <div className="flex justify-between text-xs border-t border-slate-200 pt-2 mt-1 gap-3">
+                            <span className="text-slate-500 shrink-0">
+                                New Lease Ends
+                            </span>
+                            <span className="font-bold text-emerald-600 text-right">
+                                {target.requested_end}
+                            </span>
+                        </div>
+                    </div>
+
+                    <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-left">
+                        <p className="text-[12px] text-emerald-800 leading-snug">
+                            <i className="fa-solid fa-circle-info mr-1"></i>
+                            The tenant will be notified that their stay
+                            extension has been approved.
+                        </p>
+                    </div>
+                </div>
+
+                <div className="p-4 sm:p-5 border-t border-slate-100 flex justify-end gap-3 shrink-0 flex-wrap">
+                    <button
+                        onClick={onClose}
+                        disabled={saving}
+                        className="text-slate-600 text-[13.5px] font-semibold px-4 py-2 disabled:opacity-50"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        onClick={onConfirm}
+                        disabled={saving}
+                        className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-5 py-2.5 rounded-lg text-[13.5px] font-semibold inline-flex items-center gap-2 transition"
+                    >
+                        {saving ? (
+                            <>
+                                <i className="fa-solid fa-spinner fa-spin"></i>
+                                Approving…
+                            </>
+                        ) : (
+                            <>
+                                <i className="fa-solid fa-check"></i>
+                                Yes, Approve
+                            </>
+                        )}
+                    </button>
+                </div>
             </div>
         </Modal>
     );
@@ -551,87 +649,113 @@ function ApproveStayExtensionModal({ target, saving, onClose, onConfirm }) {
 // ============================================================
 // REJECT CONFIRMATION SUBCOMPONENT
 // ============================================================
-function RejectStayExtensionModal({ target, saving, notes, onNotesChange, onClose, onConfirm }) {
+function RejectStayExtensionModal({
+    target,
+    saving,
+    notes,
+    onNotesChange,
+    onClose,
+    onConfirm,
+}) {
     return (
         <Modal onClose={onClose} maxWidth="max-w-[460px]">
-            <div className="p-5 pb-4 flex items-center justify-between border-b border-slate-100 shrink-0">
-                <h3 className="text-lg font-bold text-slate-900">Reject Extension</h3>
-                <button
-                    onClick={onClose}
-                    disabled={saving}
-                    className="text-slate-400 hover:text-slate-700 text-lg disabled:opacity-50"
-                >
-                    <i className="fa-solid fa-xmark"></i>
-                </button>
-            </div>
+            <div className="flex flex-col max-h-[90vh]">
+                <div className="p-4 sm:p-5 pb-4 flex items-center justify-between border-b border-slate-100 shrink-0">
+                    <h3 className="text-base sm:text-lg font-bold text-slate-900 pr-4">
+                        Reject Extension
+                    </h3>
+                    <button
+                        onClick={onClose}
+                        disabled={saving}
+                        className="text-slate-400 hover:text-slate-700 text-lg disabled:opacity-50 shrink-0"
+                    >
+                        <i className="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
 
-            <div className="p-6 overflow-y-auto max-h-[60vh]">
-                <div className="text-center mb-4">
-                    <div className="w-16 h-16 mx-auto rounded-full bg-rose-50 flex items-center justify-center mb-4">
-                        <i className="fa-solid fa-circle-xmark text-rose-500 text-2xl"></i>
+                <div className="p-4 sm:p-6 overflow-y-auto flex-1">
+                    <div className="text-center mb-4">
+                        <div className="w-16 h-16 mx-auto rounded-full bg-rose-50 flex items-center justify-center mb-4">
+                            <i className="fa-solid fa-circle-xmark text-rose-500 text-2xl"></i>
+                        </div>
+                        <h4 className="text-lg font-bold text-slate-900 mb-2">
+                            Reject this stay extension?
+                        </h4>
+                        <p className="text-slate-500 text-[13px]">
+                            The tenant&rsquo;s lease will remain unchanged and
+                            they will be notified of the rejection.
+                        </p>
                     </div>
-                    <h4 className="text-lg font-bold text-slate-900 mb-2">
-                        Reject this stay extension?
-                    </h4>
-                    <p className="text-slate-500 text-[13px]">
-                        The tenant&rsquo;s lease will remain unchanged and they will be notified of the rejection.
+
+                    <div className="bg-slate-50 rounded-xl p-4 text-left flex flex-col gap-2.5 mb-4">
+                        <div className="flex justify-between text-xs gap-3">
+                            <span className="text-slate-500 shrink-0">
+                                Tenant
+                            </span>
+                            <span className="font-bold text-slate-900 text-right break-words">
+                                {target.tenant}
+                            </span>
+                        </div>
+                        <div className="flex justify-between text-xs gap-3">
+                            <span className="text-slate-500 shrink-0">
+                                Reference
+                            </span>
+                            <span className="font-bold text-slate-900 text-right break-words">
+                                {target.reference_no}
+                            </span>
+                        </div>
+                        <div className="flex justify-between text-xs gap-3">
+                            <span className="text-slate-500 shrink-0">
+                                Requested End
+                            </span>
+                            <span className="font-bold text-slate-900 text-right">
+                                {target.requested_end}
+                            </span>
+                        </div>
+                    </div>
+
+                    <label className="block text-[13px] font-semibold text-slate-700 mb-1.5">
+                        Reason for rejection{" "}
+                        <span className="text-rose-500">*</span>
+                    </label>
+                    <textarea
+                        value={notes}
+                        onChange={(e) => onNotesChange(e.target.value)}
+                        placeholder="Explain why this stay extension is being rejected..."
+                        className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-[13px] outline-none resize-y min-h-[90px] focus:border-slate-400"
+                    />
+                    <p className="text-[11px] text-slate-400 mt-1">
+                        The tenant will see this reason on their extension
+                        request details.
                     </p>
                 </div>
 
-                <div className="bg-slate-50 rounded-xl p-4 text-left flex flex-col gap-2.5 mb-4">
-                    <div className="flex justify-between text-xs">
-                        <span className="text-slate-500">Tenant</span>
-                        <span className="font-bold text-slate-900">{target.tenant}</span>
-                    </div>
-                    <div className="flex justify-between text-xs">
-                        <span className="text-slate-500">Reference</span>
-                        <span className="font-bold text-slate-900">{target.reference_no}</span>
-                    </div>
-                    <div className="flex justify-between text-xs">
-                        <span className="text-slate-500">Requested End</span>
-                        <span className="font-bold text-slate-900">{target.requested_end}</span>
-                    </div>
+                <div className="p-4 sm:p-5 border-t border-slate-100 flex justify-end gap-3 shrink-0 flex-wrap">
+                    <button
+                        onClick={onClose}
+                        disabled={saving}
+                        className="text-slate-600 text-[13.5px] font-semibold px-4 py-2 disabled:opacity-50"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        onClick={onConfirm}
+                        disabled={saving || !notes.trim()}
+                        className="bg-rose-500 hover:bg-rose-600 disabled:opacity-50 text-white px-5 py-2.5 rounded-lg text-[13.5px] font-semibold inline-flex items-center gap-2 transition"
+                    >
+                        {saving ? (
+                            <>
+                                <i className="fa-solid fa-spinner fa-spin"></i>
+                                Rejecting…
+                            </>
+                        ) : (
+                            <>
+                                <i className="fa-solid fa-ban"></i>
+                                Yes, Reject
+                            </>
+                        )}
+                    </button>
                 </div>
-
-                <label className="block text-[13px] font-semibold text-slate-700 mb-1.5">
-                    Reason for rejection <span className="text-rose-500">*</span>
-                </label>
-                <textarea
-                    value={notes}
-                    onChange={(e) => onNotesChange(e.target.value)}
-                    placeholder="Explain why this stay extension is being rejected..."
-                    className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-[13px] outline-none resize-y min-h-[90px] focus:border-slate-400"
-                />
-                <p className="text-[11px] text-slate-400 mt-1">
-                    The tenant will see this reason on their extension request details.
-                </p>
-            </div>
-
-            <div className="p-5 border-t border-slate-100 flex justify-end gap-3 shrink-0">
-                <button
-                    onClick={onClose}
-                    disabled={saving}
-                    className="text-slate-600 text-[13.5px] font-semibold px-4 py-2 disabled:opacity-50"
-                >
-                    Cancel
-                </button>
-                <button
-                    onClick={onConfirm}
-                    disabled={saving || !notes.trim()}
-                    className="bg-rose-500 hover:bg-rose-600 disabled:opacity-50 text-white px-5 py-2.5 rounded-lg text-[13.5px] font-semibold inline-flex items-center gap-2 transition"
-                >
-                    {saving ? (
-                        <>
-                            <i className="fa-solid fa-spinner fa-spin"></i>
-                            Rejecting…
-                        </>
-                    ) : (
-                        <>
-                            <i className="fa-solid fa-ban"></i>
-                            Yes, Reject
-                        </>
-                    )}
-                </button>
             </div>
         </Modal>
     );
@@ -641,68 +765,82 @@ function RejectStayExtensionModal({ target, saving, notes, onNotesChange, onClos
 function DeleteStayExtensionModal({ target, saving, onClose, onConfirm }) {
     return (
         <Modal onClose={onClose} maxWidth="max-w-[460px]">
-            <div className="p-5 pb-4 flex items-center justify-between border-b border-slate-100">
-                <h3 className="text-lg font-bold text-slate-900">Delete Stay Extension Request</h3>
-                <button
-                    onClick={onClose}
-                    disabled={saving}
-                    className="text-slate-400 hover:text-slate-700 text-lg disabled:opacity-50"
-                >
-                    <i className="fa-solid fa-xmark"></i>
-                </button>
-            </div>
-
-            <div className="p-6 text-center">
-                <div className="w-16 h-16 mx-auto rounded-full bg-rose-50 flex items-center justify-center mb-4">
-                    <i className="fa-solid fa-trash-can text-rose-500 text-2xl"></i>
+            <div className="flex flex-col max-h-[90vh]">
+                <div className="p-4 sm:p-5 pb-4 flex items-center justify-between border-b border-slate-100 shrink-0">
+                    <h3 className="text-base sm:text-lg font-bold text-slate-900 pr-4">
+                        Delete Stay Extension Request
+                    </h3>
+                    <button
+                        onClick={onClose}
+                        disabled={saving}
+                        className="text-slate-400 hover:text-slate-700 text-lg disabled:opacity-50 shrink-0"
+                    >
+                        <i className="fa-solid fa-xmark"></i>
+                    </button>
                 </div>
-                <h4 className="text-lg font-bold text-slate-900 mb-2">Are you sure?</h4>
-                <p className="text-slate-500 text-[13px] mb-2">
-                    You are about to permanently delete:
-                </p>
-                <p className="font-bold text-slate-900 text-[15px] mb-1">
-                    {target.tenant}
-                </p>
-                <p className="text-[13px] text-slate-600 mb-4">
-                    <span className="font-semibold">{target.current_end}</span>
-                    <i className="fa-solid fa-arrow-right text-slate-400 text-[10px] mx-2"></i>
-                    <span className="font-semibold text-purple-700">{target.requested_end}</span>
-                    <span className="text-slate-400 ml-2">({target.reference_no})</span>
-                </p>
-                <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-left">
-                    <p className="text-[12px] text-amber-800 leading-snug">
-                        <i className="fa-solid fa-circle-info mr-1"></i>
-                        This will permanently remove the stay extension request and its history. The tenant's lease will not be affected.{' '}
-                        <strong>This action cannot be undone.</strong>
+
+                <div className="p-4 sm:p-6 text-center overflow-y-auto flex-1">
+                    <div className="w-16 h-16 mx-auto rounded-full bg-rose-50 flex items-center justify-center mb-4">
+                        <i className="fa-solid fa-trash-can text-rose-500 text-2xl"></i>
+                    </div>
+                    <h4 className="text-lg font-bold text-slate-900 mb-2">
+                        Are you sure?
+                    </h4>
+                    <p className="text-slate-500 text-[13px] mb-2">
+                        You are about to permanently delete:
                     </p>
+                    <p className="font-bold text-slate-900 text-[15px] mb-1 break-words">
+                        {target.tenant}
+                    </p>
+                    <p className="text-[13px] text-slate-600 mb-4 break-words">
+                        <span className="font-semibold">
+                            {target.current_end}
+                        </span>
+                        <i className="fa-solid fa-arrow-right text-slate-400 text-[10px] mx-2"></i>
+                        <span className="font-semibold text-purple-700">
+                            {target.requested_end}
+                        </span>
+                        <span className="text-slate-400 ml-2">
+                            ({target.reference_no})
+                        </span>
+                    </p>
+                    <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-left">
+                        <p className="text-[12px] text-amber-800 leading-snug">
+                            <i className="fa-solid fa-circle-info mr-1"></i>
+                            This will permanently remove the stay extension
+                            request and its history. The tenant's lease will not
+                            be affected.{" "}
+                            <strong>This action cannot be undone.</strong>
+                        </p>
+                    </div>
                 </div>
-            </div>
 
-            <div className="p-5 border-t border-slate-100 flex justify-end gap-3">
-                <button
-                    onClick={onClose}
-                    disabled={saving}
-                    className="text-slate-600 text-[13.5px] font-semibold px-4 py-2 disabled:opacity-50"
-                >
-                    Cancel
-                </button>
-                <button
-                    onClick={onConfirm}
-                    disabled={saving}
-                    className="bg-rose-500 hover:bg-rose-600 disabled:opacity-50 text-white px-5 py-2.5 rounded-lg text-[13.5px] font-semibold inline-flex items-center gap-2 transition"
-                >
-                    {saving ? (
-                        <>
-                            <i className="fa-solid fa-spinner fa-spin"></i>
-                            Deleting…
-                        </>
-                    ) : (
-                        <>
-                            <i className="fa-solid fa-trash-can"></i>
-                            Yes, Delete
-                        </>
-                    )}
-                </button>
+                <div className="p-4 sm:p-5 border-t border-slate-100 flex justify-end gap-3 shrink-0 flex-wrap">
+                    <button
+                        onClick={onClose}
+                        disabled={saving}
+                        className="text-slate-600 text-[13.5px] font-semibold px-4 py-2 disabled:opacity-50"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        onClick={onConfirm}
+                        disabled={saving}
+                        className="bg-rose-500 hover:bg-rose-600 disabled:opacity-50 text-white px-5 py-2.5 rounded-lg text-[13.5px] font-semibold inline-flex items-center gap-2 transition"
+                    >
+                        {saving ? (
+                            <>
+                                <i className="fa-solid fa-spinner fa-spin"></i>
+                                Deleting…
+                            </>
+                        ) : (
+                            <>
+                                <i className="fa-solid fa-trash-can"></i>
+                                Yes, Delete
+                            </>
+                        )}
+                    </button>
+                </div>
             </div>
         </Modal>
     );

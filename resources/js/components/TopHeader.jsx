@@ -286,6 +286,7 @@ export default function TopHeader({
                         onClick={() => setNotifOpen(!notifOpen)}
                         className="relative w-9 h-9 flex items-center justify-center rounded-full text-slate-600 hover:bg-slate-100 transition"
                         aria-label="Notifications"
+                        aria-expanded={notifOpen}
                     >
                         <i className="fa-solid fa-bell text-[16px]" />
                         {unreadCount > 0 && (
@@ -296,98 +297,127 @@ export default function TopHeader({
                     </button>
 
                     {notifOpen && (
-                        <div className="absolute right-0 mt-3 w-[340px] bg-white rounded-2xl border border-slate-200 shadow-xl z-[2000] overflow-hidden">
-                            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
-                                <div className="flex items-center gap-2">
-                                    <h4 className="text-[14px] font-bold text-slate-900">
-                                        Notifications
-                                    </h4>
-                                    {unreadCount > 0 && (
-                                        <span className="px-2 py-0.5 bg-rose-100 text-rose-600 text-[10px] font-bold rounded-full">
-                                            {unreadCount} new
-                                        </span>
-                                    )}
-                                </div>
-                                {processedNotifications.length > 0 && (
-                                    <div className="flex items-center gap-2">
+                        <>
+                            {/* Mobile backdrop — closes panel on tap outside */}
+                            <div
+                                className="fixed inset-0 z-[1999] bg-black/20 md:hidden"
+                                onClick={() => setNotifOpen(false)}
+                            />
+
+                            <div
+                                className="
+                    fixed md:absolute
+                    left-1/2 md:left-auto -translate-x-1/2 md:translate-x-0
+                    md:right-0 md:mt-3
+                    top-[68px] md:top-auto
+                    w-[calc(100vw-2rem)] sm:w-[360px] md:w-[380px]
+                    max-w-[420px]
+                    max-h-[calc(100dvh-90px)] md:max-h-[560px]
+                    bg-white rounded-2xl border border-slate-200 shadow-2xl
+                    z-[2000] flex flex-col overflow-hidden
+                "
+                                role="dialog"
+                                aria-label="Notifications"
+                            >
+                                {/* Header */}
+                                <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-slate-100 shrink-0">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                        <h4 className="text-[14px] font-bold text-slate-900 truncate">
+                                            Notifications
+                                        </h4>
                                         {unreadCount > 0 && (
+                                            <span className="px-2 py-0.5 bg-rose-100 text-rose-600 text-[10px] font-bold rounded-full shrink-0">
+                                                {unreadCount} new
+                                            </span>
+                                        )}
+                                    </div>
+
+                                    {processedNotifications.length > 0 && (
+                                        <div className="flex items-center gap-2 shrink-0">
+                                            {unreadCount > 0 && (
+                                                <button
+                                                    type="button"
+                                                    onClick={markAllAsRead}
+                                                    className="text-[11px] font-semibold text-slate-500 hover:text-slate-800 whitespace-nowrap"
+                                                >
+                                                    Mark all read
+                                                </button>
+                                            )}
                                             <button
                                                 type="button"
-                                                onClick={markAllAsRead}
-                                                className="text-[11px] font-semibold text-slate-500 hover:text-slate-800"
+                                                onClick={clearAll}
+                                                className="text-[11px] font-semibold text-orange-600 hover:text-orange-700 whitespace-nowrap"
+                                                title="Dismiss read notifications"
                                             >
-                                                Mark all read
+                                                Clear read
                                             </button>
-                                        )}
-                                        <button
-                                            type="button"
-                                            onClick={clearAll}
-                                            className="text-[11px] font-semibold text-orange-600 hover:text-orange-700"
-                                            title="Dismiss read notifications"
-                                        >
-                                            Clear read
-                                        </button>
-                                    </div>
-                                )}
-                            </div>
-
-                            <div className="max-h-[380px] overflow-y-auto">
-                                {loading &&
-                                processedNotifications.length === 0 ? (
-                                    <div className="py-12 text-center text-[12px] text-slate-500">
-                                        Loading…
-                                    </div>
-                                ) : processedNotifications.length === 0 ? (
-                                    <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
-                                        <div className="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center text-slate-400 text-lg mb-2">
-                                            <i className="fa-solid fa-inbox"></i>
                                         </div>
-                                        <p className="text-[12px] text-slate-500">
-                                            No notifications
-                                        </p>
-                                    </div>
-                                ) : (
-                                    processedNotifications.map((n) => (
-                                        <a
-                                            key={n.id}
-                                            href={n.link}
-                                            onClick={() =>
-                                                handleClickNotification(n)
-                                            }
-                                            className={`flex items-start gap-3 px-4 py-3 border-b border-slate-50 last:border-b-0 hover:bg-slate-50 transition ${
-                                                n.isUnread
-                                                    ? "bg-orange-50/40"
-                                                    : ""
-                                            }`}
-                                        >
-                                            <div
-                                                className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${n.color}`}
+                                    )}
+                                </div>
+
+                                {/* Scrollable list */}
+                                <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
+                                    {loading &&
+                                    processedNotifications.length === 0 ? (
+                                        <div className="py-12 text-center text-[12px] text-slate-500">
+                                            Loading…
+                                        </div>
+                                    ) : processedNotifications.length === 0 ? (
+                                        <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
+                                            <div className="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center text-slate-400 text-lg mb-2">
+                                                <i className="fa-solid fa-inbox"></i>
+                                            </div>
+                                            <p className="text-[12px] text-slate-500">
+                                                No notifications
+                                            </p>
+                                        </div>
+                                    ) : (
+                                        processedNotifications.map((n) => (
+                                            <a
+                                                key={n.id}
+                                                href={n.link}
+                                                onClick={() =>
+                                                    handleClickNotification(n)
+                                                }
+                                                className={`flex items-start gap-3 px-4 py-3 border-b border-slate-50 last:border-b-0 hover:bg-slate-50 transition ${
+                                                    n.isUnread
+                                                        ? "bg-orange-50/40"
+                                                        : ""
+                                                }`}
                                             >
-                                                <i
-                                                    className={`${n.icon} text-[13px]`}
-                                                ></i>
-                                            </div>
-                                            <div className="flex-1 min-w-0">
-                                                <p
-                                                    className={`text-[12.5px] leading-tight ${n.isUnread ? "font-bold text-slate-900" : "font-medium text-slate-600"}`}
+                                                <div
+                                                    className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${n.color}`}
                                                 >
-                                                    {n.title}
-                                                </p>
-                                                <p className="text-[11.5px] text-slate-500 mt-0.5 truncate">
-                                                    {n.description}
-                                                </p>
-                                                <p className="text-[10.5px] text-slate-400 mt-1">
-                                                    {timeAgo(n.time)}
-                                                </p>
-                                            </div>
-                                            {n.isUnread && (
-                                                <span className="w-2 h-2 rounded-full bg-rose-500 mt-1.5 flex-shrink-0" />
-                                            )}
-                                        </a>
-                                    ))
-                                )}
+                                                    <i
+                                                        className={`${n.icon} text-[13px]`}
+                                                    ></i>
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <p
+                                                        className={`text-[12.5px] leading-tight break-words ${
+                                                            n.isUnread
+                                                                ? "font-bold text-slate-900"
+                                                                : "font-medium text-slate-600"
+                                                        }`}
+                                                    >
+                                                        {n.title}
+                                                    </p>
+                                                    <p className="text-[11.5px] text-slate-500 mt-0.5 truncate">
+                                                        {n.description}
+                                                    </p>
+                                                    <p className="text-[10.5px] text-slate-400 mt-1">
+                                                        {timeAgo(n.time)}
+                                                    </p>
+                                                </div>
+                                                {n.isUnread && (
+                                                    <span className="w-2 h-2 rounded-full bg-rose-500 mt-1.5 flex-shrink-0" />
+                                                )}
+                                            </a>
+                                        ))
+                                    )}
+                                </div>
                             </div>
-                        </div>
+                        </>
                     )}
                 </div>
 

@@ -21,16 +21,10 @@ class StayExtensionController extends Controller
             ->latest()
             ->get();
 
-        $metrics = [
-            'total'    => StayExtensionRequest::count(),
-            'pending'  => StayExtensionRequest::pending()->count(),
-            'approved' => StayExtensionRequest::approved()->count(),
-            'rejected' => StayExtensionRequest::rejected()->count(),
-        ];
+        $metrics = $this->buildMetrics();
 
-        $requestsForReact = $requests->mapWithKeys(function ($req) {
-            return [$req->id => $req->toReactArray()];
-        })->toArray();
+        // ✅ Build from the SAME serializer used by data(), keyed by real id
+        $requestsForReact = $this->buildReactMap($requests);
 
         return view('admin.services.stay-extension', compact('requests', 'metrics', 'requestsForReact'));
     }
@@ -72,7 +66,7 @@ class StayExtensionController extends Controller
 
         return response()->json([
             'success' => true,
-            'data'    => $stayExtensionRequest->toReactArray(),
+            'data'    => $this->serializeForReact($stayExtensionRequest),
         ]);
     }
 
@@ -181,28 +175,14 @@ class StayExtensionController extends Controller
     {
         $requests = StayExtensionRequest::with(['tenant.user', 'room'])->latest()->get();
 
-        $metrics = [
-            'total'    => StayExtensionRequest::count(),
-            'pending'  => StayExtensionRequest::pending()->count(),
-            'approved' => StayExtensionRequest::approved()->count(),
-            'rejected' => StayExtensionRequest::rejected()->count(),
-        ];
+        // ✅ Row shape matches what admin blade uses; `react` is keyed by real id
+        $rows = $requests->map(fn ($req) => $this->serializeRow($req))->values();
 
-        $rows = $requests->map(function ($req) {
-            return [
-                'id'                  => $req->id,
-                'tenant_name'         => $req->tenant->user->name ?? 'Unknown',
-                'room_number'         => $req->room?->room_number ? 'Room ' . $req->room->room_number : 'N/A',
-                'current_lease_end'   => $req->current_lease_end?->format('M d, Y'),
-                'requested_lease_end' => $req->requested_lease_end?->format('M d, Y'),
-                'extension_label'     => $req->extension_label,
-                'status'              => $req->status,
-                'status_class'        => $req->status_class,
-                'is_pending'          => $req->status === 'Pending',
-            ];
-        })->values();
-
-        return response()->json(['rows' => $rows, 'metrics' => $metrics]);
+        return response()->json([
+            'rows'    => $rows,
+            'metrics' => $this->buildMetrics(),
+            'react'   => $this->buildReactMap($requests),
+        ]);
     }
 
     public function destroy(StayExtensionRequest $stayExtensionRequest)
@@ -221,6 +201,67 @@ class StayExtensionController extends Controller
     // ============================================================
     // HELPERS
     // ============================================================
+
+    private function buildMetrics(): array
+    {
+        return [
+            'total'    => StayExtensionRequest::count(),
+            'pending'  => StayExtensionRequest::pending()->count(),
+            'approved' => StayExtensionRequest::approved()->count(),
+            'rejected' => StayExtensionRequest::rejected()->count(),
+        ];
+    }
+
+    /**
+     * The exact row shape used for the table refresh AND the React modal payload.
+     * Includes `id` and keys the modal needs (tenant, reference_no, current_end, etc.).
+     */
+    private function serializeRow(StayExtensionRequest $req): array
+    {
+        return [
+            'id'                  => $req->id,
+            'tenant_name'         => $req->tenant?->user?->name ?? 'Unknown',
+            'room_number'         => $req->room?->room_number ? 'Room ' . $req->room->room_number : 'N/A',
+            'current_lease_end'   => $req->current_lease_end?->format('M d, Y'),
+            'requested_lease_end' => $req->requested_lease_end?->format('M d, Y'),
+            'extension_label'     => $req->extension_label,
+            'status'              => $req->status,
+            'status_class'        => $req->status_class,
+            'is_pending'          => $req->status === 'Pending',
+        ];
+    }
+
+    /**
+     * Full payload consumed by React modals. Mirrors admin/service keys used in JSX.
+     */
+    private function serializeForReact(StayExtensionRequest $req): array
+    {
+        return [
+            'id'              => $req->id,
+            'tenant'          => $req->tenant?->user?->name ?? 'Unknown',
+            'reference_no'    => $req->reference_no,
+            'room_number'     => $req->room?->room_number ? 'Room ' . $req->room->room_number : 'N/A',
+            'current_end'     => $req->current_lease_end?->format('M d, Y'),
+            'requested_end'   => $req->requested_lease_end?->format('M d, Y'),
+            'extension_days'  => $req->extension_label,
+            'status'          => $req->status,
+            'reason'          => $req->reason,
+            'admin_notes'     => $req->admin_notes ?? '',
+            'submitted'       => $req->created_at?->format('M d, Y'),
+        ];
+    }
+
+    /**
+     * Map keyed by real primary key.
+     */
+    private function buildReactMap($requests): array
+    {
+        return $requests
+            ->mapWithKeys(fn ($req) => [
+                (string) $req->id => $this->serializeForReact($req),
+            ])
+            ->all();
+    }
 
     private function createExtensionInvoice(
         StayExtensionRequest $request,

@@ -53,123 +53,130 @@
             </div>
         </div>
 
-        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-            <table class="w-full text-left">
-                <thead>
-                    <tr
-                        class="bg-slate-50 text-[11px] font-bold text-slate-500 tracking-wide uppercase border-b border-slate-200">
-                        <th class="py-3.5 px-5 w-[28%]">Request</th>
-                        <th class="py-3.5 px-5 w-[22%]">Room / Tenant</th>
-                        <th class="py-3.5 px-5 w-[18%]">Assigned</th>
-                        <th class="py-3.5 px-5 w-[14%]">Status</th>
-                        <th class="py-3.5 px-5 w-[12%]">Date</th>
-                        <th class="py-3.5 px-5 w-[6%]"></th>
-                    </tr>
-                </thead>
-                <tbody id="maintenance-tbody">
-                    {{-- Server-rendered on first paint --}}
-                    @forelse($activeRequests as $req)
-                        <tr class="border-b border-slate-50 last:border-0">
-                            <td class="py-4 px-5">
-                                <div class="font-bold text-slate-900 text-sm">{{ $req->title }}</div>
-                                <div class="flex items-center gap-2 mt-1">
-                                    <span
-                                        class="text-[10px] font-extrabold px-1.5 py-0.5 rounded uppercase tracking-wide {{ $req->priority_class }}">{{ $req->priority }}</span>
-                                    <span class="text-[12px] text-slate-400">{{ $req->category }}</span>
-                                </div>
-                            </td>
-                            <td class="py-4 px-5">
-                                <div class="font-semibold text-slate-700 text-[13px]">
-                                    {{ $req->room?->room_number ? 'Room ' . $req->room->room_number : 'N/A' }}</div>
-                                <div class="text-xs text-slate-400 mt-0.5">{{ $req->tenant?->user?->name ?? 'Unknown' }}
-                                </div>
-                            </td>
-                            <td class="py-4 px-5">
-                                @if ($req->assigned_staff)
-                                    <span class="text-slate-600 font-medium text-[13px]">{{ $req->assigned_staff }}</span>
-                                @else
-                                    <span class="text-slate-400 italic text-[13px]">Unassigned</span>
-                                @endif
-                            </td>
-                            <td class="py-4 px-5"><span
-                                    class="inline-block px-3 py-1 rounded-full text-xs font-semibold {{ $req->status_class }}">{{ $req->status }}</span>
-                            </td>
-                            <td class="py-4 px-5 text-[13px] text-slate-500">{{ $req->created_at->format('M d, Y') }}</td>
-                            <td class="py-4 px-5">
-                                <button data-request-id="{{ $req->id }}" data-request='@json($req)'
-                                    class="text-emerald-600 hover:text-emerald-700 text-[13px] font-semibold inline-flex items-center gap-1.5 admin-view-request-btn">
-                                    <i class="fa-regular fa-eye"></i> View
-                                </button>
-                            </td>
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm">
+            {{-- Scroll container --}}
+            <div class="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+                <table class="w-full min-w-225 text-left">
+                    <thead>
+                        <tr
+                            class="bg-slate-50 text-[11px] font-bold text-slate-500 tracking-wide uppercase border-b border-slate-200">
+                            <th class="py-3.5 px-5 min-w-55">Request</th>
+                            <th class="py-3.5 px-5 min-w-45">Room / Tenant</th>
+                            <th class="py-3.5 px-5 min-w-37.5">Assigned</th>
+                            <th class="py-3.5 px-5 min-w-32.5">Status</th>
+                            <th class="py-3.5 px-5 min-w-27.5">Date</th>
+                            <th class="py-3.5 px-5 min-w-20"></th>
                         </tr>
-                    @empty
-                        <tr>
-                            <td colspan="6" class="py-12 text-center text-slate-400 text-[13px]">
-                                <i class="fa-solid fa-inbox text-3xl mb-3 block opacity-30"></i>
-                                No active maintenance requests found.
-                            </td>
-                        </tr>
-                    @endforelse
-                </tbody>
-            </table>
+                    </thead>
+                    <tbody id="maintenance-tbody">
+                        {{-- Server-rendered on first paint --}}
+                        @forelse($activeRequests as $req)
+                            <tr class="border-b border-slate-50 last:border-0">
+                                <td class="py-4 px-5">
+                                    <div class="font-bold text-slate-900 text-sm">{{ $req->title }}</div>
+                                    <div class="flex items-center gap-2 mt-1">
+                                        <span
+                                            class="text-[10px] font-extrabold px-1.5 py-0.5 rounded uppercase tracking-wide {{ $req->priority_class }}">{{ $req->priority }}</span>
+                                        <span class="text-[12px] text-slate-400">{{ $req->category }}</span>
+                                    </div>
+                                </td>
+                                <td class="py-4 px-5">
+                                    <div class="font-semibold text-slate-700 text-[13px]">
+                                        {{ $req->room?->room_number ? 'Room ' . $req->room->room_number : 'N/A' }}</div>
+                                    <div class="text-xs text-slate-400 mt-0.5">{{ $req->tenant?->user?->name ?? 'Unknown' }}
+                                    </div>
+                                </td>
+                                <td class="py-4 px-5">
+                                    @if ($req->assigned_staff)
+                                        <span
+                                            class="text-slate-600 font-medium text-[13px]">{{ $req->assigned_staff }}</span>
+                                    @else
+                                        <span class="text-slate-400 italic text-[13px]">Unassigned</span>
+                                    @endif
+                                </td>
+                                <td class="py-4 px-5"><span
+                                        class="inline-block px-3 py-1 rounded-full text-xs font-semibold {{ $req->status_class }}">{{ $req->status }}</span>
+                                </td>
+                                <td class="py-4 px-5 text-[13px] text-slate-500">{{ $req->created_at->format('M d, Y') }}
+                                </td>
+                                <td class="py-4 px-5">
+                                    <button data-request-id="{{ $req->id }}"
+                                        data-request='@json($req)'
+                                        class="text-emerald-600 hover:text-emerald-700 text-[13px] font-semibold inline-flex items-center gap-1.5 admin-view-request-btn">
+                                        <i class="fa-regular fa-eye"></i> View
+                                    </button>
+                                </td>
+                            </tr>
+                        @empty
+                            <tr>
+                                <td colspan="6" class="py-12 text-center text-slate-400 text-[13px]">
+                                    <i class="fa-solid fa-inbox text-3xl mb-3 block opacity-30"></i>
+                                    No active maintenance requests found.
+                                </td>
+                            </tr>
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
         </div>
-    </div>
 
-    <div id="admin-services-modals" data-requests='@json($requests)'></div>
-@endsection
+        <div id="admin-services-modals" data-requests='@json($requests)'></div>
+    @endsection
 
-@push('scripts')
-<script>
-(function () {
-    window.addEventListener('load', () => {
-        const DATA_URL = "{{ route('admin.services.maintenance.data') }}";
-        const tbody    = document.getElementById('maintenance-tbody');
-        const modalsEl = document.getElementById('admin-services-modals');
+    @push('scripts')
+        <script>
+            (function() {
+                window.addEventListener('load', () => {
+                    const DATA_URL = "{{ route('admin.services.maintenance.data') }}";
+                    const tbody = document.getElementById('maintenance-tbody');
+                    const modalsEl = document.getElementById('admin-services-modals');
 
-        const escapeHtml = (str) => {
-            if (!str) return '';
-            return String(str)
-                .replace(/&/g, "&amp;")
-                .replace(/</g, "&lt;")
-                .replace(/>/g, "&gt;")
-                .replace(/"/g, "&quot;")
-                .replace(/'/g, "&#039;");
-        };
+                    const escapeHtml = (str) => {
+                        if (!str) return '';
+                        return String(str)
+                            .replace(/&/g, "&amp;")
+                            .replace(/</g, "&lt;")
+                            .replace(/>/g, "&gt;")
+                            .replace(/"/g, "&quot;")
+                            .replace(/'/g, "&#039;");
+                    };
 
-        // --- Silent Fetch & Render ---
-        async function refreshTable() {
-            try {
-                const res = await fetch(DATA_URL, { 
-                    headers: { 'Accept': 'application/json' },
-                    cache: 'no-store'
-                });
-                if (!res.ok) return;
-                const data = await res.json();
+                    // --- Silent Fetch & Render ---
+                    async function refreshTable() {
+                        try {
+                            const res = await fetch(DATA_URL, {
+                                headers: {
+                                    'Accept': 'application/json'
+                                },
+                                cache: 'no-store'
+                            });
+                            if (!res.ok) return;
+                            const data = await res.json();
 
-                // Update metrics
-                for (const [key, val] of Object.entries(data.metrics)) {
-                    const el = document.getElementById(`metric-${key}`);
-                    if (el) el.textContent = val;
-                }
+                            // Update metrics
+                            for (const [key, val] of Object.entries(data.metrics)) {
+                                const el = document.getElementById(`metric-${key}`);
+                                if (el) el.textContent = val;
+                            }
 
-                // Re-render rows
-                const active = data.rows.filter(r => !r.is_finalized);
-                let html = '';
+                            // Re-render rows
+                            const active = data.rows.filter(r => !r.is_finalized);
+                            let html = '';
 
-                if (active.length === 0) {
-                    html = `<tr>
+                            if (active.length === 0) {
+                                html = `<tr>
                         <td colspan="6" class="py-12 text-center text-slate-400 text-[13px]">
                             <i class="fa-solid fa-inbox text-3xl mb-3 block opacity-30"></i>
                             No active maintenance requests found.
                         </td>
                     </tr>`;
-                } else {
-                    active.forEach(r => {
-                        const staff = r.assigned_staff 
-                            ? `<span class="text-slate-600 font-medium text-[13px]">${escapeHtml(r.assigned_staff)}</span>` 
-                            : `<span class="text-slate-400 italic text-[13px]">Unassigned</span>`;
+                            } else {
+                                active.forEach(r => {
+                                    const staff = r.assigned_staff ?
+                                        `<span class="text-slate-600 font-medium text-[13px]">${escapeHtml(r.assigned_staff)}</span>` :
+                                        `<span class="text-slate-400 italic text-[13px]">Unassigned</span>`;
 
-                        html += `
+                                    html += `
                             <tr class="border-b border-slate-50 last:border-0">
                                 <td class="py-4 px-5">
                                     <div class="font-bold text-slate-900 text-sm">${escapeHtml(r.title)}</div>
@@ -191,34 +198,36 @@
                                     </button>
                                 </td>
                             </tr>`;
-                    });
-                }
+                                });
+                            }
 
-                tbody.innerHTML = html;
+                            tbody.innerHTML = html;
 
-                // Update React modal state
-                if (modalsEl) {
-                    modalsEl.dataset.requests = JSON.stringify(data.rows);
-                    window.dispatchEvent(new CustomEvent('maintenance:data-updated', { detail: data.rows }));
-                }
-            } catch (e) {
-                console.error('Admin Refresh Error:', e);
-            }
-        }
+                            // Update React modal state
+                            if (modalsEl) {
+                                modalsEl.dataset.requests = JSON.stringify(data.rows);
+                                window.dispatchEvent(new CustomEvent('maintenance:data-updated', {
+                                    detail: data.rows
+                                }));
+                            }
+                        } catch (e) {
+                            console.error('Admin Refresh Error:', e);
+                        }
+                    }
 
-        // --- WebSocket Listener ---
-        if (window.Echo) {
-            window.Echo.private('admin.services')
-                .listen('.maintenance.updated', () => {
-                    console.log('[Live] Admin Maintenance updated, refreshing...');
-                    // Delay slightly to let the DB transaction finish
-                    setTimeout(refreshTable, 800);
+                    // --- WebSocket Listener ---
+                    if (window.Echo) {
+                        window.Echo.private('admin.services')
+                            .listen('.maintenance.updated', () => {
+                                console.log('[Live] Admin Maintenance updated, refreshing...');
+                                // Delay slightly to let the DB transaction finish
+                                setTimeout(refreshTable, 800);
+                            });
+                    }
+
+                    // --- Local Refresh Event ---
+                    window.addEventListener('maintenance:refresh', refreshTable);
                 });
-        }
-
-        // --- Local Refresh Event ---
-        window.addEventListener('maintenance:refresh', refreshTable);
-    });
-})();
-</script>
-@endpush
+            })();
+        </script>
+    @endpush
