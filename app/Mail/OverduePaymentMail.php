@@ -22,7 +22,7 @@ class OverduePaymentMail extends Mailable
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: '⚠️ OVERDUE: Invoice ' . $this->invoice->transaction_no . ' - Immediate Action Required',
+            subject: 'OVERDUE: Invoice ' . $this->invoice->transaction_no . ' - Immediate Action Required',
         );
     }
 

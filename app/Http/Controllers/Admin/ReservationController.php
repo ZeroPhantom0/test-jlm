@@ -17,6 +17,10 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
+use App\Mail\ReservationApprovedMail;
+use App\Mail\ReservationRejectedMail;
+use Illuminate\Support\Facades\Mail;
+use App\Services\SmsService;
 
 class ReservationController extends Controller
 {
@@ -198,7 +202,7 @@ class ReservationController extends Controller
 
     public function approve(Request $request, Reservation $reservation)
     {
-        session()->save();
+        // Removed session()->save()
 
         $validated = $request->validate([
             'admin_notes' => ['nullable', 'string'],
@@ -263,6 +267,43 @@ class ReservationController extends Controller
             $settledInvoice = $this->settleReservationInvoice($reservation, $tenant);
         });
 
+        // ── Send Approval Email via QUEUE ──
+        try {
+            $email = $reservation->email ?? $reservation->user?->email;
+            if ($email) {
+                Mail::to($email)->queue(new ReservationApprovedMail($reservation->fresh()));
+            }
+        } catch (\Throwable $e) {
+            report($e);
+        }
+
+        // ── Send Approval SMS 
+        try {
+            $phone = $reservation->phone ?? $reservation->user?->phone;
+
+            if ($phone) {
+                // Clean the phone number: remove spaces, dashes, and leading 0 or +63
+                $phone = preg_replace('/[^0-9]/', '', $phone);
+                if (str_starts_with($phone, '0')) {
+                    $phone = '63' . substr($phone, 1);
+                } elseif (str_starts_with($phone, '63')) {
+                    // already good
+                } else {
+                    $phone = '63' . $phone;
+                }
+
+                $msg = "Your reservation {$reservation->reference_no} has been APPROVED. Log in to your portal to view your billing details.";
+                $sent = SmsService::send($phone, $msg);
+
+                // If it fails, log it so you can see why
+                if (!$sent) {
+                    \Illuminate\Support\Facades\Log::warning('SMS failed to send for Reservation Approval', ['phone' => $phone]);
+                }
+            }
+        } catch (\Throwable $e) {
+            report($e);
+        }
+
         AuditLogger::log([
             'action'       => 'APPROVE',
             'module'       => 'RESERVATIONS',
@@ -275,7 +316,6 @@ class ReservationController extends Controller
 
         event(new ReservationUpdated('approved', $reservation->id));
 
-        // Broadcast with the real invoice ID when one was created/updated
         if ($settledInvoice) {
             event(new InvoiceUpdated('created', $settledInvoice->id));
         }
@@ -289,8 +329,8 @@ class ReservationController extends Controller
 
     public function reject(Request $request, Reservation $reservation)
     {
-        session()->save();
-        
+        // Removed session()->save()
+
         $validated = $request->validate([
             'admin_notes' => ['nullable', 'string'],
         ]);
@@ -311,6 +351,44 @@ class ReservationController extends Controller
 
             $deletedInvoiceIds = $this->deleteInvoicesOnRejection($reservation);
         });
+
+        // ── Send Rejection Email via QUEUE ──
+        try {
+            $email = $reservation->email ?? $reservation->user?->email;
+            if ($email) {
+                Mail::to($email)->queue(
+                    new ReservationRejectedMail($reservation->fresh(), $validated['admin_notes'] ?? null)
+                );
+            }
+        } catch (\Throwable $e) {
+            report($e);
+        }
+
+        // ── Send Rejection SMS
+        try {
+            $phone = $reservation->phone ?? $reservation->user?->phone;
+
+            if ($phone) {
+                // Clean the phone number
+                $phone = preg_replace('/[^0-9]/', '', $phone);
+                if (str_starts_with($phone, '0')) {
+                    $phone = '63' . substr($phone, 1);
+                } elseif (str_starts_with($phone, '63')) {
+                    // already good
+                } else {
+                    $phone = '63' . $phone;
+                }
+
+                $msg = "Your reservation {$reservation->reference_no} was DECLINED. Please check your email or portal for the reason.";
+                $sent = SmsService::send($phone, $msg);
+
+                if (!$sent) {
+                    \Illuminate\Support\Facades\Log::warning('SMS failed to send for Reservation Rejection', ['phone' => $phone]);
+                }
+            }
+        } catch (\Throwable $e) {
+            report($e);
+        }
 
         AuditLogger::log([
             'action'       => 'REJECT',

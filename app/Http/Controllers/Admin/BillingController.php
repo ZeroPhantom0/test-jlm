@@ -15,6 +15,7 @@ use App\Models\Reservation;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Services\AuditLogger;
+use App\Services\BillingService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -37,7 +38,7 @@ class BillingController extends Controller
         if (! empty($filters['status'])) {
             $query->where('status', $filters['status']);
         } else {
-            $query->whereIn('status', self::ACTIONABLE_STATUSES);
+            $query->whereIn('status', static::ACTIONABLE_STATUSES);
         }
 
         $invoices = $query->paginate(50);
@@ -73,7 +74,7 @@ class BillingController extends Controller
             ->keyBy('transaction_no')
             ->map(fn($inv) => $this->reactPayload($inv));
 
-        $availableStatuses = self::ACTIONABLE_STATUSES;
+        $availableStatuses = static::ACTIONABLE_STATUSES;
 
         return view('admin.billing', compact(
             'invoices',
@@ -97,7 +98,7 @@ class BillingController extends Controller
         if (! empty($status)) {
             $query->where('status', $status);
         } else {
-            $query->whereIn('status', self::ACTIONABLE_STATUSES);
+            $query->whereIn('status', static::ACTIONABLE_STATUSES);
         }
 
         $invoices = $query->paginate(50);
@@ -168,13 +169,19 @@ class BillingController extends Controller
             return response()->json(['message' => 'Cannot delete a paid invoice.'], 422);
         }
 
+        // Archive proof-of-payment instead of deleting it.
+        if ($invoice->receipt_path) {
+            BillingService::archiveReceipt($invoice->receipt_path);
+        }
+
+        // Soft delete (SoftDeletes trait on Invoice model)
         $invoice->delete();
 
         event(new \App\Events\InvoiceUpdated('deleted', $invoice->id));
 
         return response()->json([
             'success' => true,
-            'message' => 'Invoice deleted.',
+            'message' => 'Invoice archived (soft-deleted).',
         ]);
     }
 
@@ -283,11 +290,14 @@ class BillingController extends Controller
                     : null,
             ]);
 
+            $updatedInvoice = $invoice->fresh();
+            $reservation = $this->reservationForInvoice($updatedInvoice);
+
             if (!$wasPaid && $status === 'Paid') {
-                $this->deductFromReservation($invoice->fresh());
+                $this->deductFromReservation($updatedInvoice, $reservation);
             }
 
-            $this->syncLinkedReservation($invoice->fresh());
+            $this->syncLinkedReservation($updatedInvoice, $reservation);
 
             AuditLogger::log([
                 'action'       => 'UPDATE',
@@ -320,19 +330,19 @@ class BillingController extends Controller
         }
     }
 
-    public function verifyPayment(Request $request, Invoice $invoice)
+     public function verifyPayment(Request $request, Invoice $invoice)
     {
-        session()->save();
-
+        // Removed session()->save() to prevent session blocking
         if ($invoice->status !== 'Pending') {
-            return response()->json([
-                'message' => 'Invoice is not pending verification.',
-            ], 422);
+            return response()->json(['message' => 'Invoice is not pending verification.'], 422);
         }
 
         DB::beginTransaction();
         try {
             [$status, $balance, $datePaid, $verified] = $this->deriveInvoiceStatus($invoice);
+            
+            // Eager load the reservation ONCE
+            $reservation = $this->reservationForInvoice($invoice);
 
             $invoice->update([
                 'status'      => $status,
@@ -342,22 +352,24 @@ class BillingController extends Controller
                 'verified_at' => $verified ? now() : null,
             ]);
 
-            $this->deductFromReservation($invoice);
-            $this->syncLinkedReservation($invoice);
+            if ($reservation) {
+                $this->deductFromReservation($invoice, $reservation);
+                $this->syncLinkedReservation($invoice, $reservation);
+            }
 
             DB::commit();
 
             $this->notifyTenant($invoice, 'verified');
 
-            if ($status === 'Paid') {
-                $this->sendPaymentApprovedEmail($invoice->fresh());
-            } elseif ($status === 'Partial') {
-                $this->sendPaymentApprovedEmail($invoice->fresh(), true);
+            // Use queue() instead of send()
+            if ($status === 'Paid' || $status === 'Partial') {
+                $email = $this->getTenantEmail($invoice);
+                if ($email) {
+                    Mail::to($email)->queue(new PaymentApprovedMail($invoice->fresh()));
+                }
             }
 
-            // Broadcast billing change + possible reservation auto-approval
             event(new InvoiceUpdated('verified', $invoice->id));
-            event(new ReservationUpdated('updated', null));
 
             $message = match ($status) {
                 'Paid'    => 'Payment verified successfully. Invoice is now fully Paid.',
@@ -374,42 +386,29 @@ class BillingController extends Controller
         } catch (\Throwable $e) {
             DB::rollBack();
             report($e);
-            return response()->json([
-                'message' => 'Verification failed: ' . $e->getMessage(),
-            ], 500);
+            return response()->json(['message' => 'Verification failed: ' . $e->getMessage()], 500);
         }
     }
 
-    public function rejectPayment(Request $request, Invoice $invoice)
+      public function rejectPayment(Request $request, Invoice $invoice)
     {
-        session()->save(); 
-        
         $validated = $request->validate([
             'admin_notes' => ['required', 'string', 'max:1000'],
         ]);
 
         if ($invoice->status !== 'Pending') {
-            return response()->json([
-                'message' => 'Invoice is not pending verification.',
-            ], 422);
+            return response()->json(['message' => 'Invoice is not pending verification.'], 422);
         }
 
-        $tenantUser  = User::find($invoice->tenant_id);
-        if (! $tenantUser) {
-            $tenantUser = User::find(Tenant::find($invoice->tenant_id)?->user_id);
-        }
-        $tenantEmail = $tenantUser?->email ?? $invoice->tenant_name;
+        $tenantEmail = $this->getTenantEmail($invoice) ?? $invoice->tenant_name;
 
         DB::beginTransaction();
         try {
             $reservation = $this->reservationForInvoice($invoice);
 
             if ($reservation && $reservation->status === 'Pending') {
-                if (
-                    $reservation->proof_of_payment
-                    && Storage::disk('public')->exists($reservation->proof_of_payment)
-                ) {
-                    Storage::disk('public')->delete($reservation->proof_of_payment);
+                if ($reservation->proof_of_payment) {
+                    BillingService::archiveProofOfPayment($reservation->proof_of_payment);
                 }
 
                 $reservation->update([
@@ -428,10 +427,10 @@ class BillingController extends Controller
                     ->get();
 
                 foreach ($invoices as $inv) {
-                    if ($inv->receipt_path && Storage::disk('public')->exists($inv->receipt_path)) {
-                        Storage::disk('public')->delete($inv->receipt_path);
+                    if ($inv->receipt_path) {
+                        BillingService::archiveReceipt($inv->receipt_path);
                     }
-                    $inv->delete();
+                    $inv->delete(); 
                 }
 
                 AuditLogger::log([
@@ -449,7 +448,11 @@ class BillingController extends Controller
                 DB::commit();
 
                 $this->notifyTenant($invoice, 'rejected', $validated['admin_notes']);
-                $this->sendPaymentRejectedEmail($invoice, $validated['admin_notes']);
+                
+                $email = $this->getTenantEmail($invoice);
+                if ($email) {
+                    Mail::to($email)->queue(new PaymentRejectedMail($invoice, $validated['admin_notes']));
+                }
 
                 event(new InvoiceUpdated('rejected', $invoice->id));
                 event(new ReservationUpdated('rejected', $reservation->id));
@@ -461,8 +464,8 @@ class BillingController extends Controller
                 ]);
             }
 
-            if ($invoice->receipt_path && Storage::disk('public')->exists($invoice->receipt_path)) {
-                Storage::disk('public')->delete($invoice->receipt_path);
+            if ($invoice->receipt_path) {
+                BillingService::archiveReceipt($invoice->receipt_path);
             }
 
             $revertedAmount = max(0, (float) $invoice->amount_paid - (float) $invoice->balance);
@@ -492,7 +495,11 @@ class BillingController extends Controller
             DB::commit();
 
             $this->notifyTenant($invoice, 'rejected', $validated['admin_notes']);
-            $this->sendPaymentRejectedEmail($invoice->fresh(), $validated['admin_notes']);
+            
+            $email = $this->getTenantEmail($invoice);
+            if ($email) {
+                Mail::to($email)->queue(new PaymentRejectedMail($invoice->fresh(), $validated['admin_notes']));
+            }
 
             event(new InvoiceUpdated('rejected', $invoice->id));
 
@@ -504,9 +511,7 @@ class BillingController extends Controller
         } catch (\Throwable $e) {
             DB::rollBack();
             report($e);
-            return response()->json([
-                'message' => 'Rejection failed: ' . $e->getMessage(),
-            ], 500);
+            return response()->json(['message' => 'Rejection failed: ' . $e->getMessage()], 500);
         }
     }
 
@@ -572,14 +577,11 @@ class BillingController extends Controller
         ];
     }
 
-    private function deductFromReservation(Invoice $invoice): void
+     private function deductFromReservation(Invoice $invoice, ?Reservation $reservation): void
     {
-        $reservation = $this->reservationForInvoice($invoice);
-
         if ($reservation) {
             $paidAmount   = (float) $invoice->amount_paid;
             $newRemaining = max(0, (float) $reservation->remaining - $paidAmount);
-
             $reservation->update(['remaining' => $newRemaining]);
         }
     }
@@ -627,7 +629,7 @@ class BillingController extends Controller
         return ['Partial', max(0, $total - $paid), null, true];
     }
 
-    private function syncLinkedReservation(Invoice $invoice): void
+    private function syncLinkedReservation(Invoice $invoice, ?Reservation $reservation): void
     {
         $reservation = $this->reservationForInvoice($invoice);
 
@@ -707,11 +709,12 @@ class BillingController extends Controller
     private function notifyTenant(Invoice $invoice, string $type, string $notes = ''): void
     {
         try {
-            $tenantUser = User::where('id', $invoice->tenant_id)->first();
+            $tenant = Tenant::with('user')->find($invoice->tenant_id);
+            $tenantUser = $tenant?->user;
+
             if (! $tenantUser) {
-                $tenantUser = User::find(Tenant::find($invoice->tenant_id)?->user_id);
+                return;
             }
-            if (! $tenantUser) return;
 
             if ($type === 'verified' && class_exists('App\\Notifications\\PaymentVerifiedNotification')) {
                 $tenantUser->notify(new \App\Notifications\PaymentVerifiedNotification($invoice));
@@ -725,14 +728,11 @@ class BillingController extends Controller
 
     private function getTenantEmail(Invoice $invoice): ?string
     {
-        $user = User::find($invoice->tenant_id);
-        if (!$user) {
-            $tenant = Tenant::find($invoice->tenant_id);
-            if ($tenant) {
-                $user = User::find($tenant->user_id);
-            }
-        }
-        return $user?->email;
+        if (! $invoice->tenant_id) return null;
+        
+        return Tenant::join('users', 'tenants.user_id', '=', 'users.id')
+            ->where('tenants.id', $invoice->tenant_id)
+            ->value('users.email');
     }
 
     private function sendPaymentApprovedEmail(Invoice $invoice, bool $isPartial = false): void
@@ -782,10 +782,13 @@ class BillingController extends Controller
             $email = $this->getTenantEmail($invoice);
             if ($email) {
                 $daysOverdue = $invoice->due_date
-                    ? now()->diffInDays($invoice->due_date)
+                    ? (int) now()->diffInDays($invoice->due_date)
                     : 0;
 
-                Mail::to($email)->send(new OverduePaymentMail($invoice, (int) $daysOverdue));
+                Mail::to($email)->send(new OverduePaymentMail($invoice, $daysOverdue));
+
+                // Marks the invoice so the automated nightly cron doesn't email them again today.
+                $invoice->update(['was_overdue_notified_at' => now()]);
             }
         } catch (\Throwable $e) {
             report($e);

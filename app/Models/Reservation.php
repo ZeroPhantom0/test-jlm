@@ -57,9 +57,18 @@ class Reservation extends Model
 
     // ---- Relationships ----
 
-    public function user(): BelongsTo       { return $this->belongsTo(User::class); }
-    public function room(): BelongsTo       { return $this->belongsTo(Room::class); }
-    public function processedBy(): BelongsTo { return $this->belongsTo(User::class, 'processed_by'); }
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
+    }
+    public function room(): BelongsTo
+    {
+        return $this->belongsTo(Room::class);
+    }
+    public function processedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'processed_by');
+    }
 
     // ---- Accessors ----
 
@@ -135,10 +144,22 @@ class Reservation extends Model
 
     // ---- Scopes ----
 
-    public function scopePending($query)  { return $query->where('status', 'Pending'); }
-    public function scopeApproved($query) { return $query->where('status', 'Approved'); }
-    public function scopeRejected($query) { return $query->where('status', 'Rejected'); }
-    public function scopeExpired($query)  { return $query->where('status', 'Expired'); }
+    public function scopePending($query)
+    {
+        return $query->where('status', 'Pending');
+    }
+    public function scopeApproved($query)
+    {
+        return $query->where('status', 'Approved');
+    }
+    public function scopeRejected($query)
+    {
+        return $query->where('status', 'Rejected');
+    }
+    public function scopeExpired($query)
+    {
+        return $query->where('status', 'Expired');
+    }
 
     public function scopeFilter($query, array $filters)
     {
@@ -162,14 +183,31 @@ class Reservation extends Model
     public static function generateReferenceNo(): string
     {
         $lastId = static::max('id') ?? 0;
-        return '#RSV-' . ($lastId + 1);
+
+        // Optional: Add a safety loop in case of duplicates
+        $nextId = $lastId + 1;
+        while (static::where('reference_no', '#RSV-' . (100 + $nextId))->exists()) {
+            $nextId++;
+        }
+
+        return '#RSV-' . (100 + $nextId);
     }
 
     public static function generateReservationNumber(): string
     {
         $lastId = static::max('id') ?? 0;
         $year = now()->format('Y');
-        return 'RSV-' . $year . '-' . str_pad($lastId + 1, 5, '0', STR_PAD_LEFT);
+
+        $nextId = $lastId + 1;
+
+        // Safety loop: Keep incrementing until we find an unused number
+        while (
+            static::where('reservation_number', 'RSV-' . $year . '-' . str_pad($nextId, 5, '0', STR_PAD_LEFT))->exists()
+        ) {
+            $nextId++;
+        }
+
+        return 'RSV-' . $year . '-' . str_pad($nextId, 5, '0', STR_PAD_LEFT);
     }
 
     public static function makeAvatar(string $name): array
@@ -215,7 +253,7 @@ class Reservation extends Model
         $billed = (float) \App\Models\Invoice::where('tenant_id', $this->user?->tenant?->id)
             ->where(function ($q) {
                 $q->where('description', 'like', '%remaining%')
-                  ->orWhere('description', 'like', '%' . $this->reference_no . '%');
+                    ->orWhere('description', 'like', '%' . $this->reference_no . '%');
             })
             ->sum('balance');
 
@@ -244,7 +282,7 @@ class Reservation extends Model
             'checkout'        => $this->check_out?->format('M j, Y') ?? 'Open-ended',
             'stayPeriod'      => $this->stay_period,
             'stayDuration'    => $this->stay_duration,
-            'formattedCheckIn'=> $this->formatted_check_in,
+            'formattedCheckIn' => $this->formatted_check_in,
             'formattedCheckOut' => $this->formatted_check_out,
             'submitted'       => 'Submitted: ' . $this->created_at?->format('F j, Y'),
             'requestDetails'  => $this->request_details ?? '',

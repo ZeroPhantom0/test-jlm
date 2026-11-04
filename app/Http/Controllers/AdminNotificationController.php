@@ -175,6 +175,7 @@ class AdminNotificationController extends Controller
         // 2b) Payments submitted by tenants (awaiting verification)
         $pendingPayments = DB::table('invoices')
             ->where('status', 'Pending')
+            ->whereNull('deleted_at')   
             ->whereNotNull('receipt_path')
             ->orderByDesc('updated_at')
             ->limit(10)
@@ -198,6 +199,7 @@ class AdminNotificationController extends Controller
         // 3) Overdue / unpaid invoices
         $overdueInvoices = DB::table('invoices')
             ->whereIn('status', ['Overdue', 'Unpaid'])
+            ->whereNull('deleted_at')    
             ->whereNotNull('due_date')
             ->where('due_date', '<', now()->toDateString())
             ->orderByDesc('due_date')

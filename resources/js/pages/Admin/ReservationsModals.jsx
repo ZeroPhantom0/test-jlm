@@ -213,16 +213,11 @@ export default function ReservationsModals() {
             await sendAction(actionTarget.id, "approve", {
                 admin_notes: adminNotes,
             });
-
-            // Close the modal
             setShowApprove(false);
             setActionTarget(null);
             closeModal();
-
-            // Wait 600ms then silently refresh the table
-            setTimeout(() => {
-                window.dispatchEvent(new Event("reservation:refresh"));
-            }, 600);
+            // Dispatch instantly
+            window.dispatchEvent(new Event("reservation:refresh"));
         } catch (err) {
             alert(err.message);
             setSaving(false);
@@ -240,16 +235,11 @@ export default function ReservationsModals() {
             await sendAction(actionTarget.id, "reject", {
                 admin_notes: rejectNotes,
             });
-
-            // Close the modal
             setShowReject(false);
             setActionTarget(null);
             closeModal();
-
-            // Wait 600ms then silently refresh the table
-            setTimeout(() => {
-                window.dispatchEvent(new Event("reservation:refresh"));
-            }, 600);
+            // Dispatch instantly
+            window.dispatchEvent(new Event("reservation:refresh"));
         } catch (err) {
             alert(err.message);
             setSaving(false);

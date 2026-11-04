@@ -180,30 +180,21 @@ export default function BillingModals() {
         }
     };
 
-    const confirmVerify = async () => {
+        const confirmVerify = async () => {
         if (!invoice || !invoice.tn) return;
         setSaving(true);
         const modalRoot = document.getElementById("admin-billing-modals");
         if (modalRoot) modalRoot.dataset.saving = "true";
 
         try {
-            const res = await fetch(
-                `/admin/billing/${invoice.tn}/verify-payment`,
-                {
-                    method: "POST",
-                    headers: {
-                        Accept: "application/json",
-                        "X-CSRF-TOKEN": csrf(),
-                    },
-                },
-            );
+            const res = await fetch(`/admin/billing/${invoice.tn}/verify-payment`, {
+                method: "POST",
+                headers: { Accept: "application/json", "X-CSRF-TOKEN": csrf() },
+            });
             const result = await res.json();
 
             if (!res.ok) {
-                if (
-                    res.status === 422 &&
-                    result.message.includes("not pending")
-                ) {
+                if (res.status === 422 && result.message.includes("not pending")) {
                     alert(result.message);
                     closeAll();
                     window.dispatchEvent(new Event("billing:refresh"));
@@ -212,20 +203,16 @@ export default function BillingModals() {
                 throw new Error(result.message || "Verification failed.");
             }
 
-            // Close modal instantly
             closeAll();
-            setTimeout(
-                () => window.dispatchEvent(new Event("billing:refresh")),
-                600,
-            );
+            // Dispatch instantly
+            window.dispatchEvent(new Event("billing:refresh"));
         } catch (err) {
             alert(err.message);
         } finally {
             setSaving(false);
-            // ADD THIS
             setTimeout(() => {
                 if (modalRoot) delete modalRoot.dataset.saving;
-            }, 2000);
+            }, 1000); // Reduced from 2000ms to 1000ms
         }
     };
 
@@ -240,25 +227,19 @@ export default function BillingModals() {
         if (modalRoot) modalRoot.dataset.saving = "true";
 
         try {
-            const res = await fetch(
-                `/admin/billing/${invoice.tn}/reject-payment`,
-                {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                        Accept: "application/json",
-                        "X-CSRF-TOKEN": csrf(),
-                    },
-                    body: JSON.stringify({ admin_notes: rejectNotes }),
+            const res = await fetch(`/admin/billing/${invoice.tn}/reject-payment`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Accept: "application/json",
+                    "X-CSRF-TOKEN": csrf(),
                 },
-            );
+                body: JSON.stringify({ admin_notes: rejectNotes }),
+            });
             const result = await res.json();
 
             if (!res.ok) {
-                if (
-                    res.status === 422 &&
-                    result.message.includes("not pending")
-                ) {
+                if (res.status === 422 && result.message.includes("not pending")) {
                     alert(result.message);
                     closeAll();
                     window.dispatchEvent(new Event("billing:refresh"));
@@ -267,20 +248,16 @@ export default function BillingModals() {
                 throw new Error(result.message || "Rejection failed.");
             }
 
-            // Close modal instantly
             closeAll();
-            setTimeout(
-                () => window.dispatchEvent(new Event("billing:refresh")),
-                600,
-            );
+            // Dispatch instantly
+            window.dispatchEvent(new Event("billing:refresh"));
         } catch (err) {
             alert(err.message);
         } finally {
             setSaving(false);
-            // ADD THIS
             setTimeout(() => {
                 if (modalRoot) delete modalRoot.dataset.saving;
-            }, 2000);
+            }, 1000); // Reduced from 2000ms to 1000ms
         }
     };
 

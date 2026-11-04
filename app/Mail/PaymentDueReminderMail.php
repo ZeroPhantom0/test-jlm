@@ -22,7 +22,7 @@ class PaymentDueReminderMail extends Mailable
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: '⏰ Payment Reminder - Invoice ' . $this->invoice->transaction_no . ' Due Soon',
+            subject: 'Payment Reminder - Invoice ' . $this->invoice->transaction_no . ' Due Soon',
         );
     }
 

@@ -9,8 +9,9 @@
     <div style="max-width: 520px; margin: 0 auto; background: #ffffff; border-radius: 16px; box-shadow: 0 4px 24px rgba(0,0,0,0.06); overflow: hidden;">
         {{-- Header --}}
         <div style="background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%); padding: 36px 32px; text-align: center;">
-            <div style="width: 64px; height: 64px; background: rgba(255,255,255,0.2); border-radius: 50%; margin: 0 auto 16px; display: flex; align-items: center; justify-content: center;">
-                <span style="font-size: 32px;">🔐</span>
+            {{-- Text-based Centered Lock Icon --}}
+            <div style="width: 64px; height: 64px; background: rgba(255,255,255,0.2); border-radius: 50%; margin: 0 auto 16px; line-height: 64px; text-align: center;">
+                <span style="color: #ffffff; font-size: 32px; font-weight: 300; line-height: 1; display: inline-block; vertical-align: middle;">&#128274;</span>
             </div>
             <h1 style="color: #ffffff; margin: 0; font-size: 22px; font-weight: 700;">Password Reset Request</h1>
             <p style="color: #e0e7ff; margin: 8px 0 0; font-size: 14px;">JLM Cozy Cabin</p>

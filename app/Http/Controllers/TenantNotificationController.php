@@ -63,6 +63,7 @@ class TenantNotificationController extends Controller
         // 2) Outstanding / overdue invoices
         $invoices = DB::table('invoices')
             ->where('tenant_id', $tenant->id)
+            ->whereNull('deleted_at')    
             ->whereIn('status', ['Unpaid', 'Partial', 'Overdue'])
             ->orderByRaw("FIELD(status, 'Overdue', 'Unpaid', 'Partial')")
             ->orderBy('due_date')
@@ -94,6 +95,7 @@ class TenantNotificationController extends Controller
         // 2a) Recently verified invoices (Paid / Partial after admin verify)
         $resolvedInvoices = DB::table('invoices')
             ->where('tenant_id', $tenant->id)
+            ->whereNull('deleted_at') 
             ->whereIn('status', ['Paid', 'Partial'])
             ->whereNotNull('verified_at')
             ->where('verified_at', '>=', now()->subDays(14))

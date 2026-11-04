@@ -71,13 +71,13 @@ Route::middleware('guest')->group(function () {
     // --- ADMIN LOGIN ---
     Route::get('/admin/login',  [AuthController::class, 'showAdminLogin'])->name('admin.login');
     Route::post('/admin/login', [AuthController::class, 'adminLogin']);
-    
+
     // Wrap Admin verification routes in cache prevention
     Route::middleware('prevent.back.cache')->group(function () {
         Route::get('/admin/login/verify',  [AuthController::class, 'showAdminVerify'])->name('admin.login.verify');
         Route::post('/admin/login/verify', [AuthController::class, 'adminVerify'])->name('admin.login.verify.submit');
     });
-    
+
     Route::post('/admin/login/resend', [AuthController::class, 'adminResendCode'])->name('admin.login.resend');
     Route::post('/admin/login/cancel', [AuthController::class, 'adminCancelVerification'])->name('admin.login.cancel');
 
@@ -96,7 +96,7 @@ Route::middleware('guest')->group(function () {
         Route::get('/login/verify',  [AuthController::class, 'showVerify'])->name('login.verify');
         Route::post('/login/verify', [AuthController::class, 'verify'])->name('login.verify.submit');
     });
-    
+
     Route::post('/login/resend', [AuthController::class, 'resendCode'])->name('login.resend');
     Route::post('/login/cancel', [AuthController::class, 'cancelVerification'])->name('login.cancel');
 
@@ -286,10 +286,15 @@ Route::middleware(['auth', 'admin', 'prevent.back.cache'])->prefix('admin')->nam
     Route::put('/settings/password', [SettingsController::class, 'updatePassword'])->name('settings.password');
 
     // ---------- Data Management ----------
-    Route::post('/settings/backup',              [SettingsController::class, 'backupDatabase'])->name('settings.backup');
-    Route::get('/settings/backup/{filename}',    [SettingsController::class, 'downloadBackup'])->name('settings.download-backup');
-    Route::get('/settings/export',               [SettingsController::class, 'exportData'])->name('settings.export');
-    Route::post('/settings/archive',             [SettingsController::class, 'archiveRecords'])->name('settings.archive');
+    Route::post('/settings/backup', [SettingsController::class, 'backupDatabase'])->name('settings.backup');
+
+    // Constrain filename to only .sql files (defense-in-depth against path traversal)
+    Route::get('/settings/backup/{filename}', [SettingsController::class, 'downloadBackup'])
+        ->where('filename', '[A-Za-z0-9_\-]+\.sql')
+        ->name('settings.download-backup');
+
+    Route::get('/settings/export',   [SettingsController::class, 'exportData'])->name('settings.export');
+    Route::post('/settings/archive', [SettingsController::class, 'archiveRecords'])->name('settings.archive');
 
     // ============================================================
     // SERVICES

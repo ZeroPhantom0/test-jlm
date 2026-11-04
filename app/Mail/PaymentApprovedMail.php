@@ -5,12 +5,13 @@ namespace App\Mail;
 
 use App\Models\Invoice;
 use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
 
-class PaymentApprovedMail extends Mailable
+class PaymentApprovedMail extends Mailable implements ShouldQueue 
 {
     use Queueable, SerializesModels;
 
@@ -21,7 +22,7 @@ class PaymentApprovedMail extends Mailable
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: '✓ Payment Approved - Invoice ' . $this->invoice->transaction_no,
+            subject: 'Payment Approved - Invoice ' . $this->invoice->transaction_no,
         );
     }
 

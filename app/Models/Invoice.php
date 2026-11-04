@@ -49,7 +49,8 @@ class Invoice extends Model
         'days'         => 'integer',
         'created_at'   => 'datetime',
         'updated_at'   => 'datetime',
-        'deleted_at'   => 'datetime', 
+        'deleted_at'   => 'datetime',
+        'was_overdue_notified_at' => 'datetime',
     ];
 
     // ---- Relationships ----
@@ -174,8 +175,16 @@ class Invoice extends Model
 
     public static function generateTransactionNo(string $prefix = 'tn'): string
     {
-        $lastId = static::max('id') ?? 0;
-        return $prefix . '-' . (100 + $lastId + 1);
+        // withTrashed() ensures we count rejected/deleted invoices too
+        $lastId = static::withTrashed()->max('id') ?? 0;
+
+        // Safety loop just in case
+        $nextId = $lastId + 1;
+        while (static::withTrashed()->where('transaction_no', $prefix . '-' . (100 + $nextId))->exists()) {
+            $nextId++;
+        }
+
+        return $prefix . '-' . (100 + $nextId);
     }
 
     public function toReactArray(): array

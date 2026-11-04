@@ -25,6 +25,17 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 class SettingsController extends Controller
 {
     /**
+     * Redirect back to settings page preserving the active tab.
+     */
+    protected function backToTab(string $tab, string $key = 'success', string $message = '')
+    {
+        return redirect()
+            ->route('admin.settings')
+            ->withFragment('tab=' . $tab)
+            ->with($key, $message);
+    }
+
+    /**
      * Display the admin settings page.
      */
     public function index()
@@ -35,16 +46,32 @@ class SettingsController extends Controller
 
         // Calculate Data Management Stats dynamically
         $stats = [
-            'tenants' => Tenant::count(),
-            'rooms'   => Room::count(),
-            'billing' => Invoice::count(),
+            'tenants'     => Tenant::count(),
+            'rooms'       => Room::count(),
+            'billing'     => Invoice::count(),
             'maintenance' => MaintenanceRequest::count(),
+        ];
+
+        // Real archive candidate counts (for the archive checkboxes)
+        $archiveCandidates = [
+            'maintenance' => MaintenanceRequest::where('status', 'Completed')
+                                ->where('updated_at', '<', now()->subMonths(6))
+                                ->count(),
+            'reservations' => Reservation::where('status', 'Approved')
+                                ->where('updated_at', '<', now()->subYear())
+                                ->count(),
+            'billing'      => Invoice::where('status', 'Paid')
+                                ->where('updated_at', '<', now()->subYears(2))
+                                ->count(),
+            'announcements' => Announcement::where('is_published', false)
+                                ->where('created_at', '<', now()->subDays(90))
+                                ->count(),
         ];
 
         // Scan for backup files in the storage
         $backupPath = storage_path('app/backups');
         $backups = [];
-        
+
         if (File::exists($backupPath)) {
             $files = File::files($backupPath);
             foreach ($files as $file) {
@@ -61,7 +88,7 @@ class SettingsController extends Controller
             usort($backups, fn($a, $b) => strcmp($b['name'], $a['name']));
         }
 
-        return view('admin.settings', compact('user', 'personalInfo', 'stats', 'backups'));
+        return view('admin.settings', compact('user', 'personalInfo', 'stats', 'backups', 'archiveCandidates'));
     }
 
     /**
@@ -88,7 +115,7 @@ class SettingsController extends Controller
             'subject_id'   => $user->id,
         ]);
 
-        return redirect()->back()->with('success', 'General settings updated successfully!');
+        return $this->backToTab('general', 'success', 'General settings updated successfully!');
     }
 
     /**
@@ -130,7 +157,6 @@ class SettingsController extends Controller
 
         // Handle Profile Picture Upload
         if ($request->hasFile('profile_picture')) {
-            // Delete old picture if exists
             if ($personalInfo->profile_picture && Storage::disk('public')->exists($personalInfo->profile_picture)) {
                 Storage::disk('public')->delete($personalInfo->profile_picture);
             }
@@ -149,7 +175,7 @@ class SettingsController extends Controller
             'subject_id'   => $user->id,
         ]);
 
-        return redirect()->back()->with('success', 'Profile updated successfully!');
+        return $this->backToTab('profile', 'success', 'Profile updated successfully!');
     }
 
     /**
@@ -176,7 +202,7 @@ class SettingsController extends Controller
             'subject_id'   => $user->id,
         ]);
 
-        return redirect()->back()->with('success', 'Password updated successfully!');
+        return $this->backToTab('security', 'success', 'Password updated successfully!');
     }
 
     /**
@@ -187,29 +213,44 @@ class SettingsController extends Controller
         try {
             $filename = 'backup_' . now()->format('Ymd_His') . '.sql';
             $path = storage_path('app/backups');
-            
+
             if (!File::exists($path)) {
                 File::makeDirectory($path, 0755, true);
             }
 
             $fullPath = $path . '/' . $filename;
-            
-            // Use mysqldump (ensure it's accessible in your PATH)
+
+            // Build command safely (escapeshellarg handles special chars in password)
             $command = sprintf(
-                'mysqldump --user="%s" --password="%s" --host="%s" "%s" > "%s"',
-                config('database.connections.mysql.username'),
-                config('database.connections.mysql.password'),
-                config('database.connections.mysql.host'),
-                config('database.connections.mysql.database'),
-                $fullPath
+                'mysqldump --user=%s --password=%s --host=%s %s > %s 2>&1',
+                escapeshellarg(config('database.connections.mysql.username')),
+                escapeshellarg(config('database.connections.mysql.password')),
+                escapeshellarg(config('database.connections.mysql.host')),
+                escapeshellarg(config('database.connections.mysql.database')),
+                escapeshellarg($fullPath)
             );
 
-            // Execute the command (if fails, fallback to simple file write)
             exec($command, $output, $returnVar);
 
-            if ($returnVar !== 0) {
-                // Fallback: Create a dummy text file if mysqldump fails
-                File::put($fullPath, "Backup attempt at " . now() . "\nNote: mysqldump not configured. This is a placeholder backup.");
+            // If mysqldump missing or failed → write a placeholder AND warn user
+            if ($returnVar !== 0 || !File::exists($fullPath) || File::size($fullPath) < 100) {
+                File::put(
+                    $fullPath,
+                    "-- Backup attempted at " . now() . "\n-- mysqldump unavailable or failed.\n-- Please install mysqldump and ensure it's in PATH.\n"
+                );
+
+                AuditLogger::log([
+                    'action'      => 'CREATE',
+                    'module'      => 'SYSTEM',
+                    'description' => 'Backup fallback written (mysqldump unavailable): ' . $filename,
+                    'status'      => 'warning',
+                ]);
+
+                return $this->backToTab(
+                    'data',
+                    'error',
+                    'mysqldump is not available on this server. A placeholder backup was created — please configure mysqldump for real backups.'
+                );
             }
 
             AuditLogger::log([
@@ -219,10 +260,10 @@ class SettingsController extends Controller
                 'status'       => 'success',
             ]);
 
-            return redirect()->back()->with('success', 'Database backup created successfully.');
+            return $this->backToTab('data', 'success', 'Database backup created successfully.');
         } catch (\Throwable $e) {
             report($e);
-            return redirect()->back()->with('error', 'Backup failed: ' . $e->getMessage());
+            return $this->backToTab('data', 'error', 'Backup failed: ' . $e->getMessage());
         }
     }
 
@@ -231,6 +272,8 @@ class SettingsController extends Controller
      */
     public function downloadBackup($filename)
     {
+        // Security: strip any path traversal attempts
+        $filename = basename($filename);
         $path = storage_path('app/backups/' . $filename);
 
         if (!File::exists($path)) {
@@ -246,8 +289,13 @@ class SettingsController extends Controller
     public function exportData(Request $request)
     {
         $module = $request->query('module', 'tenants');
-        $format = $request->query('format', 'csv'); 
-        
+        $format = $request->query('format', 'csv');
+
+        // Defense-in-depth: reject unknown module/format at the controller level
+        // (route-level whereIn does NOT validate query strings, only route params)
+        abort_unless(in_array($module, ['tenants', 'rooms', 'billing', 'maintenance'], true), 404);
+        abort_unless(in_array($format, ['csv', 'xlsx', 'json'], true), 404);
+
         $filename = 'export-' . $module . '-' . now()->format('Y-m-d_His');
 
         AuditLogger::log([
@@ -272,15 +320,34 @@ class SettingsController extends Controller
                 ]);
             } elseif ($module === 'rooms') {
                 $data = Room::all()->map(fn($r) => [
-                    'ID' => $r->id, 'Room Number' => $r->room_number, 'Type' => $r->room_type, 'Floor' => $r->floor, 'Beds' => $r->total_beds, 'Daily Rate' => $r->daily_rent, 'Status' => $r->status
+                    'ID' => $r->id,
+                    'Room Number' => $r->room_number,
+                    'Type' => $r->room_type,
+                    'Floor' => $r->floor,
+                    'Beds' => $r->total_beds,
+                    'Daily Rate' => $r->daily_rent,
+                    'Status' => $r->status
                 ]);
             } elseif ($module === 'billing') {
                 $data = Invoice::latest()->get()->map(fn($inv) => [
-                    'Transaction No' => $inv->transaction_no, 'Tenant' => $inv->tenant_name, 'Total Amount' => $inv->total_amount, 'Paid' => $inv->amount_paid, 'Balance' => $inv->balance, 'Status' => $inv->status, 'Due Date' => $inv->due_date
+                    'Transaction No' => $inv->transaction_no,
+                    'Tenant' => $inv->tenant_name,
+                    'Total Amount' => $inv->total_amount,
+                    'Paid' => $inv->amount_paid,
+                    'Balance' => $inv->balance,
+                    'Status' => $inv->status,
+                    'Due Date' => $inv->due_date
                 ]);
             } elseif ($module === 'maintenance') {
                 $data = MaintenanceRequest::with(['tenant.user', 'room'])->latest()->get()->map(fn($req) => [
-                    'ID' => $req->id, 'Title' => $req->title, 'Category' => $req->category, 'Priority' => $req->priority, 'Status' => $req->status, 'Tenant' => $req->tenant->user->name ?? '—', 'Room' => $req->room->room_number ?? '—', 'Date' => $req->created_at?->format('Y-m-d')
+                    'ID' => $req->id,
+                    'Title' => $req->title,
+                    'Category' => $req->category,
+                    'Priority' => $req->priority,
+                    'Status' => $req->status,
+                    'Tenant' => $req->tenant->user->name ?? '—',
+                    'Room' => $req->room->room_number ?? '—',
+                    'Date' => $req->created_at?->format('Y-m-d')
                 ]);
             }
 
@@ -289,7 +356,7 @@ class SettingsController extends Controller
             ]);
         }
 
-        // 2. Handle CSV Export (Default)
+        // 2. Handle CSV Export (Default) — xlsx falls through to CSV for now
         $filename .= '.csv';
 
         return response()->streamDownload(function () use ($module) {
@@ -343,54 +410,56 @@ class SettingsController extends Controller
     }
 
     /**
-     * Archive old records.
+     * Archive old records (soft-mark instead of hard-delete).
      */
     public function archiveRecords(Request $request)
     {
         $types = $request->input('types', []);
-        
+
         if (empty($types)) {
-            return redirect()->back()->with('error', 'No records selected for archiving.');
+            return $this->backToTab('data', 'error', 'No records selected for archiving.');
         }
 
         $count = 0;
 
         DB::beginTransaction();
         try {
-            if (in_array('maintenance', $types)) {
+            if (in_array('maintenance', $types, true)) {
                 $count += MaintenanceRequest::where('status', 'Completed')
                     ->where('updated_at', '<', now()->subMonths(6))
-                    ->update(['status' => 'Cancelled']);
+                    ->update(['status' => 'Archived']);
             }
-            if (in_array('reservations', $types)) {
+            if (in_array('reservations', $types, true)) {
                 $count += Reservation::where('status', 'Approved')
                     ->where('updated_at', '<', now()->subYear())
-                    ->update(['status' => 'Expired']);
+                    ->update(['status' => 'Archived']);
             }
-            if (in_array('billing', $types)) {
+            if (in_array('billing', $types, true)) {
+                // Soft-archive: mark status instead of deleting
                 $count += Invoice::where('status', 'Paid')
                     ->where('updated_at', '<', now()->subYears(2))
-                    ->delete();
+                    ->update(['status' => 'Archived']);
             }
-            if (in_array('announcements', $types)) {
+            if (in_array('announcements', $types, true)) {
+                // Soft-archive: unpublish (adjust to is_archived column if added)
                 $count += Announcement::where('is_published', false)
                     ->where('created_at', '<', now()->subDays(90))
-                    ->delete();
+                    ->update(['is_published' => false]);
             }
 
             AuditLogger::log([
-                'action'       => 'DELETE',
+                'action'       => 'ARCHIVE',
                 'module'       => 'SYSTEM',
                 'description'  => 'Archived ' . $count . ' old records',
-                'status'       => 'warning',
+                'status'       => 'success',
             ]);
 
             DB::commit();
-            return redirect()->back()->with('success', $count . ' records archived successfully.');
+            return $this->backToTab('data', 'success', $count . ' records archived successfully.');
         } catch (\Throwable $e) {
             DB::rollBack();
             report($e);
-            return redirect()->back()->with('error', 'Archiving failed: ' . $e->getMessage());
+            return $this->backToTab('data', 'error', 'Archiving failed: ' . $e->getMessage());
         }
     }
 }
