@@ -26,7 +26,8 @@ export default function LogoutModal() {
             <div className="p-5 flex justify-end pb-0">
                 <button
                     onClick={handleClose}
-                    className="text-slate-400 hover:text-slate-600 transition"
+                    aria-label="Close"
+                    className="w-9 h-9 flex items-center justify-center rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 active:bg-slate-200 transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
                 >
                     <i className="fa-solid fa-xmark text-xl"></i>
                 </button>
@@ -51,13 +52,13 @@ export default function LogoutModal() {
             <div className="px-6 pb-6 flex gap-3">
                 <button
                     onClick={handleConfirm}
-                    className="flex-1 bg-[#02122b] hover:bg-[#0a1c3a] text-white py-3 rounded-xl text-[14px] font-bold transition"
+                    className="flex-1 bg-[#02122b] hover:bg-[#0a1c3a] active:bg-[#010b1c] text-white py-3 rounded-xl text-[14px] font-bold transition-all duration-150 hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 active:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-[#02122b] focus-visible:ring-offset-2"
                 >
                     Yes, Logout
                 </button>
                 <button
                     onClick={handleClose}
-                    className="flex-1 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 py-3 rounded-xl text-[14px] font-bold transition"
+                    className="flex-1 bg-white border border-slate-200 hover:bg-slate-50 hover:border-slate-300 active:bg-slate-100 text-slate-700 py-3 rounded-xl text-[14px] font-bold transition-all duration-150 hover:shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-300 focus-visible:ring-offset-2"
                 >
                     Cancel
                 </button>

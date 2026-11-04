@@ -57,13 +57,19 @@
             <h3 class="text-lg font-extrabold text-slate-900 mb-3">
                 JLM Cozy Cabin - House Rules &amp; Boarding Contract
             </h3>
-            <p class="text-[13px] text-slate-600 leading-relaxed mb-4">
-                HOUSE RULES &amp; BOARDING CONTRACT JLM Cozy Cabin — Effective: January 2026 1. QUIET HOURS Quiet hours are strictly observed from 10:00 PM to 7:00 AM daily. Loud music, parties, and excessive noise are prohibited during these hours. Violations are subject to warnings and eventual eviction. 2. VISITOR POLICY Visitors are allowed only between 8:00 AM and
-            </p>
+            
+            {{-- Added line-clamp and fade effect for the text --}}
+            <div class="relative mb-5">
+                <p class="text-[13px] text-slate-600 leading-relaxed line-clamp-3">
+                    HOUSE RULES &amp; BOARDING CONTRACT JLM Cozy Cabin — Effective: January 2026 1. QUIET HOURS Quiet hours are strictly observed from 10:00 PM to 7:00 AM daily. Loud music, parties, and excessive noise are prohibited during these hours. Violations are subject to warnings and eventual eviction. 2. VISITOR POLICY Visitors are allowed only between 8:00 AM and 10:00 PM. Overnight visitors are strictly prohibited unless prior written approval is granted by management. 3. CLEANLINESS Tenants are expected to maintain the cleanliness of their rooms...
+                </p>
+                {{-- Fade overlay to indicate more text --}}
+                <div class="absolute bottom-0 left-0 right-0 h-10 bg-gradient-to-t from-amber-50 to-transparent pointer-events-none"></div>
+            </div>
 
             <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <div class="flex items-center gap-1.5 text-xs text-slate-500">
-                    <i class="fa-regular fa-globe text-sm"></i>
+                    <i class="fa-regular fa-user text-sm"></i>
                     <span>Leah Administrator</span>
                 </div>
                 <button
@@ -160,7 +166,7 @@
                 <h3 class="card-title text-base font-bold text-slate-900 mb-2">${escapeHtml(a.title)}</h3>
                 <p class="card-desc text-[13px] text-slate-600 leading-relaxed mb-4">${escapeHtml(a.content)}</p>
                 <div class="text-xs text-slate-400 flex items-center gap-1.5">
-                    <i class="fa-regular fa-globe"></i> Posted by ${escapeHtml(a.author)}
+                    <i class="fa-regular fa-user"></i> Posted by ${escapeHtml(a.author)}
                 </div>
             </div>
         `;

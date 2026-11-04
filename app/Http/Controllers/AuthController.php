@@ -522,6 +522,15 @@ class AuthController extends Controller
     {
         $user = Auth::user();
 
+        // Capture role BEFORE invalidating the session
+        $wasAdmin = $user?->role === 'admin';
+
+        // Safety net: if role flag wasn't set but referrer is an admin page
+        if (! $wasAdmin) {
+            $referer = $request->headers->get('referer', '');
+            $wasAdmin = str_contains($referer, '/admin');
+        }
+
         if ($user) {
             AuditLogger::log([
                 'action'      => 'LOGOUT',
@@ -534,16 +543,27 @@ class AuthController extends Controller
         $request->session()->invalidate();
         $request->session()->regenerateToken();
 
-        // Force a real browser navigation (not an Inertia SPA visit) and
-        // attach anti-cache headers so pressing Back cannot restore the
-        // previously cached authenticated page from the browser's
-        // back-forward cache.
-        return redirect('/login')
-            ->withHeaders([
-                'Cache-Control' => 'no-store, no-cache, must-revalidate, max-age=0',
-                'Pragma'        => 'no-cache',
-                'Expires'       => 'Sat, 01 Jan 2000 00:00:00 GMT',
-            ]);
+        // Pick the correct login page for each role
+        $redirectTo = $wasAdmin
+            ? route('admin.login')
+            : route('login');
+
+        $antiCache = [
+            'Cache-Control' => 'no-store, no-cache, must-revalidate, max-age=0',
+            'Pragma'        => 'no-cache',
+            'Expires'       => 'Sat, 01 Jan 2000 00:00:00 GMT',
+        ];
+
+        // If the request came from fetch() (Accept: application/json),
+        // return JSON so JS can navigate. Otherwise do a normal redirect.
+        if ($request->expectsJson()) {
+            return response()->json([
+                'success'     => true,
+                'redirect_to' => $redirectTo,
+            ], 200, $antiCache);
+        }
+
+        return redirect($redirectTo)->withHeaders($antiCache);
     }
 
     // ============ PASSWORD RESET ============

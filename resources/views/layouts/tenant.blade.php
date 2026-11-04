@@ -58,7 +58,6 @@
 
     @viteReactRefresh
     @vite(['resources/css/app.css', 'resources/js/app.jsx'])
-    @livewireStyles
     @stack('styles')
 </head>
 
@@ -83,7 +82,6 @@
         </main>
     </div>
 
-    @livewireScripts
     @stack('scripts')
 </body>
 

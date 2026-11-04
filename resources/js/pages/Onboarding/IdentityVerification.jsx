@@ -3,6 +3,8 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Head, router, useForm } from '@inertiajs/react';
 import { UploadChoiceModal } from './PersonalInformation';
 import CameraCaptureModal from '../../components/CameraCaptureModal';
+import TermsModal from '../Auth/Modals/TermsModal';
+import PrivacyModal from '../Auth/Modals/PrivacyModal';
 
 const DRAFT_KEY = 'jlm_onboarding_identity_draft';
 
@@ -34,6 +36,8 @@ export default function IdentityVerification({ identity }) {
     );
     const [choiceTarget, setChoiceTarget] = useState(null);
     const [cameraTarget, setCameraTarget] = useState(null);
+    const [showTerms, setShowTerms]     = useState(false);
+    const [showPrivacy, setShowPrivacy] = useState(false);
 
     const frontCameraRef  = useRef(null);
     const frontGalleryRef = useRef(null);
@@ -113,6 +117,18 @@ export default function IdentityVerification({ identity }) {
         router.get('/personal-information');
     };
 
+    const openTerms = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setShowTerms(true);
+    };
+
+    const openPrivacy = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setShowPrivacy(true);
+    };
+
     return (
         <div className="identity-page">
             <Head title="Identity Verification | JLM Cozy Cabin" />
@@ -137,6 +153,20 @@ export default function IdentityVerification({ identity }) {
                     onClose={() => setCameraTarget(null)}
                 />
             )}
+
+            <TermsModal
+                isOpen={showTerms}
+                onClose={() => setShowTerms(false)}
+                onConfirm={() => {
+                    setData('verification_agreement', true);
+                    setShowTerms(false);
+                }}
+            />
+
+            <PrivacyModal
+                isOpen={showPrivacy}
+                onClose={() => setShowPrivacy(false)}
+            />
 
             <div className="identity-container">
                 {/* LEFT */}
@@ -320,8 +350,24 @@ export default function IdentityVerification({ identity }) {
                                 onChange={(e) => setData('verification_agreement', e.target.checked)}
                             />
                             <span>
-                                I agree to the <a href="#">Terms and Conditions</a> and <a href="#">Privacy Policy</a>.
-                                I understand that my information will be used for verification purposes only.
+                                I agree to the{' '}
+                                <button
+                                    type="button"
+                                    className="link-button"
+                                    onClick={openTerms}
+                                >
+                                    Terms and Conditions
+                                </button>{' '}
+                                and{' '}
+                                <button
+                                    type="button"
+                                    className="link-button"
+                                    onClick={openPrivacy}
+                                >
+                                    Privacy Policy
+                                </button>
+                                . I understand that my information will be used for
+                                verification purposes only.
                             </span>
                         </label>
                         {errors.verification_agreement && <p style={{ color: '#e11d48', fontSize: 12, marginTop: 6 }}>{errors.verification_agreement}</p>}

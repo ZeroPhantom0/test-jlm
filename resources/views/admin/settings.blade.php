@@ -47,7 +47,7 @@
 
             {{-- Left Nav Tabs --}}
             <div id="settings-tabs"
-                 class="bg-white rounded-xl border border-slate-200 shadow-sm p-2 lg:p-3
+                class="bg-white rounded-xl border border-slate-200 shadow-sm p-2 lg:p-3
                         flex flex-row lg:flex-col gap-1
                         overflow-x-auto lg:overflow-visible
                         lg:sticky lg:top-20
@@ -334,12 +334,9 @@
                         <h3 class="text-base font-bold text-slate-900 mb-1">Preferences</h3>
                         <p class="text-[12.5px] text-slate-500 mb-5">Customize your boarding house experience</p>
 
-                        @foreach ([
-                            ['id' => 'email-notif', 'label' => 'Email Notifications', 'desc' => 'Receive updates via email', 'icon' => 'fa-regular fa-envelope', 'default' => true],
-                            ['id' => 'push-notif',  'label' => 'Push Notifications',  'desc' => 'Alerts on your device',     'icon' => 'fa-solid fa-mobile-screen', 'default' => false],
-                            ['id' => 'dark-mode',   'label' => 'Dark Mode',           'desc' => 'Easier on the eyes at night','icon' => 'fa-regular fa-moon',        'default' => false],
-                        ] as $pref)
-                            <div class="flex items-center justify-between gap-3 py-3 border-b border-slate-100 last:border-b-0">
+                        @foreach ([['id' => 'email-notif', 'label' => 'Email Notifications', 'desc' => 'Receive updates via email', 'icon' => 'fa-regular fa-envelope', 'default' => true], ['id' => 'sms-alerts', 'label' => 'SMS Alerts', 'desc' => 'Get text message updates', 'icon' => 'fa-regular fa-comment-dots', 'default' => false]] as $pref)
+                            <div
+                                class="flex items-center justify-between gap-3 py-3 border-b border-slate-100 last:border-b-0">
                                 <div class="flex items-start gap-3 min-w-0">
                                     <i class="{{ $pref['icon'] }} text-[15px] text-slate-900 mt-0.5 shrink-0"></i>
                                     <div class="min-w-0">
@@ -414,25 +411,6 @@
                                     <span class="text-[11.5px] text-slate-500">{{ count($backups) }} snapshots</span>
                                 </div>
                             </div>
-                        </div>
-
-                        {{-- Automatic Backups Toggle --}}
-                        <div class="border border-slate-200 rounded-lg p-5 mb-6">
-                            <div class="flex items-center justify-between gap-3">
-                                <div class="min-w-0">
-                                    <div class="text-[13.5px] font-bold text-slate-900">Automatic Backups</div>
-                                    <div class="text-xs text-slate-500">Schedule regular database snapshots</div>
-                                </div>
-                                <label class="relative inline-flex items-center w-11 h-6 shrink-0 cursor-not-allowed opacity-60">
-                                    <input type="checkbox" checked disabled class="peer sr-only">
-                                    <span
-                                        class="absolute inset-0 bg-slate-200 rounded-full transition peer-checked:bg-emerald-500"></span>
-                                    <span
-                                        class="absolute left-[2px] top-[2px] bg-white w-5 h-5 rounded-full shadow transition-transform peer-checked:translate-x-5"></span>
-                                </label>
-                            </div>
-                            <p class="text-[11px] text-slate-400 mt-2">*Requires server cron configuration (coming soon)
-                            </p>
                         </div>
 
                         <h4 class="text-sm font-bold text-slate-900 mb-3">Recent Backups</h4>
@@ -520,9 +498,7 @@
                         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                             <a href="{{ route('admin.settings.export', ['module' => 'tenants', 'format' => 'csv']) }}"
                                 class="module-export-box border border-slate-200 bg-white rounded-lg px-3 py-3 cursor-pointer transition hover:border-slate-400 block text-left"
-                                data-module="tenants"
-                                data-base-url="{{ route('admin.settings.export') }}"
-                                download>
+                                data-module="tenants" data-base-url="{{ route('admin.settings.export') }}" download>
                                 <i class="fa-solid fa-users text-[14px] text-slate-500 mb-1 block"></i>
                                 <div class="text-[12px] font-semibold text-slate-900">Tenants</div>
                                 <div class="text-[11px] text-slate-500">{{ $stats['tenants'] }} records</div>
@@ -530,9 +506,7 @@
 
                             <a href="{{ route('admin.settings.export', ['module' => 'rooms', 'format' => 'csv']) }}"
                                 class="module-export-box border border-slate-200 bg-white rounded-lg px-3 py-3 cursor-pointer transition hover:border-slate-400 block text-left"
-                                data-module="rooms"
-                                data-base-url="{{ route('admin.settings.export') }}"
-                                download>
+                                data-module="rooms" data-base-url="{{ route('admin.settings.export') }}" download>
                                 <i class="fa-solid fa-bed text-[14px] text-slate-500 mb-1 block"></i>
                                 <div class="text-[12px] font-semibold text-slate-900">Rooms</div>
                                 <div class="text-[11px] text-slate-500">{{ $stats['rooms'] }} profiles</div>
@@ -540,9 +514,7 @@
 
                             <a href="{{ route('admin.settings.export', ['module' => 'billing', 'format' => 'csv']) }}"
                                 class="module-export-box border border-slate-200 bg-white rounded-lg px-3 py-3 cursor-pointer transition hover:border-slate-400 block text-left"
-                                data-module="billing"
-                                data-base-url="{{ route('admin.settings.export') }}"
-                                download>
+                                data-module="billing" data-base-url="{{ route('admin.settings.export') }}" download>
                                 <i class="fa-solid fa-credit-card text-[14px] text-slate-500 mb-1 block"></i>
                                 <div class="text-[12px] font-semibold text-slate-900">Billing</div>
                                 <div class="text-[11px] text-slate-500">{{ $stats['billing'] }} invoices</div>
@@ -550,9 +522,7 @@
 
                             <a href="{{ route('admin.settings.export', ['module' => 'maintenance', 'format' => 'csv']) }}"
                                 class="module-export-box border border-slate-200 bg-white rounded-lg px-3 py-3 cursor-pointer transition hover:border-slate-400 block text-left"
-                                data-module="maintenance"
-                                data-base-url="{{ route('admin.settings.export') }}"
-                                download>
+                                data-module="maintenance" data-base-url="{{ route('admin.settings.export') }}" download>
                                 <i class="fa-solid fa-wrench text-[14px] text-slate-500 mb-1 block"></i>
                                 <div class="text-[12px] font-semibold text-slate-900">Maintenance</div>
                                 <div class="text-[11px] text-slate-500">{{ $stats['maintenance'] }} requests</div>
@@ -581,12 +551,7 @@
                         <form action="{{ route('admin.settings.archive') }}" method="POST">
                             @csrf
                             <div class="flex flex-col gap-3">
-                                @foreach ([
-                                    ['key' => 'maintenance',   'title' => 'Resolved Maintenance Requests (>6 months)', 'count' => $archiveCandidates['maintenance']],
-                                    ['key' => 'reservations',  'title' => 'Completed Reservations (>1 year)',          'count' => $archiveCandidates['reservations']],
-                                    ['key' => 'billing',       'title' => 'Closed Billing Records (>2 years)',          'count' => $archiveCandidates['billing']],
-                                    ['key' => 'announcements', 'title' => 'Expired Announcements (>90 days)',           'count' => $archiveCandidates['announcements']],
-                                ] as $arc)
+                                @foreach ([['key' => 'maintenance', 'title' => 'Resolved Maintenance Requests (>6 months)', 'count' => $archiveCandidates['maintenance']], ['key' => 'reservations', 'title' => 'Completed Reservations (>1 year)', 'count' => $archiveCandidates['reservations']], ['key' => 'billing', 'title' => 'Closed Billing Records (>2 years)', 'count' => $archiveCandidates['billing']], ['key' => 'announcements', 'title' => 'Expired Announcements (>90 days)', 'count' => $archiveCandidates['announcements']]] as $arc)
                                     @php $isEmpty = $arc['count'] === 0; @endphp
                                     <label
                                         class="archive-item flex items-center justify-between gap-3 px-4 sm:px-5 py-4 rounded-xl bg-white border-[1.5px] border-slate-200 transition {{ $isEmpty ? 'cursor-not-allowed opacity-70' : 'cursor-pointer hover:border-slate-300' }}">
@@ -596,7 +561,8 @@
                                                 class="archive-checkbox w-5 h-5 rounded-[5px] border-2 border-slate-300 text-emerald-500 focus:ring-emerald-500 shrink-0"
                                                 @if ($isEmpty) disabled @endif>
                                             <div class="min-w-0">
-                                                <div class="archive-title text-sm font-semibold text-slate-900 break-words">
+                                                <div
+                                                    class="archive-title text-sm font-semibold text-slate-900 break-words">
                                                     {{ $arc['title'] }}
                                                 </div>
                                                 <div class="archive-sub text-[12.5px] text-slate-500">
@@ -638,14 +604,13 @@
             // ============================================================
             // 1. TAB SWITCHING
             // ============================================================
-            const tabs   = document.querySelectorAll('.settings-tab');
+            const tabs = document.querySelectorAll('.settings-tab');
             const panels = document.querySelectorAll('.settings-panel');
 
             function activateTab(tab) {
                 tabs.forEach(t => {
                     t.classList.remove('active', 'bg-[#02122b]', 'text-white');
                     t.classList.add('text-slate-600', 'hover:bg-slate-50');
-                    // Remove any chevron (may be more than one if clicked twice)
                     t.querySelectorAll('.fa-chevron-right').forEach(c => c.remove());
                 });
 
@@ -730,22 +695,35 @@
             formatCards.forEach(card => {
                 card.addEventListener('click', () => {
                     formatCards.forEach(c => {
-                        c.classList.remove('selected', 'border-2', 'border-emerald-500', 'bg-emerald-50');
+                        c.classList.remove('selected', 'border-2', 'border-emerald-500',
+                            'bg-emerald-50');
                         c.classList.add('border', 'border-slate-200', 'bg-white');
 
-                        const icon  = c.querySelector('i');
+                        const icon = c.querySelector('i');
                         const title = c.querySelector('span:first-of-type');
-                        if (icon)  { icon.classList.remove('text-emerald-500'); icon.classList.add('text-slate-400'); }
-                        if (title) { title.classList.remove('text-emerald-500'); title.classList.add('text-slate-900'); }
+                        if (icon) {
+                            icon.classList.remove('text-emerald-500');
+                            icon.classList.add('text-slate-400');
+                        }
+                        if (title) {
+                            title.classList.remove('text-emerald-500');
+                            title.classList.add('text-slate-900');
+                        }
                     });
 
                     card.classList.add('selected', 'border-2', 'border-emerald-500', 'bg-emerald-50');
                     card.classList.remove('border', 'border-slate-200', 'bg-white');
 
-                    const icon  = card.querySelector('i');
+                    const icon = card.querySelector('i');
                     const title = card.querySelector('span:first-of-type');
-                    if (icon)  { icon.classList.remove('text-slate-400');  icon.classList.add('text-emerald-500'); }
-                    if (title) { title.classList.remove('text-slate-900');  title.classList.add('text-emerald-500'); }
+                    if (icon) {
+                        icon.classList.remove('text-slate-400');
+                        icon.classList.add('text-emerald-500');
+                    }
+                    if (title) {
+                        title.classList.remove('text-slate-900');
+                        title.classList.add('text-emerald-500');
+                    }
 
                     selectedFormat = card.dataset.format;
                     updateExportLinks();
@@ -755,9 +733,10 @@
             function updateExportLinks() {
                 document.querySelectorAll('.module-export-box').forEach(link => {
                     const module = link.dataset.module;
-                    const base   = link.dataset.baseUrl;
+                    const base = link.dataset.baseUrl;
                     if (module && base) {
-                        link.href = `${base}?module=${encodeURIComponent(module)}&format=${encodeURIComponent(selectedFormat)}`;
+                        link.href =
+                            `${base}?module=${encodeURIComponent(module)}&format=${encodeURIComponent(selectedFormat)}`;
                     }
                 });
             }
@@ -766,8 +745,8 @@
             // ============================================================
             // 6. ARCHIVE SELECTION COUNTER
             // ============================================================
-            const archiveItems     = document.querySelectorAll('.archive-item');
-            const archiveCountEl   = document.getElementById('archive-count');
+            const archiveItems = document.querySelectorAll('.archive-item');
+            const archiveCountEl = document.getElementById('archive-count');
             const archiveSubmitBtn = document.getElementById('archive-submit-btn');
 
             function updateArchiveCount() {
@@ -775,7 +754,7 @@
                 document.querySelectorAll('.archive-item input[type="checkbox"]:checked').forEach(cb => {
                     total += parseInt(cb.dataset.count || '0', 10);
                 });
-                if (archiveCountEl)   archiveCountEl.textContent = total.toLocaleString();
+                if (archiveCountEl) archiveCountEl.textContent = total.toLocaleString();
                 if (archiveSubmitBtn) archiveSubmitBtn.disabled = total === 0;
             }
 
