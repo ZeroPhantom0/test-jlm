@@ -6,6 +6,8 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Filesystem\FilesystemAdapter;
+use Illuminate\Support\Facades\Storage;
 
 class Message extends Model
 {
@@ -16,6 +18,7 @@ class Message extends Model
         'sender_id',
         'sender_role',
         'body',
+        'attachments',
         'read_at',
         'deleted_by_sender',
         'deleted_by_receiver',
@@ -24,6 +27,7 @@ class Message extends Model
     ];
 
     protected $casts = [
+        'attachments'             => 'array',
         'read_at'                 => 'datetime',
         'deleted_at'              => 'datetime',
         'deleted_for_everyone_at' => 'datetime',
@@ -63,9 +67,6 @@ class Message extends Model
         }
     }
 
-    /**
-     * Whether the given role has deleted this message from their view.
-     */
     public function isDeletedFor(string $role): bool
     {
         return $role === 'admin'
@@ -73,9 +74,6 @@ class Message extends Model
             : (bool) $this->deleted_by_sender;
     }
 
-    /**
-     * Whether the message should be hidden from the given role.
-     */
     public function isHiddenFrom(string $role): bool
     {
         if ($this->deleted_at !== null) {
@@ -85,17 +83,11 @@ class Message extends Model
         return $this->isDeletedFor($role);
     }
 
-    /**
-     * True when BOTH sides removed it → show "This message was deleted".
-     */
     public function isDeletedForEveryone(): bool
     {
         return $this->deleted_for_everyone_at !== null;
     }
 
-    /**
-     * Safe body to render — placeholder when deleted for everyone.
-     */
     public function renderBody(): string
     {
         return $this->isDeletedForEveryone()
@@ -103,14 +95,38 @@ class Message extends Model
             : $this->body;
     }
 
-    /**
-     * Group reactions by emoji: ['❤️' => 3, '😂' => 1]
-     */
     public function reactionSummary(): array
     {
         return $this->reactions
             ->groupBy('reaction')
-            ->map(fn ($group) => $group->count())
+            ->map(fn($group) => $group->count())
             ->toArray();
+    }
+
+    /**
+     * Serialize attachments with public URLs for the frontend.
+     * The storage path stays internal — the client only sees
+     * the public URL, name, mime and size.
+     */
+    public function attachmentsForClient(): array
+    {
+        $list = $this->attachments ?? [];
+
+        if (! is_array($list) || empty($list)) {
+            return [];
+        }
+
+        return array_map(function ($a) {
+            $path = $a['path'] ?? null;
+            $mime = $a['mime'] ?? 'application/octet-stream';
+
+            return [
+                'name'     => $a['name'] ?? 'file',
+                'mime'     => $mime,
+                'size'     => (int) ($a['size'] ?? 0),
+                'url'      => $path ? '/storage/' . ltrim($path, '/') : null,
+                'is_image' => str_starts_with($mime, 'image/'),
+            ];
+        }, $list);
     }
 }

@@ -1,7 +1,9 @@
 <?php
+// app/Http/Controllers/Admin/VirtualTourController.php
 
 namespace App\Http\Controllers\Admin;
 
+use App\Events\ReservationUpdated; // <-- Added
 use App\Http\Controllers\Controller;
 use App\Models\Room;
 use App\Models\VirtualTour;
@@ -59,6 +61,9 @@ class VirtualTourController extends Controller
         $tour->load('room:id,room_number');
         $tour->scenes_count = 0;
 
+        // Broadcast to tenant page
+        event(new ReservationUpdated('tour_created', null));
+
         if ($request->expectsJson()) {
             return response()->json([
                 'ok'      => true,
@@ -109,6 +114,9 @@ class VirtualTourController extends Controller
             Storage::disk('public')->delete('tours/' . $oldThumbnail);
         }
 
+        // Broadcast to tenant page
+        event(new ReservationUpdated('tour_updated', null));
+
         if ($request->expectsJson()) {
             return response()->json([
                 'ok'      => true,
@@ -146,6 +154,9 @@ class VirtualTourController extends Controller
         // frontend gets its JSON back instantly. Uses Laravel's `defer()`
         // helper (Laravel 11+) or falls back to a queued job.
         $this->deferDelete($filesToDelete);
+
+        // Broadcast to tenant page
+        event(new ReservationUpdated('tour_deleted', null));
 
         if ($request->expectsJson()) {
             return response()->json([

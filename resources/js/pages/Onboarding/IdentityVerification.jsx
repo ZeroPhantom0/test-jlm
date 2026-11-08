@@ -173,7 +173,7 @@ export default function IdentityVerification({ identity }) {
                 <div className="identity-left">
                     <div className="identity-brand">
                         <div className="identity-logo">
-                            <img src="/images/JLM Cozy cabin.jpg" alt="JLM Cozy Cabin Logo" />
+                            <img src="/images/jlm-logo.png" alt="JLM Cozy Cabin Logo" />
                         </div>
                         <div>
                             <strong>JLM Cozy Cabin</strong>
@@ -238,6 +238,7 @@ export default function IdentityVerification({ identity }) {
                                     <option value="philhealth">PhilHealth ID</option>
                                     <option value="umid">UMID</option>
                                     <option value="postal-id">Postal ID</option>
+                                    <option value="voter-id">Student ID</option>
                                     <option value="other">Other Government-Issued ID</option>
                                 </select>
                                 <i className="bi bi-chevron-down"></i>

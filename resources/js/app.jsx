@@ -46,12 +46,16 @@ import TenantAnnouncementsModals from "./pages/Announcements/AnnouncementsModals
 // Tenant history modal
 import TenantHistoryModals from "./pages/History/HistoryModals";
 
-// Tenant settings accordion
+// Admin settings modals 
+import AdminSettingsModals from "./pages/Admin/AdminSettingsModals";
+
+// Tenant settings modals (NEW)
 import TenantSettingsAccordions from "./pages/Settings/SettingsAccordions";
+import SettingsModals from "./pages/Settings/SettingsModals"; 
 
 import AdminSidebar from "./components/AdminSidebar";
-
 import Sidebar from "./components/Sidebar";
+
 
 // ============================================================
 // ECHO (REAL-TIME) BOOTSTRAP
@@ -62,8 +66,7 @@ import Sidebar from "./components/Sidebar";
 
     const cfg = window.__appConfig?.broadcast || {};
     const key = cfg.key || import.meta.env.VITE_PUSHER_APP_KEY;
-    const cluster =
-        cfg.cluster || import.meta.env.VITE_PUSHER_APP_CLUSTER || "ap1";
+    const cluster = cfg.cluster || import.meta.env.VITE_PUSHER_APP_CLUSTER || "ap1";
 
     if (!key) {
         console.warn("[Echo] Pusher key missing — real-time disabled.");
@@ -81,9 +84,7 @@ import Sidebar from "./components/Sidebar";
             auth: {
                 headers: {
                     "X-CSRF-TOKEN":
-                        document
-                            .querySelector('meta[name="csrf-token"]')
-                            ?.getAttribute("content") ||
+                        document.querySelector('meta[name="csrf-token"]')?.getAttribute("content") ||
                         window.__appConfig?.csrf,
                     Accept: "application/json",
                     "X-Requested-With": "XMLHttpRequest",
@@ -111,7 +112,6 @@ import Sidebar from "./components/Sidebar";
         });
 
         // ── SHARED CHANNEL HELPERS ──
-
         window.LiveAdminChannels = {
             reservations: (handler) => {
                 const ch = window.Echo.private("admin.reservations");
@@ -211,9 +211,7 @@ function mountReact() {
         tenantHeader.dataset.mounted = "true";
     }
 
-    const adminHeader = document.querySelector(
-        '[data-react="admin-top-header"]',
-    );
+    const adminHeader = document.querySelector('[data-react="admin-top-header"]');
     if (adminHeader && !adminHeader.dataset.mounted) {
         const props = JSON.parse(adminHeader.dataset.props || "{}");
         createRoot(adminHeader).render(<AdminTopHeader {...props} />);
@@ -263,7 +261,14 @@ function mountReact() {
     mountIfExists("tenant-reservations-modals", TenantReservationsModal);
     mountIfExists("tenant-announcements-modals", TenantAnnouncementsModals);
     mountIfExists("tenant-history-modals", TenantHistoryModals);
+
+    mountIfExists("admin-settings-modals", AdminSettingsModals);
+    
+    // Mounts into the div at the top of settings.blade.php
     mountIfExists("tenant-settings-accordions", TenantSettingsAccordions);
+    
+    // NEW: Mount the SettingsModals
+    mountIfExists("settings-modal-root", SettingsModals);
 
     let logoutModalRoot = document.getElementById("global-logout-modal-root");
     if (!logoutModalRoot) {
@@ -286,8 +291,6 @@ if (document.readyState === "loading") {
 window.mountReact = mountReact;
 
 // ── Re-mount React on Livewire SPA navigation ──
-// Without this, wire:navigate swaps the body, destroys all React roots,
-// and leaves every [data-react] div empty → header disappears, modals dead.
 document.addEventListener("livewire:navigated", mountReact);
 
 // Re-mount if the browser restores from back/forward cache

@@ -7,83 +7,70 @@ use App\Events\MessageSent;
 use App\Http\Controllers\Controller;
 use App\Models\Conversation;
 use App\Models\Message;
-use App\Models\MessageReaction;
 use App\Models\Tenant;
-use App\Services\SmsService;
+use App\Models\User;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Str;
 
 class MessageController extends Controller
 {
-    public function index(Request $request)
+    public function index()
     {
-        $admin = Auth::user();
-
         $conversations = Conversation::with(['tenant.user', 'latestMessage'])
             ->where('deleted_by_admin', false)
             ->whereNull('deleted_at')
             ->orderByDesc('last_message_at')
-            ->orderByDesc('created_at')
             ->get();
 
-        $total = $conversations->count();
         $unreadCount = $conversations->sum(
-            fn($c) =>
-            $c->messages()
+            fn ($c) => $c->messages()
                 ->whereNull('read_at')
                 ->where('sender_role', 'tenant')
                 ->count()
         );
 
-        $conversationsForReact = $conversations->mapWithKeys(function ($c) {
-            $latest = $c->latestMessage;
-            return [
-                $c->id => [
-                    'id'      => $c->id,
-                    'tenant'  => $c->tenant->user->name ?? 'Unknown',
-                    'email'   => $c->tenant->user->email ?? '',
-                    'subject' => $c->subject,
-                    'last'    => $latest?->body,
-                    'last_at' => $c->last_message_at?->format('M d, Y · h:i A'),
-                    'unread'  => $c->messages()->whereNull('read_at')->where('sender_role', 'tenant')->count(),
-                ],
-            ];
-        })->toArray();
-
-        $tenants = Tenant::with('user')
-            ->join('users', 'tenants.user_id', '=', 'users.id')
-            ->orderBy('users.name')
-            ->select('tenants.*')
+        $tenants = User::where('role', 'tenant')
+            ->with('tenant')
+            ->orderBy('name')
             ->get()
-            ->map(fn($t) => [
-                'id'    => $t->id,
-                'name'  => $t->user->name,
-                'email' => $t->user->email,
-                'phone' => $t->user->phone,
-            ])
+            ->map(function (User $u) {
+                $tenant = $u->tenant ?: Tenant::ensureForUser($u);
+
+                return [
+                    'id'    => $tenant->id,
+                    'name'  => $u->name,
+                    'email' => $u->email,
+                    'phone' => $u->phone ?? '',
+                ];
+            })
             ->values();
 
-        return view('admin.messages', compact(
-            'admin',
-            'conversations',
-            'conversationsForReact',
-            'tenants',
-            'total',
-            'unreadCount'
-        ));
+        return view('admin.messages', [
+            'conversations' => $conversations,
+            'tenants'       => $tenants,
+            'total'         => $conversations->count(),
+            'unreadCount'   => $unreadCount,
+        ]);
     }
 
-    public function show(Conversation $conversation)
+    public function show(int $id): JsonResponse
     {
+        $conversation = Conversation::with(['tenant.user', 'messages.sender', 'messages.reactions'])
+            ->where('deleted_by_admin', false)
+            ->findOrFail($id);
+
         $conversation->messages()
             ->whereNull('read_at')
             ->where('sender_role', 'tenant')
             ->update(['read_at' => now()]);
 
-        $conversation->load(['tenant.user', 'messages.sender', 'messages.reactions']);
-
-        $visible = $conversation->messages
-            ->reject(fn(Message $m) => $m->isHiddenFrom('admin'));
+        $messages = $conversation->messages()
+            ->orderBy('created_at')
+            ->get()
+            ->map(fn (Message $m) => $this->serializeMessage($m))
+            ->values();
 
         return response()->json([
             'success' => true,
@@ -91,177 +78,208 @@ class MessageController extends Controller
                 'id'       => $conversation->id,
                 'tenant'   => $conversation->tenant->user->name ?? 'Unknown',
                 'subject'  => $conversation->subject,
-                'messages' => $visible->map(fn(Message $m) => [
-                    'id'                   => $m->id,
-                    'sender'               => $m->sender->name ?? 'Unknown',
-                    'sender_id'            => $m->sender_id,
-                    'role'                 => $m->sender_role,
-                    'body'                 => $m->renderBody(),
-                    'deleted_for_everyone' => $m->isDeletedForEveryone(),
-                    'created_at'           => $m->created_at?->format('M d, Y · h:i A'),
-                    'reactions'            => $m->reactionSummary(),
-                ])->values(),
+                'messages' => $messages,
             ],
         ]);
     }
 
-    public function store(Request $request)
+    public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'tenant_id' => ['required', 'exists:tenants,id'],
-            'subject'   => ['required', 'string', 'max:255'],
-            'body'      => ['required', 'string'],
+            'tenant_id'     => ['required', 'integer', 'exists:tenants,id'],
+            'subject'       => ['required', 'string', 'max:255'],
+            'body'          => ['nullable', 'string'],
+            'attachments'   => ['nullable', 'array', 'max:5'],
+            'attachments.*' => ['file', 'max:10240'],
         ]);
 
-        $admin  = Auth::user();
-        $tenant = Tenant::with('user')->findOrFail($validated['tenant_id']);
-
-        $conversation = Conversation::create([
-            'tenant_id'       => $tenant->id,
-            'admin_id'        => $admin->id,
-            'subject'         => $validated['subject'],
-            'last_message_at' => now(),
-        ]);
-
-        Message::create([
-            'conversation_id' => $conversation->id,
-            'sender_id'       => $admin->id,
-            'sender_role'     => 'admin',
-            'body'            => $validated['body'],
-        ]);
-
-        if ($tenant->user && $tenant->user->phone) {
-            $msg = "You have received a new message from the administrator. Log in to your account and visit the Messages section to view and reply.";
-            SmsService::send($tenant->user->phone, $msg);
+        if (empty(trim((string) ($validated['body'] ?? ''))) && empty($validated['attachments'])) {
+            return response()->json(['message' => 'Message body or an attachment is required.'], 422);
         }
 
-        // 🔴 Broadcast to admin screens and the specific tenant
-        $messageText = $validated['body'];
-        $senderName = $auth->name ?? 'Admin';
+        $tenant = Tenant::with('user')->findOrFail($validated['tenant_id']);
 
-        event(new MessageSent(
-            $conversation->id,
-            $conversation->tenant_id, // or $tenant->id in store()
-            'admin',
-            $senderName,
-            $messageText
-        ));
+        $conversation = Conversation::findOrCreateForTenant(
+            $tenant,
+            Auth::id(),
+            $validated['subject']
+        );
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Message sent.',
-            'data'    => ['conversation_id' => $conversation->id],
-        ]);
-    }
+        if ($conversation->deleted_by_admin) {
+            $conversation->update(['deleted_by_admin' => false, 'deleted_at' => null]);
+        }
 
-    public function reply(Request $request, Conversation $conversation)
-    {
-        $validated = $request->validate([
-            'body' => ['required', 'string'],
-        ]);
+        $attachments = $this->saveAttachments($request, $conversation->id);
 
-        $admin = Auth::user();
-
-        Message::create([
-            'conversation_id' => $conversation->id,
-            'sender_id'       => $admin->id,
-            'sender_role'     => 'admin',
-            'body'            => $validated['body'],
+        $message = $conversation->messages()->create([
+            'sender_id'   => Auth::id(),
+            'sender_role' => 'admin',
+            'body'        => $validated['body'] ?? '',
+            'attachments' => $attachments,
         ]);
 
         $conversation->update(['last_message_at' => now()]);
 
-        $conversation->load('tenant.user');
-        if ($conversation->tenant?->user?->phone) {
-            $msg = "You have received a new message from the administrator. Log in to your account and visit the Messages section to view and reply.";
-            SmsService::send($conversation->tenant->user->phone, $msg);
-        }
-
-        // 🔴 Broadcast to admin screens and the specific tenant
-        $messageText = $validated['body'];
-        $senderName = $auth->name ?? 'Admin';
-
-        event(new MessageSent(
-            $conversation->id,
-            $conversation->tenant_id, // or $tenant->id in store()
-            'admin',
-            $senderName,
-            $messageText
-        ));
+        $this->broadcast($conversation, $message, $tenant);
 
         return response()->json([
             'success' => true,
-            'message' => 'Reply sent.',
+            'data'    => [
+                'conversation_id' => $conversation->id,
+                'message_id'      => $message->id,
+            ],
         ]);
     }
 
-    public function deleteMessage(Message $message)
+    public function reply(Request $request, int $id): JsonResponse
     {
-        $message->update(['deleted_by_receiver' => true]);
+        $validated = $request->validate([
+            'body'          => ['nullable', 'string'],
+            'attachments'   => ['nullable', 'array', 'max:5'],
+            'attachments.*' => ['file', 'max:10240'],
+        ]);
 
-        $fresh = $message->fresh();
-        if ($fresh->deleted_by_sender && $fresh->deleted_by_receiver) {
-            $fresh->update([
-                'deleted_at'              => now(),
-                'deleted_for_everyone_at' => now(),
-                'body'                    => 'This message was deleted.',
-            ]);
+        if (empty(trim((string) ($validated['body'] ?? ''))) && empty($validated['attachments'])) {
+            return response()->json(['message' => 'Message body or an attachment is required.'], 422);
         }
+
+        $conversation = Conversation::with('tenant.user')
+            ->where('deleted_by_admin', false)
+            ->findOrFail($id);
+
+        $attachments = $this->saveAttachments($request, $conversation->id);
+
+        $message = $conversation->messages()->create([
+            'sender_id'   => Auth::id(),
+            'sender_role' => 'admin',
+            'body'        => $validated['body'] ?? '',
+            'attachments' => $attachments,
+        ]);
+
+        $conversation->update(['last_message_at' => now()]);
+
+        $this->broadcast($conversation, $message, $conversation->tenant);
 
         return response()->json([
             'success' => true,
-            'message' => 'Message deleted.',
+            'data'    => $this->serializeMessage($message),
         ]);
     }
 
-    public function reactToMessage(Request $request, Message $message)
+    public function destroyMessage(int $messageId): JsonResponse
+    {
+        $message = Message::findOrFail($messageId);
+
+        $message->update([
+            'deleted_by_receiver'     => true,
+            'deleted_for_everyone_at' => now(),
+        ]);
+
+        return response()->json(['success' => true]);
+    }
+
+    public function destroyConversation(int $id): JsonResponse
+    {
+        $conversation = Conversation::findOrFail($id);
+
+        $conversation->update([
+            'deleted_by_admin' => true,
+            'deleted_at'       => now(),
+        ]);
+
+        return response()->json(['success' => true]);
+    }
+
+    public function react(Request $request, int $messageId): JsonResponse
     {
         $validated = $request->validate([
             'reaction' => ['required', 'string', 'max:16'],
         ]);
 
-        $userId = Auth::id();
+        $message = Message::findOrFail($messageId);
 
-        $existing = MessageReaction::where('message_id', $message->id)
-            ->where('user_id', $userId)
+        $existing = $message->reactions()
+            ->where('user_id', Auth::id())
+            ->where('reaction', $validated['reaction'])
             ->first();
 
-        if ($existing && $existing->reaction === $validated['reaction']) {
+        if ($existing) {
             $existing->delete();
-            $action = 'removed';
-        } elseif ($existing) {
-            $existing->update(['reaction' => $validated['reaction']]);
-            $action = 'updated';
         } else {
-            MessageReaction::create([
-                'message_id' => $message->id,
-                'user_id'    => $userId,
-                'reaction'   => $validated['reaction'],
+            $message->reactions()->where('user_id', Auth::id())->delete();
+            $message->reactions()->create([
+                'user_id'  => Auth::id(),
+                'reaction' => $validated['reaction'],
             ]);
-            $action = 'added';
         }
-
-        $message->load('reactions');
 
         return response()->json([
             'success'   => true,
-            'action'    => $action,
-            'reactions' => $message->reactionSummary(),
+            'reactions' => $message->fresh()->reactionSummary(),
         ]);
     }
 
-    public function deleteConversation(Conversation $conversation)
-    {
-        $conversation->update(['deleted_by_admin' => true]);
+    // ============================================================
+    // HELPERS
+    // ============================================================
 
-        $fresh = $conversation->fresh();
-        if ($fresh->deleted_by_admin && $fresh->deleted_by_tenant) {
-            $fresh->update(['deleted_at' => now()]);
+    private function saveAttachments(Request $request, int $conversationId): array
+    {
+        if (! $request->hasFile('attachments')) {
+            return [];
         }
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Conversation deleted.',
-        ]);
+        $saved = [];
+        $dir   = 'messages/' . $conversationId;
+
+        foreach ($request->file('attachments') as $file) {
+            if (! $file || ! $file->isValid()) {
+                continue;
+            }
+
+            $ext  = $file->getClientOriginalExtension() ?: 'bin';
+            $name = Str::random(24) . '.' . $ext;
+            $path = $file->storeAs($dir, $name, 'public');
+
+            $saved[] = [
+                'path' => $path,
+                'name' => $file->getClientOriginalName(),
+                'mime' => $file->getClientMimeType() ?: 'application/octet-stream',
+                'size' => $file->getSize(),
+            ];
+        }
+
+        return $saved;
+    }
+
+    private function serializeMessage(Message $m): array
+    {
+        return [
+            'id'                   => $m->id,
+            'sender'               => $m->sender->name ?? ($m->sender_role === 'admin' ? 'Admin' : 'Tenant'),
+            'role'                 => $m->sender_role,
+            'body'                 => $m->body,
+            'attachments'          => $m->attachmentsForClient(),
+            'created_at'           => $m->created_at?->format('M d, Y g:i A'),
+            'deleted_for_everyone' => $m->isDeletedForEveryone(),
+            'reactions'            => $m->reactionSummary(),
+        ];
+    }
+
+    private function broadcast(Conversation $conversation, Message $message, ?Tenant $tenant): void
+    {
+        if (! $tenant) {
+            return;
+        }
+
+        event(new MessageSent(
+            conversationId: $conversation->id,
+            tenantId:       $tenant->id,
+            userId:         $tenant->user_id,
+            senderRole:     'admin',
+            senderName:     Auth::user()->name ?? 'Admin',
+            body:           $message->body,
+            messageId:      $message->id,
+        ));
     }
 }

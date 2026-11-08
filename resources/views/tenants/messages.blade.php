@@ -63,7 +63,7 @@
                                         class="text-xs text-slate-400">{{ $c->last_message_at?->format('M d') ?? '' }}</span>
                                 </div>
                                 <div class="text-[13px] text-slate-600 leading-relaxed mb-2 line-clamp-2">
-                                    {{ $latest?->body ?? 'No messages yet.' }}
+                                    {{ $latest?->body ?: ($latest?->attachments ? '📎 Attachment' : 'No messages yet.') }}
                                 </div>
                                 <div class="flex justify-between items-center">
                                     <span class="text-xs text-slate-400">Building Management</span>
@@ -116,14 +116,26 @@
                             placeholder="Enter message subject...">
                     </div>
                     <div class="flex flex-col gap-2">
-                        <label class="text-[13px] font-semibold text-slate-700">Message *</label>
-                        <textarea id="new-body" required
+                        <label class="text-[13px] font-semibold text-slate-700">Message</label>
+                        <textarea id="new-body"
                             class="w-full border border-slate-200 rounded-lg px-4 py-3 text-[13px] outline-none resize-none min-h-[180px] focus:border-[#041d40]"
-                            placeholder="Type your message..."></textarea>
+                            placeholder="Type your message (optional if you attach a file)..."></textarea>
                     </div>
+
+                    {{-- Attachment previews --}}
+                    <div id="tenant-new-attachments-preview" class="flex flex-wrap gap-2 hidden"></div>
+
                     <div class="flex justify-between items-center pt-2">
-                        <button type="button" id="messages-cancel-btn"
-                            class="text-slate-600 text-sm font-semibold px-4 py-2.5">Cancel</button>
+                        <div class="flex items-center gap-2">
+                            <button type="button" id="tenant-new-attach-btn"
+                                class="text-slate-600 text-sm font-semibold px-3 py-2.5 border border-slate-200 rounded-lg hover:bg-slate-50 inline-flex items-center gap-2">
+                                <i class="fa-solid fa-paperclip"></i> Attach
+                            </button>
+                            <input type="file" id="tenant-new-files" multiple hidden
+                                accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx,.txt,.zip,.rar">
+                            <button type="button" id="messages-cancel-btn"
+                                class="text-slate-600 text-sm font-semibold px-4 py-2.5">Cancel</button>
+                        </div>
                         <button type="submit" id="tenant-send-btn"
                             class="bg-[#041d40] text-white px-5 py-2.5 rounded-lg text-[13px] font-semibold inline-flex items-center gap-2 disabled:opacity-50">
                             <i class="fa-regular fa-paper-plane"></i> <span id="tenant-send-label">Send Message</span>
@@ -133,7 +145,7 @@
             </div>
         </div>
 
-        {{-- THREAD VIEW — ADDED: Delete Conversation button on the right --}}
+        {{-- THREAD VIEW --}}
         <div id="messages-thread-view" class="hidden">
             <div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
                 <div class="px-5 py-4 border-b border-slate-100 flex items-start gap-3">
@@ -147,7 +159,6 @@
                             <span id="threadCountText">0 message(s)</span>
                         </span>
                     </div>
-                    {{-- NEW: Delete Conversation button --}}
                     <button id="delete-conversation-btn"
                         class="text-rose-500 hover:text-rose-700 text-[12px] font-semibold inline-flex items-center gap-1.5">
                         <i class="fa-regular fa-trash-can"></i> Delete Conversation
@@ -157,15 +168,26 @@
                 <div class="px-5 py-6 flex flex-col gap-4 min-h-[220px] max-h-[500px] overflow-y-auto"
                     id="threadMessagesContainer"></div>
 
-                <div class="px-5 pb-6 pt-2 flex items-end gap-3 border-t border-slate-100">
-                    <div class="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3">
-                        <textarea id="reply-textarea" placeholder="Type your reply..."
-                            class="w-full border-none bg-transparent outline-none text-[13px] resize-none h-12 text-slate-900"></textarea>
+                <div class="px-5 pb-6 pt-2 border-t border-slate-100">
+                    <!-- Reply attachment previews -->
+                    <div id="tenant-reply-attachments-preview" class="flex flex-wrap gap-2 mb-3 hidden"></div>
+
+                    <div class="flex items-end gap-3">
+                        <div class="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3">
+                            <textarea id="reply-textarea" placeholder="Type your reply..."
+                                class="w-full border-none bg-transparent outline-none text-[13px] resize-none h-12 text-slate-900"></textarea>
+                        </div>
+                        <button type="button" id="tenant-reply-attach-btn"
+                            class="bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 px-4 py-4 rounded-xl text-[14px] font-semibold inline-flex items-center gap-2">
+                            <i class="fa-solid fa-paperclip"></i>
+                        </button>
+                        <input type="file" id="tenant-reply-files" multiple hidden
+                            accept="image/*,application/pdf,.doc,.docx,.xls,.xlsx,.txt,.zip,.rar">
+                        <button id="reply-send-btn"
+                            class="bg-[#041d40] text-white px-6 py-4 rounded-xl text-[14px] font-semibold inline-flex items-center gap-2 disabled:opacity-50">
+                            <i class="fa-regular fa-paper-plane"></i> <span id="reply-send-label">Send</span>
+                        </button>
                     </div>
-                    <button id="reply-send-btn"
-                        class="bg-[#041d40] text-white px-6 py-4 rounded-xl text-[14px] font-semibold inline-flex items-center gap-2 disabled:opacity-50">
-                        <i class="fa-regular fa-paper-plane"></i> Send
-                    </button>
                 </div>
             </div>
         </div>
@@ -361,8 +383,6 @@
 
                     if (item && item.dataset.unread === 'true') {
                         item.dataset.unread = 'false';
-
-                        // Remove the amber background
                         item.classList.remove('bg-amber-50/40');
                         item.classList.add('bg-white');
 
@@ -374,7 +394,6 @@
                         if (badge) badge.remove();
                     }
 
-                    // NEW: Wire up "Delete Conversation" for this thread
                     const delConvBtn = document.getElementById('delete-conversation-btn');
                     delConvBtn.onclick = async () => {
                         if (!confirm(
@@ -417,24 +436,26 @@
                     const bubble = document.createElement('div');
                     bubble.className = `bubble ${isAdmin ? 'admin' : 'tenant'}`;
 
-                    // NEW: show placeholder when "deleted for everyone"
+                    const attachmentsHTML = renderAttachments(m.attachments || []);
+
                     bubble.innerHTML = m.deleted_for_everyone ?
                         `
-                    <div class="flex items-center justify-between mb-1.5 gap-6">
-                        <span class="text-[11px] font-bold">${escapeHTML(m.sender)}</span>
-                        <span class="text-[11px] opacity-80 whitespace-nowrap">${escapeHTML(m.created_at || '')}</span>
-                    </div>
-                    <div class="italic opacity-70">
-                        <i class="fa-regular fa-trash-can mr-1"></i> This message was deleted.
-                    </div>
-                ` :
+                            <div class="flex items-center justify-between mb-1.5 gap-6">
+                                <span class="text-[11px] font-bold">${escapeHTML(m.sender)}</span>
+                                <span class="text-[11px] opacity-80 whitespace-nowrap">${escapeHTML(m.created_at || '')}</span>
+                            </div>
+                            <div class="italic opacity-70">
+                                <i class="fa-regular fa-trash-can mr-1"></i> This message was deleted.
+                            </div>
+                        ` :
                         `
-                    <div class="flex items-center justify-between mb-1.5 gap-6">
-                        <span class="text-[11px] font-bold">${escapeHTML(m.sender)}</span>
-                        <span class="text-[11px] opacity-80 whitespace-nowrap">${escapeHTML(m.created_at || '')}</span>
-                    </div>
-                    <div>${escapeHTML(m.body)}</div>
-                `;
+                            <div class="flex items-center justify-between mb-1.5 gap-6">
+                                <span class="text-[11px] font-bold">${escapeHTML(m.sender)}</span>
+                                <span class="text-[11px] opacity-80 whitespace-nowrap">${escapeHTML(m.created_at || '')}</span>
+                            </div>
+                            ${attachmentsHTML}
+                            ${m.body && m.body.trim() !== '' ? `<div class="whitespace-pre-wrap">${escapeHTML(m.body)}</div>` : ''}
+                        `;
 
                     const actions = document.createElement('div');
                     actions.className = 'bubble-actions';
@@ -486,6 +507,56 @@
                 }, 50);
             }
 
+            // ── Attachments renderer — same look, but images open in lightbox ──
+            function renderAttachments(attachments) {
+                if (!attachments || attachments.length === 0) return '';
+
+                const imgs = attachments.filter(a => a.is_image);
+                const files = attachments.filter(a => !a.is_image);
+
+                let html = '';
+
+                if (imgs.length > 0) {
+                    html += '<div class="flex flex-wrap gap-1.5 mb-2">';
+                    imgs.forEach((a, idx) => {
+                        html += `
+                            <button type="button"
+                                    class="fb-attach-thumb group relative overflow-hidden rounded-lg border border-white/20"
+                                    data-group="${escapeHTML(a.name + '-' + idx)}"
+                                    data-index="${idx}"
+                                    data-name="${escapeHTML(a.name)}"
+                                    data-src="${a.url}">
+                                <img src="${a.url}" alt="${escapeHTML(a.name)}"
+                                     class="max-h-48 max-w-[220px] object-cover transition group-hover:brightness-90"
+                                     loading="lazy">
+                            </button>
+                        `;
+                    });
+                    html += '</div>';
+                }
+
+                if (files.length > 0) {
+                    html += '<div class="flex flex-col gap-1.5 mb-2">';
+                    files.forEach(a => {
+                        const size = a.size > 1024 * 1024 ?
+                            (a.size / (1024 * 1024)).toFixed(1) + ' MB' :
+                            Math.max(1, Math.round(a.size / 1024)) + ' KB';
+                        html += `
+                            <a href="${a.url}" download="${escapeHTML(a.name)}"
+                               class="flex items-center gap-2 px-3 py-2 rounded-lg border border-white/20 hover:bg-white/10 transition text-[12px]">
+                                <i class="fa-solid fa-paperclip"></i>
+                                <span class="truncate max-w-[200px]">${escapeHTML(a.name)}</span>
+                                <span class="opacity-70">${size}</span>
+                                <i class="fa-solid fa-download ml-auto opacity-60"></i>
+                            </a>
+                        `;
+                    });
+                    html += '</div>';
+                }
+
+                return html;
+            }
+
             async function deleteMessage(messageId) {
                 if (!confirm('Delete this message for you? The other side will still see it.')) return;
                 try {
@@ -532,36 +603,148 @@
                 }
             }
 
+            // ── Attachments picker (unchanged) ────────────────────
+            const tenantSelected = {
+                new: [],
+                reply: []
+            };
+
+            async function compressImage(file) {
+                if (!file.type.startsWith('image/') || file.size < 200 * 1024) return file;
+                try {
+                    const bitmap = await createImageBitmap(file);
+                    const maxDim = 1600;
+                    const ratio = Math.min(1, maxDim / Math.max(bitmap.width, bitmap.height));
+                    const w = Math.round(bitmap.width * ratio);
+                    const h = Math.round(bitmap.height * ratio);
+                    const canvas = document.createElement('canvas');
+                    canvas.width = w;
+                    canvas.height = h;
+                    canvas.getContext('2d').drawImage(bitmap, 0, 0, w, h);
+                    const blob = await new Promise(res => canvas.toBlob(b => res(b), 'image/jpeg', 0.82));
+                    if (!blob) return file;
+                    return new File([blob], file.name.replace(/\.(png|webp|gif|bmp)$/i, '.jpg'), {
+                        type: 'image/jpeg',
+                        lastModified: Date.now(),
+                    });
+                } catch (e) {
+                    return file;
+                }
+            }
+
+            function renderPreview(targetId, files) {
+                const box = document.getElementById(targetId);
+                box.innerHTML = '';
+                if (files.length === 0) {
+                    box.classList.add('hidden');
+                    return;
+                }
+                box.classList.remove('hidden');
+
+                files.forEach((f, i) => {
+                    const item = document.createElement('div');
+                    item.className =
+                        'flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-100 text-[12px] text-slate-700';
+                    if (f.type.startsWith('image/')) {
+                        const img = document.createElement('img');
+                        img.src = URL.createObjectURL(f);
+                        img.className = 'w-8 h-8 rounded object-cover';
+                        item.appendChild(img);
+                    } else {
+                        const ic = document.createElement('i');
+                        ic.className = 'fa-solid fa-paperclip';
+                        item.appendChild(ic);
+                    }
+                    const name = document.createElement('span');
+                    name.className = 'truncate max-w-[140px]';
+                    name.textContent = f.name;
+                    item.appendChild(name);
+
+                    const rm = document.createElement('button');
+                    rm.type = 'button';
+                    rm.className = 'text-slate-400 hover:text-rose-500';
+                    rm.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+                    rm.onclick = () => {
+                        const arr = targetId.includes('reply') ? tenantSelected.reply : tenantSelected.new;
+                        arr.splice(i, 1);
+                        renderPreview(targetId, arr);
+                    };
+                    item.appendChild(rm);
+                    box.appendChild(item);
+                });
+            }
+
+            async function handleFilePick(fileList, target) {
+                const files = Array.from(fileList || []);
+                if (files.length === 0) return;
+                const bucket = target === 'reply' ? tenantSelected.reply : tenantSelected.new;
+                const max = 5 - bucket.length;
+                if (max <= 0) {
+                    alert('You can attach at most 5 files per message.');
+                    return;
+                }
+                const picked = files.slice(0, max);
+                picked.forEach(f => bucket.push(f));
+                const previewId = target === 'reply' ? 'tenant-reply-attachments-preview' :
+                    'tenant-new-attachments-preview';
+                renderPreview(previewId, bucket);
+                for (let i = 0; i < picked.length; i++) {
+                    const original = picked[i];
+                    const smaller = await compressImage(original);
+                    if (smaller !== original) {
+                        const idx = bucket.indexOf(original);
+                        if (idx > -1) bucket[idx] = smaller;
+                    }
+                }
+                renderPreview(previewId, bucket);
+            }
+
+            document.getElementById('tenant-reply-attach-btn').onclick = () =>
+                document.getElementById('tenant-reply-files').click();
+            document.getElementById('tenant-new-attach-btn').onclick = () =>
+                document.getElementById('tenant-new-files').click();
+            document.getElementById('tenant-reply-files').onchange = (e) => {
+                handleFilePick(e.target.files, 'reply');
+                e.target.value = '';
+            };
+            document.getElementById('tenant-new-files').onchange = (e) => {
+                handleFilePick(e.target.files, 'new');
+                e.target.value = '';
+            };
+
             document.getElementById('new-message-form').addEventListener('submit', async (e) => {
                 e.preventDefault();
                 const btn = document.getElementById('tenant-send-btn');
                 const label = document.getElementById('tenant-send-label');
-
-                const payload = {
-                    subject: document.getElementById('new-subject').value,
-                    body: document.getElementById('new-body').value,
-                };
-
-                if (!payload.subject.trim() || !payload.body.trim()) {
-                    alert('Please fill in all fields.');
+                const subject = document.getElementById('new-subject').value;
+                const body = document.getElementById('new-body').value;
+                const files = tenantSelected.new;
+                if (!subject.trim()) {
+                    alert('Please enter a subject.');
                     return;
                 }
-
+                if (!body.trim() && files.length === 0) {
+                    alert('Please add a message or an attachment.');
+                    return;
+                }
                 btn.disabled = true;
-                label.innerText = 'Sending…';
-
+                label.innerText = files.length ? 'Uploading…' : 'Sending…';
+                const fd = new FormData();
+                fd.append('subject', subject);
+                fd.append('body', body);
+                files.forEach(f => fd.append('attachments[]', f));
                 try {
                     const res = await fetch('/tenants/messages', {
                         method: 'POST',
                         headers: {
-                            'Content-Type': 'application/json',
                             'Accept': 'application/json',
-                            'X-CSRF-TOKEN': csrf(),
+                            'X-CSRF-TOKEN': csrf()
                         },
-                        body: JSON.stringify(payload),
+                        body: fd,
                     });
                     const data = await res.json();
                     if (!res.ok) throw new Error(data.message || 'Failed to send.');
+                    tenantSelected.new = [];
                     window.location.reload();
                 } catch (err) {
                     alert(err.message);
@@ -574,26 +757,29 @@
             document.getElementById('reply-send-btn').addEventListener('click', async () => {
                 const ta = document.getElementById('reply-textarea');
                 const body = ta.value.trim();
-                if (!body || !currentConvId) return;
-
+                const files = tenantSelected.reply;
+                if ((!body && files.length === 0) || !currentConvId) return;
                 const btn = document.getElementById('reply-send-btn');
+                const label = document.getElementById('reply-send-label');
                 btn.disabled = true;
-
+                if (label) label.innerText = files.length ? 'Uploading…' : 'Sending…';
+                const fd = new FormData();
+                fd.append('body', body);
+                files.forEach(f => fd.append('attachments[]', f));
                 try {
                     const res = await fetch(`/tenants/messages/${currentConvId}/reply`, {
                         method: 'POST',
                         headers: {
-                            'Content-Type': 'application/json',
                             'Accept': 'application/json',
-                            'X-CSRF-TOKEN': csrf(),
+                            'X-CSRF-TOKEN': csrf()
                         },
-                        body: JSON.stringify({
-                            body
-                        }),
+                        body: fd,
                     });
                     const data = await res.json();
                     if (!res.ok) throw new Error(data.message || 'Failed to send.');
                     ta.value = '';
+                    tenantSelected.reply = [];
+                    renderPreview('tenant-reply-attachments-preview', []);
                     const item = document.querySelector(
                         `.conversation-item[data-conv-id="${currentConvId}"]`);
                     openThread(currentConvId, item);
@@ -601,39 +787,33 @@
                     alert(err.message);
                 } finally {
                     btn.disabled = false;
+                    if (label) label.innerText = 'Send';
                 }
             });
 
             const tabButtons = document.querySelectorAll('.tab-btn');
             let currentTab = 'all';
-
             tabButtons.forEach(btn => btn.addEventListener('click', () => {
                 tabButtons.forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
                 currentTab = btn.dataset.tab;
                 applyFilter(currentTab);
             }));
-
             document.getElementById('conversation-search').addEventListener('input', () => applyFilter(currentTab));
 
             function applyFilter(tab) {
                 const q = (document.getElementById('conversation-search').value || '').toLowerCase().trim();
                 const items = document.querySelectorAll('.conversation-item');
                 let visible = 0;
-
                 items.forEach(item => {
                     const isUnread = item.dataset.unread === 'true';
-                    const matchesTab =
-                        tab === 'all' ||
-                        (tab === 'unread' && isUnread) ||
-                        (tab === 'read' && !isUnread);
+                    const matchesTab = tab === 'all' || (tab === 'unread' && isUnread) || (tab === 'read' && !
+                        isUnread);
                     const matchesSearch = !q || (item.dataset.subject || '').includes(q);
-
                     const show = matchesTab && matchesSearch;
                     item.classList.toggle('is-hidden', !show);
                     if (show) visible++;
                 });
-
                 const empty = document.getElementById('emptyState');
                 if (visible === 0) {
                     empty.classList.remove('hidden');
@@ -652,97 +832,247 @@
                     '<': '&lt;',
                     '>': '&gt;',
                     '"': '&quot;',
-                    "'": '&#39;'
+                    "'": '&#39;',
                 })[s]);
             }
 
             // ============================================================
-            // 🟢 ECHO REAL-TIME LISTENER (Tenant - No Reload)
+            // FACEBOOK-MESSENGER-STYLE IMAGE LIGHTBOX
+            // Click any image thumbnail → it scales up into a full-screen
+            // overlay. Arrow keys cycle within the same message. Esc /
+            // backdrop / ✕ closes. No new tab ever opens.
+            // ============================================================
+            let lb, lbImg, lbDownload, lbPrev, lbNext, lbCounter;
+            let lbGallery = []; // [{url, name}]
+            let lbIndex = 0;
+
+            function ensureLightbox() {
+                if (lb) return;
+                lb = document.createElement('div');
+                lb.id = 'fb-lightbox';
+                lb.style.cssText = `
+                    position: fixed; inset: 0; z-index: 9999;
+                    background: rgba(10, 12, 16, 0.92);
+                    display: none; align-items: center; justify-content: center;
+                    opacity: 0; transition: opacity .18s ease;
+                    padding: 16px; cursor: zoom-out;
+                    -webkit-user-select: none; user-select: none;
+                `;
+                lb.innerHTML = `
+                    <button type="button" id="fb-lb-close" aria-label="Close"
+                        style="position:absolute;top:14px;right:18px;background:transparent;border:0;
+                               color:#fff;font-size:24px;cursor:pointer;padding:6px;line-height:1;
+                               border-radius:8px;transition:background .15s;">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                    <button type="button" id="fb-lb-prev" aria-label="Previous"
+                        style="position:absolute;left:14px;top:50%;transform:translateY(-50%);
+                               background:rgba(255,255,255,.1);border:0;color:#fff;font-size:22px;
+                               cursor:pointer;padding:10px 14px;border-radius:999px;transition:background .15s;">
+                        <i class="fa-solid fa-chevron-left"></i>
+                    </button>
+                    <button type="button" id="fb-lb-next" aria-label="Next"
+                        style="position:absolute;right:14px;top:50%;transform:translateY(-50%);
+                               background:rgba(255,255,255,.1);border:0;color:#fff;font-size:22px;
+                               cursor:pointer;padding:10px 14px;border-radius:999px;transition:background .15s;">
+                        <i class="fa-solid fa-chevron-right"></i>
+                    </button>
+                    <img id="fb-lb-img" src="" alt=""
+                         style="max-width:92vw;max-height:88vh;border-radius:12px;
+                                box-shadow:0 20px 60px rgba(0,0,0,.6);
+                                transform:scale(.9);transition:transform .18s ease;cursor:default;">
+                    <div id="fb-lb-counter"
+                         style="position:absolute;bottom:20px;left:50%;transform:translateX(-50%);
+                                color:#fff;font-size:12px;font-weight:600;opacity:.85;
+                                background:rgba(255,255,255,.1);padding:4px 10px;border-radius:999px;display:none;">
+                    </div>
+                    <a id="fb-lb-download" href="#" download
+                       style="position:absolute;bottom:20px;right:20px;background:#fff;color:#0f172a;
+                              padding:8px 14px;border-radius:8px;font-size:13px;font-weight:600;
+                              text-decoration:none;display:inline-flex;align-items:center;gap:6px;">
+                        <i class="fa-solid fa-download"></i> Download
+                    </a>
+                `;
+                document.body.appendChild(lb);
+
+                lbImg = document.getElementById('fb-lb-img');
+                lbDownload = document.getElementById('fb-lb-download');
+                lbPrev = document.getElementById('fb-lb-prev');
+                lbNext = document.getElementById('fb-lb-next');
+                lbCounter = document.getElementById('fb-lb-counter');
+
+                // Close on backdrop click only (not when clicking the image)
+                lb.addEventListener('click', (e) => {
+                    if (e.target === lb) closeLightbox();
+                });
+                document.getElementById('fb-lb-close').addEventListener('click', closeLightbox);
+
+                lbPrev.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    showPrev();
+                });
+                lbNext.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    showNext();
+                });
+
+                // Keyboard: Esc closes, ←/→ navigate
+                document.addEventListener('keydown', (e) => {
+                    if (!lb || lb.style.display !== 'flex') return;
+                    if (e.key === 'Escape') closeLightbox();
+                    if (e.key === 'ArrowLeft') showPrev();
+                    if (e.key === 'ArrowRight') showNext();
+                });
+            }
+
+            function openLightbox(gallery, index) {
+                ensureLightbox();
+                lbGallery = gallery;
+                lbIndex = index;
+
+                applyCurrentImage();
+
+                lb.style.display = 'flex';
+                // Trigger the fade/scale transition
+                requestAnimationFrame(() => {
+                    lb.style.opacity = '1';
+                    lbImg.style.transform = 'scale(1)';
+                });
+
+                // Prevent body scroll while open
+                document.body.style.overflow = 'hidden';
+            }
+
+            function closeLightbox() {
+                if (!lb) return;
+                lb.style.opacity = '0';
+                lbImg.style.transform = 'scale(.9)';
+                setTimeout(() => {
+                    lb.style.display = 'none';
+                    document.body.style.overflow = '';
+                }, 180);
+            }
+
+            function showPrev() {
+                if (lbGallery.length <= 1) return;
+                lbIndex = (lbIndex - 1 + lbGallery.length) % lbGallery.length;
+                applyCurrentImage();
+            }
+
+            function showNext() {
+                if (lbGallery.length <= 1) return;
+                lbIndex = (lbIndex + 1) % lbGallery.length;
+                applyCurrentImage();
+            }
+
+            function applyCurrentImage() {
+                const current = lbGallery[lbIndex];
+                if (!current) return;
+
+                // tiny fade-out/in so switching feels smooth
+                lbImg.style.opacity = '0';
+                setTimeout(() => {
+                    lbImg.src = current.url;
+                    lbImg.alt = current.name || '';
+                    lbDownload.href = current.url;
+                    lbDownload.setAttribute('download', current.name || 'image');
+                    lbImg.style.opacity = '1';
+                }, 90);
+
+                if (lbGallery.length > 1) {
+                    lbCounter.style.display = 'inline-block';
+                    lbCounter.textContent = `${lbIndex + 1} / ${lbGallery.length}`;
+                    lbPrev.style.display = 'inline-flex';
+                    lbNext.style.display = 'inline-flex';
+                } else {
+                    lbCounter.style.display = 'none';
+                    lbPrev.style.display = 'none';
+                    lbNext.style.display = 'none';
+                }
+            }
+
+            // Delegate: any click on a thumbnail opens the lightbox.
+            // Grouping by message bubble so ← → only cycle within
+            // images from the SAME message — exactly like Messenger.
+            document.addEventListener('click', (e) => {
+                const trigger = e.target.closest('.fb-attach-thumb');
+                if (!trigger) return;
+                e.preventDefault();
+                e.stopPropagation();
+
+                const parentBubble = trigger.closest('.bubble-wrap') || document;
+                const allThumbs = Array.from(parentBubble.querySelectorAll('.fb-attach-thumb'));
+                const gallery = allThumbs.map(t => ({
+                    url: t.dataset.src,
+                    name: t.dataset.name,
+                }));
+                const idx = allThumbs.indexOf(trigger);
+                openLightbox(gallery, Math.max(0, idx));
+            });
+
+            // ============================================================
+            // ECHO — Tenant realtime
             // ============================================================
             function initTenantMessageListener() {
                 if (!window.Echo) {
                     setTimeout(initTenantMessageListener, 300);
                     return;
                 }
-
                 try {
                     const tenantId = {{ Auth::user()->tenant?->id ?? 'null' }};
+                    const userId = {{ Auth::id() }};
+                    const channel = tenantId ? `tenant.${tenantId}.messages` : `user.${userId}.messages`;
 
-                    if (tenantId) {
-                        window.Echo.private(`tenant.${tenantId}.messages`)
-                            .listen('.message.sent', (payload) => {
-                                console.log('[live] 🟢 tenant message.sent received!', payload);
-
-                                // 1. Inside chat thread AND it matches this conversation
-                                if (currentConvId && String(payload.conversation_id) === String(currentConvId)) {
-                                    const item = document.querySelector(
-                                        `.conversation-item[data-conv-id="${currentConvId}"]`);
-                                    openThread(currentConvId, item);
-                                    return;
+                    window.Echo.private(channel)
+                        .listen('.message.sent', (payload) => {
+                            if (currentConvId && String(payload.conversation_id) === String(currentConvId)) {
+                                const item = document.querySelector(
+                                    `.conversation-item[data-conv-id="${currentConvId}"]`);
+                                openThread(currentConvId, item);
+                                return;
+                            }
+                            let listItem = document.querySelector(
+                                `.conversation-item[data-conv-id="${payload.conversation_id}"]`);
+                            if (listItem) {
+                                const previewEl = listItem.querySelector('.line-clamp-2');
+                                if (previewEl) {
+                                    previewEl.innerText = payload.sender_role === 'tenant' ?
+                                        `You: ${payload.body || '📎 Attachment'}` :
+                                        (payload.body || '📎 Attachment');
                                 }
-
-                                // 2. On list view
-                                let listItem = document.querySelector(
-                                    `.conversation-item[data-conv-id="${payload.conversation_id}"]`);
-
-                                if (listItem) {
-                                    // Update preview
-                                    const previewEl = listItem.querySelector('.line-clamp-2');
-                                    if (previewEl) {
-                                        previewEl.innerText = payload.sender_role === 'tenant' ?
-                                            `You: ${payload.body}` :
-                                            payload.body;
-                                    }
-
-                                    // Update time
-                                    const timeEl = listItem.querySelector('.text-xs.text-slate-400');
-                                    if (timeEl) {
-                                        timeEl.innerText = new Date(payload.ts).toLocaleTimeString([], {
-                                            hour: '2-digit',
-                                            minute: '2-digit'
-                                        });
-                                    }
-
-                                    // Highlight row and add badge if admin sent it
-                                    if (payload.sender_role === 'admin') {
-                                        listItem.dataset.unread = 'true';
-
-                                        // ✅ Change ENTIRE row background
-                                        listItem.classList.remove('bg-white');
-                                        listItem.classList.add('bg-amber-50');
-
-                                        // Change icon background
-                                        const iconBox = listItem.querySelector('.w-11');
-                                        if (iconBox) {
-                                            iconBox.classList.remove('bg-slate-100', 'text-[#041d40]');
-                                            iconBox.classList.add('bg-amber-100', 'text-amber-600');
-                                        }
-
-                                        // Rebuild the bottom row to update count
-                                        const bottomRow = listItem.querySelector(
-                                            '.flex.justify-between.items-center');
-                                        if (bottomRow) {
-                                            const currentBadge = bottomRow.querySelector('.badge-unread');
-                                            let currentUnread = 0;
-                                            if (currentBadge) {
-                                                currentUnread = parseInt(currentBadge.innerText) || 1;
-                                            }
-                                            const newUnread = currentUnread + 1;
-
-                                            bottomRow.innerHTML = `
-                                                <span class="text-xs text-slate-400">Building Management</span>
-                                                <span class="badge-unread bg-[#e06800] text-white text-[11px] font-semibold px-2.5 py-0.5 rounded-full">${newUnread} new</span>
-                                            `;
-                                        }
-                                    }
-
-                                    // Move to top
-                                    document.getElementById('conversationsContainer').prepend(listItem);
-                                } else if (!currentConvId) {
-                                    window.location.reload();
+                                const timeEl = listItem.querySelector('.text-xs.text-slate-400');
+                                if (timeEl) {
+                                    timeEl.innerText = new Date(payload.ts).toLocaleTimeString([], {
+                                        hour: '2-digit',
+                                        minute: '2-digit',
+                                    });
                                 }
-                            });
-                    }
+                                if (payload.sender_role === 'admin') {
+                                    listItem.dataset.unread = 'true';
+                                    listItem.classList.remove('bg-white');
+                                    listItem.classList.add('bg-amber-50');
+                                    const iconBox = listItem.querySelector('.w-11');
+                                    if (iconBox) {
+                                        iconBox.classList.remove('bg-slate-100', 'text-[#041d40]');
+                                        iconBox.classList.add('bg-amber-100', 'text-amber-600');
+                                    }
+                                    const bottomRow = listItem.querySelector('.flex.justify-between.items-center');
+                                    if (bottomRow) {
+                                        const currentBadge = bottomRow.querySelector('.badge-unread');
+                                        let currentUnread = 0;
+                                        if (currentBadge) currentUnread = parseInt(currentBadge.innerText) || 1;
+                                        const newUnread = currentUnread + 1;
+                                        bottomRow.innerHTML = `
+                                            <span class="text-xs text-slate-400">Building Management</span>
+                                            <span class="badge-unread bg-[#e06800] text-white text-[11px] font-semibold px-2.5 py-0.5 rounded-full">${newUnread} new</span>
+                                        `;
+                                    }
+                                }
+                                document.getElementById('conversationsContainer').prepend(listItem);
+                            } else if (!currentConvId) {
+                                window.location.reload();
+                            }
+                        });
                 } catch (e) {
                     console.error('Echo tenant.messages bind failed:', e);
                 }

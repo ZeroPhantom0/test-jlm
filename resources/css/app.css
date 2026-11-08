@@ -51,13 +51,40 @@ input::-webkit-strong-password-auto-fill-button {
 
 @layer components {
 
-        /* ---------- LOGIN PAGE ---------- */
+    /* ---------- LOGIN PAGE ---------- */
     .login-page { margin: 0; min-height: 100vh; background: #001D4C; font-family: 'Inter', sans-serif; }
     .login-container { min-height: 100vh; display: grid; grid-template-columns: 1fr 1.2fr; }
+
+    /* LEFT — custom background image + dark overlay */
     .login-left {
-        padding: 42px 9%; display: flex; flex-direction: column;
-        background: #001D4C; color: #ffffff;
+        position: relative;
+        padding: 42px 9%;
+        display: flex;
+        flex-direction: column;
+        color: #ffffff;
+        overflow: hidden;
+
+        /* 🔁 CHANGE THIS URL TO YOUR OWN BACKGROUND IMAGE */
+        background-image:
+            linear-gradient(rgba(0, 29, 76, 0.72), rgba(0, 29, 76, 0.72)),
+            url('/images/bg-login.jpg');
+        background-size: cover;
+        background-position: center;
+        background-repeat: no-repeat;
     }
+
+    /* Subtle right-edge vignette so the white panel blends in */
+    .login-left::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        background: linear-gradient(90deg, rgba(0,0,0,0) 65%, rgba(0,0,0,0.20) 100%);
+    }
+
+    /* Keep content above the vignette overlay */
+    .login-left > * { position: relative; z-index: 1; }
+
     .login-brand { display: flex; align-items: center; gap: 14px; }
     .login-logo {
         width: 42px; height: 42px; border-radius: 50%; overflow: hidden; flex-shrink: 0;
@@ -65,10 +92,31 @@ input::-webkit-strong-password-auto-fill-button {
     }
     .login-logo img { width: 100%; height: 100%; object-fit: cover; display: block; }
     .login-brand span { color: #ffffff; font-size: 18px; font-weight: 700; }
-    .login-intro { max-width: 560px; margin: auto 0; padding: 70px 0; }
-    .login-intro h1 { margin: 0 0 35px; color: #ffffff; font-size: 46px; line-height: 1.05; font-weight: 800; }
+
+    /* Headline + paragraph pinned to bottom-left (matches the screenshot) */
+    .login-intro {
+        max-width: 560px;
+        margin-top: auto;          /* push to bottom */
+        margin-bottom: 20px;
+        padding-top: 70px;
+    }
+    .login-intro h1 {
+        margin: 0 0 18px;
+        color: #ffffff;
+        font-size: 46px;
+        line-height: 1.08;
+        font-weight: 800;
+    }
     .login-intro h1 span { color: #FF8904; }
-    .login-intro > p { max-width: 470px; margin: 0 0 42px; color: #D0D9E8; font-size: 17px; line-height: 1.6; }
+    .login-intro > p {
+        max-width: 470px;
+        margin: 0;
+        color: #D0D9E8;
+        font-size: 15.5px;
+        line-height: 1.6;
+    }
+
+    /* Benefits list (kept in case you want to re-add them later) */
     .login-benefits { display: flex; flex-direction: column; gap: 22px; }
     .login-benefit { display: flex; align-items: center; gap: 16px; }
     .login-benefit > span {
@@ -79,12 +127,13 @@ input::-webkit-strong-password-auto-fill-button {
     }
     .login-benefit p { margin: 0; color: #ffffff; font-size: 16px; font-weight: 500; }
 
+    /* RIGHT — unchanged white panel */
     .login-right {
         min-height: 100vh; padding: 40px 6%;
         display: flex; align-items: center; justify-content: center;
         background: #ffffff; border-radius: 28px 0 0 28px;
     }
-    .login-form-container { width: 100%; max-width: 560px; } /* Matches Signup */
+    .login-form-container { width: 100%; max-width: 560px; }
     .back-home-link {
         display: inline-flex; align-items: center; gap: 8px;
         color: #001D4C; text-decoration: none;
@@ -171,13 +220,13 @@ input::-webkit-strong-password-auto-fill-button {
     @media (max-width: 950px) {
         .login-container { grid-template-columns: 1fr; }
         .login-left { min-height: auto; padding: 35px 7%; }
-        .login-intro { margin: 50px 0 20px; padding: 0; }
+        .login-intro { margin-top: 40px; margin-bottom: 20px; padding-top: 0; }
         .login-intro h1 { font-size: 40px; }
         .login-right { min-height: auto; padding: 60px 7%; border-radius: 28px 28px 0 0; }
     }
     @media (max-width: 600px) {
         .login-left { padding: 28px 6%; }
-        .login-intro { margin-top: 40px; }
+        .login-intro { margin-top: 32px; }
         .login-intro h1 { font-size: 34px; }
         .login-intro > p { font-size: 15px; }
         .login-right { padding: 45px 6%; }
@@ -185,34 +234,78 @@ input::-webkit-strong-password-auto-fill-button {
         .login-options { align-items: flex-start; gap: 15px; }
     }
 
-        /* ---------- SIGNUP PAGE ---------- */
+    /* ---------- SIGNUP PAGE ---------- */
     .signup-page { margin: 0; min-height: 100vh; background: #001D4C; font-family: 'Inter', sans-serif; }
     .signup-container { min-height: 100vh; display: grid; grid-template-columns: 1fr 1.2fr; }
-    .signup-left { padding: 42px 9%; display: flex; flex-direction: column; background: #001D4C; color: #ffffff; }
+
+    /* LEFT — custom background image + dark overlay */
+    .signup-left {
+        position: relative;
+        padding: 42px 9%;
+        display: flex;
+        flex-direction: column;
+        color: #ffffff;
+        overflow: hidden;
+
+        /* Uses the same background image as the login page */
+        background-image:
+            linear-gradient(rgba(0, 29, 76, 0.72), rgba(0, 29, 76, 0.72)),
+            url('/images/bg-login.jpg');
+        background-size: cover;
+        background-position: center;
+        background-repeat: no-repeat;
+    }
+
+    /* Subtle right-edge vignette so the white panel blends in */
+    .signup-left::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        background: linear-gradient(90deg, rgba(0,0,0,0) 65%, rgba(0,0,0,0.20) 100%);
+    }
+
+    /* Keep content above the vignette overlay */
+    .signup-left > * { position: relative; z-index: 1; }
+
     .signup-brand { display: flex; align-items: center; gap: 14px; }
-    .signup-logo { width: 42px; height: 42px; border-radius: 50%; overflow: hidden; flex-shrink: 0; }
+    .signup-logo { 
+        width: 42px; height: 42px; border-radius: 50%; overflow: hidden; flex-shrink: 0;
+        background: #ffffff; /* ensures logo is visible on dark bg if image has transparency */
+    }
     .signup-logo img { width: 100%; height: 100%; object-fit: cover; display: block; }
     .signup-brand span { color: #ffffff; font-size: 18px; font-weight: 700; }
-    .signup-intro { max-width: 560px; margin: auto 0; padding: 70px 0; }
-    .signup-intro h1 { margin: 0 0 35px; color: #ffffff; font-size: 46px; line-height: 1.05; font-weight: 800; }
-    .signup-intro h1 span { color: #FF8904; }
-    .signup-intro > p { max-width: 470px; margin: 0 0 42px; color: #D0D9E8; font-size: 17px; line-height: 1.6; }
-    .signup-benefits { display: flex; flex-direction: column; gap: 22px; }
-    .signup-benefit { display: flex; align-items: center; gap: 16px; }
-    .signup-benefit > span {
-        width: 25px; height: 25px; flex-shrink: 0;
-        display: flex; align-items: center; justify-content: center;
-        border: 2px solid #FF8904; border-radius: 50%;
-        color: #FF8904; font-size: 15px; font-weight: 800;
-    }
-    .signup-benefit p { margin: 0; color: #ffffff; font-size: 16px; font-weight: 500; }
 
+    /* Headline + paragraph pinned to bottom-left */
+    .signup-intro {
+        max-width: 560px;
+        margin-top: auto;          /* push to bottom */
+        margin-bottom: 20px;
+        padding-top: 70px;
+    }
+    .signup-intro h1 {
+        margin: 0 0 18px;
+        color: #ffffff;
+        font-size: 46px;
+        line-height: 1.08;
+        font-weight: 800;
+    }
+    .signup-intro h1 span { color: #FF8904; }
+    .signup-intro > p {
+        max-width: 470px;
+        margin: 0;
+        color: #D0D9E8;
+        font-size: 15.5px;
+        line-height: 1.6;
+    }
+
+    /* RIGHT — unchanged white panel */
     .signup-right {
         min-height: 100vh; padding: 40px 6%;
         display: flex; align-items: center; justify-content: center;
         background: #ffffff; border-radius: 28px 0 0 28px;
     }
-    .signup-form-container { width: 100%; max-width: 560px; } /* Narrower for professional look */
+    .signup-form-container { width: 100%; max-width: 560px; }
     .signup-form-container h2 { margin: 0 0 6px; color: #111A30; font-size: 26px; line-height: 1.2; font-weight: 800; }
     .signup-subtitle { margin: 0 0 28px; color: #7187A5; font-size: 14.5px; }
 
@@ -228,9 +321,9 @@ input::-webkit-strong-password-auto-fill-button {
         color: #8EA2BF; font-size: 16px; pointer-events: none;
     }
     .signup-input-wrapper input {
-        width: 100%; height: 46px; /* Smaller height */
+        width: 100%; height: 46px;
         padding: 0 44px;
-        border: 1px solid #C8D4E2; border-radius: 10px; /* Tighter radius */
+        border: 1px solid #C8D4E2; border-radius: 10px;
         outline: none; background: #ffffff; color: #111A30;
         font-family: inherit; font-size: 14px; transition: 0.2s ease;
     }
@@ -249,8 +342,6 @@ input::-webkit-strong-password-auto-fill-button {
         display: flex; align-items: center; gap: 4px;
     }
 
-        /* ---------- PROFESSIONAL GUIDED VALIDATION ---------- */
-
     /* Hint (informational, not an error) */
     .signup-field-hint {
         display: flex; align-items: center; gap: 5px;
@@ -268,16 +359,12 @@ input::-webkit-strong-password-auto-fill-button {
         pointer-events: none;
         animation: valid-pop 0.2s ease-out;
     }
-    /* When password toggle button is present, nudge the tick left */
-    .signup-input-wrapper:has(.signup-password-toggle) .signup-field-valid {
-        right: 44px;
-    }
+    .signup-input-wrapper:has(.signup-password-toggle) .signup-field-valid { right: 44px; }
     @keyframes valid-pop {
         from { opacity: 0; transform: translateY(-50%) scale(0.6); }
         to   { opacity: 1; transform: translateY(-50%) scale(1); }
     }
 
-    /* Give invalid inputs a soft red border, only when it's an error */
     .signup-input-wrapper input[aria-invalid="true"] {
         border-color: #fda4af;
         background: #fff5f6;
@@ -287,15 +374,13 @@ input::-webkit-strong-password-auto-fill-button {
         box-shadow: 0 0 0 3px rgba(225, 29, 72, 0.12);
     }
 
-    /* Terms box — highlighted when user tries to submit without accepting */
+    /* Terms box */
     .signup-terms.signup-terms-invalid {
         border-color: #fda4af;
         background: #fff5f6;
         animation: terms-shake 0.35s ease;
     }
-    .signup-terms.signup-terms-invalid input[type="checkbox"] {
-        accent-color: #e11d48;
-    }
+    .signup-terms.signup-terms-invalid input[type="checkbox"] { accent-color: #e11d48; }
     @keyframes terms-shake {
         0%, 100% { transform: translateX(0); }
         20%      { transform: translateX(-4px); }
@@ -303,8 +388,6 @@ input::-webkit-strong-password-auto-fill-button {
         60%      { transform: translateX(-3px); }
         80%      { transform: translateX(3px); }
     }
-
-    /* Terms box — compact */
     .signup-terms {
         min-height: 42px; display: flex; align-items: center; gap: 10px;
         margin: 2px 0 20px; padding: 10px 14px;
@@ -316,7 +399,7 @@ input::-webkit-strong-password-auto-fill-button {
     .signup-terms a { color: #FF8904; font-weight: 700; text-decoration: none; }
     .signup-terms a:hover { text-decoration: underline; }
 
-    /* Signup button — compact */
+    /* Signup button */
     .signup-btn {
         width: 100%; padding: 13px 20px;
         display: flex; align-items: center; justify-content: center; gap: 8px;
@@ -337,16 +420,15 @@ input::-webkit-strong-password-auto-fill-button {
     @media (max-width: 950px) {
         .signup-container { grid-template-columns: 1fr; }
         .signup-left { min-height: auto; padding: 35px 8%; }
-        .signup-intro { margin: 0; padding: 60px 0 30px; }
+        .signup-intro { margin-top: 40px; margin-bottom: 20px; padding-top: 0; }
+        .signup-intro h1 { font-size: 40px; }
         .signup-right { min-height: auto; border-radius: 28px 28px 0 0; padding: 50px 8%; }
     }
     @media (max-width: 600px) {
         .signup-left { padding: 30px 6%; }
-        .signup-intro { padding: 50px 0 25px; }
-        .signup-intro h1 { font-size: 36px; }
-        .signup-intro > p { font-size: 16px; }
-        .signup-benefits { gap: 18px; }
-        .signup-benefit p { font-size: 15px; }
+        .signup-intro { padding: 32px 0 25px; }
+        .signup-intro h1 { font-size: 34px; }
+        .signup-intro > p { font-size: 15px; }
         .signup-right { padding: 40px 6%; }
         .signup-form-container h2 { font-size: 24px; }
         .signup-subtitle { font-size: 14px; margin-bottom: 24px; }

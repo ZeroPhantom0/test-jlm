@@ -150,7 +150,7 @@ export default function Signup() {
             <Head title="Sign Up | JLM Cozy Cabin" />
 
             <div className="signup-container">
-                {/* LEFT */}
+                {/* LEFT — Updated to match screenshot */}
                 <div className="signup-left">
                     <div className="signup-brand">
                         <div className="signup-logo">
@@ -159,6 +159,7 @@ export default function Signup() {
                         <span>JLM Cozy Cabin</span>
                     </div>
 
+                    {/* Address / contact block under the brand */}
                     <div className="signup-intro">
                         <h1>
                             Your Comfortable
@@ -166,25 +167,6 @@ export default function Signup() {
                             Living <span>Space Awaits</span>
                         </h1>
                         <p>Manage your rental experience with our comprehensive tenant portal</p>
-
-                        <div className="signup-benefits">
-                            <div className="signup-benefit">
-                                <span><i className="bi bi-check"></i></span>
-                                <p>Submit maintenance requests instantly</p>
-                            </div>
-                            <div className="signup-benefit">
-                                <span><i className="bi bi-check"></i></span>
-                                <p>Track payments and billing history</p>
-                            </div>
-                            <div className="signup-benefit">
-                                <span><i className="bi bi-check"></i></span>
-                                <p>Browse available rooms virtually</p>
-                            </div>
-                            <div className="signup-benefit">
-                                <span><i className="bi bi-check"></i></span>
-                                <p>Stay updated with announcements</p>
-                            </div>
-                        </div>
                     </div>
                 </div>
 

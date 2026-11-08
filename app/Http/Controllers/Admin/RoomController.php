@@ -3,6 +3,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Events\ReservationUpdated; // <-- Added
 use App\Http\Controllers\Controller;
 use App\Models\Room;
 use App\Services\AuditLogger;
@@ -46,6 +47,9 @@ class RoomController extends Controller
             'subject_type' => Room::class,
             'subject_id'   => $room->id,
         ]);
+
+        // Broadcast to tenant page
+        event(new ReservationUpdated('room_created', null));
 
         return response()->json([
             'success' => true,
@@ -92,6 +96,9 @@ class RoomController extends Controller
                 'subject_type' => Room::class,
                 'subject_id'   => $room->id,
             ]);
+
+            // Broadcast to tenant page
+            event(new ReservationUpdated('room_updated', null));
         }
 
         return response()->json([
@@ -113,6 +120,9 @@ class RoomController extends Controller
         ]);
 
         $room->delete();
+
+        // Broadcast to tenant page
+        event(new ReservationUpdated('room_deleted', null));
 
         return response()->json([
             'success' => true,

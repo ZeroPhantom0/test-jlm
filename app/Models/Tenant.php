@@ -67,6 +67,48 @@ class Tenant extends Model
     }
 
     // ============================================================
+    // NEW: Ensure a Tenant row exists for any tenant user
+    // ============================================================
+    /**
+     * Returns the Tenant row for the given user, creating a shell
+     * row (status = 'pending', no room) if it doesn't exist yet.
+     *
+     * This MUST be called for every user with role 'tenant', so that
+     * the messaging system (which FKs to tenants.id) works even
+     * before the tenant has an approved reservation.
+     */
+    public static function ensureForUser(User $user): self
+    {
+        if ($user->role !== 'tenant') {
+            throw new \InvalidArgumentException('ensureForUser() only applies to tenant-role users.');
+        }
+
+        return static::firstOrCreate(
+            ['user_id' => $user->id],
+            [
+                'room_id'                 => null,
+                'approved_reservation_id' => null,
+                'rent_rate'               => 0,
+                'status'                  => 'active',   // ✅ was 'pending'
+            ]
+        );
+    }
+
+    /**
+     * Convenience for controllers: get-or-create the current user's Tenant row.
+     */
+    public static function ensureForCurrentUser(): ?self
+    {
+        $user = Auth::user();
+
+        if (! $user || $user->role !== 'tenant') {
+            return null;
+        }
+
+        return static::ensureForUser($user);
+    }
+
+    // ============================================================
     // PAYLOAD FOR REACT MODALS
     // ============================================================
 
@@ -88,7 +130,6 @@ class Tenant extends Model
             'room'          => $this->room?->room_number
                 ? 'Room ' . $this->room->room_number
                 : '—',
-            // Check-in / Check-out are the ONLY dates for this tenant.
             'check_in'      => $reservation?->check_in?->format('M d, Y')       ?? '—',
             'check_in_time' => $reservation?->check_in_time                     ?? '',
             'check_out'     => $reservation?->check_out?->format('M d, Y')      ?? 'Open-ended',
@@ -134,7 +175,7 @@ class Tenant extends Model
         try {
             return \Carbon\Carbon::parse($time)->format('g:i A');
         } catch (\Throwable $e) {
-            return $time; // fall back to raw value if unparseable
+            return $time;
         }
     }
 }

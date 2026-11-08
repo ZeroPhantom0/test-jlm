@@ -136,6 +136,10 @@ export default function ReservationsModal() {
     const [room, setRoom] = useState(FALLBACK_ROOM);
     const [saving, setSaving] = useState(false);
 
+    // NEW: OCR state for GCash receipt auto-fill
+    const [ocrLoading, setOcrLoading] = useState(false);
+    const [ocrError, setOcrError] = useState("");
+
     const inFlightRef = useRef(false);
     const cancelInFlightRef = useRef(false);
 
@@ -258,6 +262,8 @@ export default function ReservationsModal() {
             if (reserveBtn) {
                 inFlightRef.current = false;
                 setSaving(false);
+                setOcrLoading(false);
+                setOcrError("");
 
                 const data = JSON.parse(reserveBtn.dataset.room || "{}");
                 setRoom({ ...FALLBACK_ROOM, ...data });
@@ -305,6 +311,8 @@ export default function ReservationsModal() {
         if (inFlightRef.current) return;
         setShowReserve(false);
         setNeedsReceiptReupload(false);
+        setOcrLoading(false);
+        setOcrError("");
         clearModalState();
     };
 
@@ -390,10 +398,57 @@ export default function ReservationsModal() {
         window.location.href = `/tour/${room.tourId}?from=${from}`;
     };
 
-    // --- MISSING FUNCTIONS FIXED HERE ---
     const handleCopyGCash = () => {
         navigator.clipboard?.writeText("0917-123-4567");
         alert("GCash number copied!");
+    };
+
+    // NEW: OCR handler — uploads the receipt and auto-fills the reference number
+    const handleReceiptUpload = async (file) => {
+        if (!file) return;
+
+        // Store the file in form first
+        updateField("receipt", file);
+        setNeedsReceiptReupload(false);
+        setOcrError("");
+
+        // Kick off OCR in background
+        setOcrLoading(true);
+        const fd = new FormData();
+        fd.append("receipt", file);
+
+        try {
+            const res = await fetch("/tenants/reservations/parse-receipt", {
+                method: "POST",
+                headers: {
+                    Accept: "application/json",
+                    "X-CSRF-TOKEN": csrf(),
+                },
+                body: fd,
+            });
+
+            const data = await res.json().catch(() => ({}));
+
+            if (res.ok && data.success && data.reference_no) {
+                // Auto-fill the reference number
+                updateField("reference_no", data.reference_no);
+            } else if (res.ok && data.success && !data.reference_no) {
+                setOcrError(
+                    "Reference number not detected. Please enter it manually.",
+                );
+            } else {
+                setOcrError(
+                    "Could not scan receipt. Please enter reference number manually.",
+                );
+            }
+        } catch (err) {
+            console.error("OCR request failed", err);
+            setOcrError(
+                "OCR service unavailable. Please enter reference number manually.",
+            );
+        } finally {
+            setOcrLoading(false);
+        }
     };
 
     const confirmCancelReservation = async () => {
@@ -427,7 +482,6 @@ export default function ReservationsModal() {
             setSaving(false);
         }
     };
-    // ------------------------------------
 
     const handleSubmit = async () => {
         if (inFlightRef.current || saving) return;
@@ -521,6 +575,8 @@ export default function ReservationsModal() {
             setShowReserve(false);
             clearModalState();
             setNeedsReceiptReupload(false);
+            setOcrLoading(false);
+            setOcrError("");
 
             // DELAY the local refresh by 600ms so the DB and WebSocket can finish
             setTimeout(() => {
@@ -538,8 +594,8 @@ export default function ReservationsModal() {
             inFlightRef.current = false;
             setSaving(false);
             if (modalEl) delete modalEl.dataset.saving;
-        }finally {
-            // After the POST finishes, force a local refresh just in case 
+        } finally {
+            // After the POST finishes, force a local refresh just in case
             // the WebSocket event arrived while we were saving
             window.dispatchEvent(new Event("reservation:refresh"));
         }
@@ -673,6 +729,8 @@ export default function ReservationsModal() {
                                         closeDetails();
                                         inFlightRef.current = false;
                                         setSaving(false);
+                                        setOcrLoading(false);
+                                        setOcrError("");
                                         setShowReserve(true);
                                     }}
                                     className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg py-2.5 text-[13px] font-semibold"
@@ -1187,6 +1245,36 @@ export default function ReservationsModal() {
                                 Copy GCash Number
                             </button>
 
+                            <label className="border border-dashed border-amber-300 rounded-lg p-3 flex items-center gap-3 bg-white cursor-pointer mb-2">
+                                <span className="bg-white border border-amber-300 px-3 py-1.5 rounded-md text-[12px] font-bold text-amber-700">
+                                    Choose File
+                                </span>
+                                <span className="text-[12px] text-slate-400">
+                                    {form.receipt
+                                        ? form.receipt.name
+                                        : "No file chosen"}
+                                </span>
+                                <input
+                                    type="file"
+                                    accept="image/*"
+                                    onChange={(e) => {
+                                        const file = e.target.files[0] || null;
+                                        if (file) {
+                                            handleReceiptUpload(file);
+                                        } else {
+                                            updateField("receipt", null);
+                                        }
+                                    }}
+                                    className="hidden"
+                                />
+                            </label>
+                            
+                            <div className="flex items-center gap-1.5 text-[11px] text-amber-700 mb-3">
+                                <i className="fa-solid fa-arrow-up-from-bracket"></i>
+                                Upload a screenshot of your GCash payment
+                                receipt
+                            </div>
+
                             <div className="mb-3">
                                 <label className="block text-[12px] font-semibold text-amber-800 mb-1.5">
                                     GCash Reference Number{" "}
@@ -1204,36 +1292,19 @@ export default function ReservationsModal() {
                                     placeholder="e.g. GC-20260401-12345"
                                     className="w-full bg-white border border-amber-200 rounded-lg px-3 py-2.5 text-[13px] outline-none focus:border-amber-400"
                                 />
+                                {ocrLoading && (
+                                    <div className="flex items-center gap-1.5 text-[11px] text-blue-600 mt-1">
+                                        <i className="fa-solid fa-spinner fa-spin"></i>
+                                        Scanning receipt for reference number...
+                                    </div>
+                                )}
+                                {ocrError && (
+                                    <div className="flex items-center gap-1.5 text-[11px] text-amber-600 mt-1">
+                                        <i className="fa-solid fa-circle-exclamation"></i>
+                                        {ocrError}
+                                    </div>
+                                )}
                             </div>
-
-                            <label className="border border-dashed border-amber-300 rounded-lg p-3 flex items-center gap-3 bg-white cursor-pointer mb-2">
-                                <span className="bg-white border border-amber-300 px-3 py-1.5 rounded-md text-[12px] font-bold text-amber-700">
-                                    Choose File
-                                </span>
-                                <span className="text-[12px] text-slate-400">
-                                    {form.receipt
-                                        ? form.receipt.name
-                                        : "No file chosen"}
-                                </span>
-                                <input
-                                    type="file"
-                                    accept="image/*"
-                                    onChange={(e) => {
-                                        updateField(
-                                            "receipt",
-                                            e.target.files[0] || null,
-                                        );
-                                        setNeedsReceiptReupload(false);
-                                    }}
-                                    className="hidden"
-                                />
-                            </label>
-                            <div className="flex items-center gap-1.5 text-[11px] text-amber-700 mb-3">
-                                <i className="fa-solid fa-arrow-up-from-bracket"></i>
-                                Upload a screenshot of your GCash payment
-                                receipt
-                            </div>
-
                             <div className="bg-amber-100 rounded-lg p-3 flex gap-2 text-[12px] text-amber-900 leading-relaxed">
                                 <i className="fa-solid fa-circle-info mt-0.5"></i>
                                 <span>

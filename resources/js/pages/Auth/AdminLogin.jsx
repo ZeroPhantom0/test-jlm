@@ -48,22 +48,27 @@ export default function AdminLogin() {
             <Head title="Admin Login | JLM Cozy Cabin" />
 
             <div className="login-container">
+                {/* LEFT — Matches Tenant Login format but Admin content */}
                 <div className="login-left">
                     <div className="login-brand">
-                        <div className="login-logo"><img src="/images/jlm-logo.png" alt="Logo" /></div>
+                        <div className="login-logo">
+                            <img src="/images/jlm-logo.png" alt="Logo" />
+                        </div>
                         <span>JLM Cozy Cabin</span>
                     </div>
+
+                    {/* Address / contact block under the brand */}
                     <div className="login-intro">
-                        <h1>Administrator<br />Access <span>Portal</span></h1>
+                        <h1>
+                            Administrator
+                            <br />
+                            Access <span>Portal</span>
+                        </h1>
                         <p>Manage your property, tenants, and operations securely.</p>
-                        <div className="login-benefits">
-                            <div className="login-benefit"><span><i className="bi bi-check"></i></span><p>Oversee all tenant requests</p></div>
-                            <div className="login-benefit"><span><i className="bi bi-check"></i></span><p>Manage billing and finances</p></div>
-                            <div className="login-benefit"><span><i className="bi bi-check"></i></span><p>Update room availability</p></div>
-                        </div>
                     </div>
                 </div>
 
+                {/* RIGHT — Form */}
                 <div className="login-right">
                     <form className="login-form-container" onSubmit={handleLogin} noValidate>
                         <a href="/" onClick={handleBackHome} className="back-home-link">
@@ -73,7 +78,12 @@ export default function AdminLogin() {
                         <h2>Admin Sign In</h2>
                         <p className="login-subtitle">Enter your credentials to access the admin dashboard</p>
 
-                        {flashError && <div className="login-global-error"><i className="bi bi-exclamation-circle"></i>{flashError}</div>}
+                        {flashError && (
+                            <div className="login-global-error">
+                                <i className="bi bi-exclamation-circle"></i>
+                                {flashError}
+                            </div>
+                        )}
 
                         <div className="login-form-group">
                             <label>Email Address</label>
@@ -127,8 +137,20 @@ export default function AdminLogin() {
                             )}
                         </div>
 
-                        <button type="submit" className="login-submit-btn" disabled={processing} style={{ opacity: processing ? 0.7 : 1, marginTop: '24px' }}>
-                            {processing ? <><i className="bi bi-arrow-repeat" style={{ animation: 'spin 1s linear infinite' }}></i> Signing in...</> : 'Log In as Admin'}
+                        <button 
+                            type="submit" 
+                            className="login-submit-btn" 
+                            disabled={processing} 
+                            style={{ opacity: processing ? 0.7 : 1, marginTop: '24px' }}
+                        >
+                            {processing ? (
+                                <>
+                                    <i className="bi bi-arrow-repeat" style={{ animation: 'spin 1s linear infinite' }}></i> 
+                                    Signing in...
+                                </>
+                            ) : (
+                                'Log In as Admin'
+                            )}
                         </button>
                     </form>
                 </div>

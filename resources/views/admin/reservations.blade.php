@@ -59,13 +59,11 @@
                     <thead>
                         <tr
                             class="text-[11px] uppercase tracking-wider font-bold text-slate-400 border-b border-slate-200 whitespace-nowrap">
-                            <th class="py-3 px-4">Resident</th>
-                            <th class="py-3 px-4">Contact</th>
+                            <th class="py-3 px-4">Tenant</th>
                             <th class="py-3 px-4">Desired Room</th>
                             <th class="py-3 px-4">Check-in</th>
                             <th class="py-3 px-4">Check-out</th>
                             <th class="py-3 px-4">Reservation Fee</th>
-                            <th class="py-3 px-4">Submitted</th>
                             <th class="py-3 px-4">Status</th>
                             <th class="py-3 px-4 text-right">Actions</th>
                         </tr>
@@ -89,10 +87,6 @@
                                     </div>
                                 </td>
                                 <td class="py-3.5 px-4">
-                                    <div class="text-[12.5px] text-slate-700">{{ $r->email }}</div>
-                                    <div class="text-[11px] text-slate-400 mt-0.5">{{ $r->phone }}</div>
-                                </td>
-                                <td class="py-3.5 px-4">
                                     <div class="text-[12.5px] font-medium text-slate-700">{{ $r->desired_room }}</div>
                                 </td>
                                 <td class="py-3.5 px-4">
@@ -111,8 +105,6 @@
                                     <div class="font-bold text-emerald-600 text-[13px] tracking-tight">
                                         {{ $r->formatted_fee }}</div>
                                 </td>
-                                <td class="py-3.5 px-4 text-[12.5px] text-slate-600 whitespace-nowrap">
-                                    {{ $r->created_at?->format('M d, Y') }}</td>
                                 <td class="py-3.5 px-4">
                                     <span
                                         class="inline-flex items-center gap-1.5 {{ $r->status_class }} px-2.5 py-1 rounded-full text-[10.5px] font-bold whitespace-nowrap">

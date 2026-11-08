@@ -131,7 +131,7 @@ export default function PersonalInformation({ user, personalInfo }) {
                 <div className="personal-left">
                     <div className="personal-brand">
                         <div className="personal-logo">
-                            <img src="/images/JLM Cozy cabin.jpg" alt="JLM Cozy Cabin Logo" />
+                            <img src="/images/jlm-logo.png" alt="JLM Cozy Cabin Logo" />
                         </div>
                         <div>
                             <strong>JLM Cozy Cabin</strong>

@@ -13,6 +13,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 
 class TenantBillingController extends Controller
 {
@@ -77,7 +79,7 @@ class TenantBillingController extends Controller
                 ->whereIn('status', ['Unpaid', 'Partial', 'Overdue', 'Pending', 'Paid'])
                 ->where(function ($q) {
                     $q->where('description', 'like', '%remaining%')
-                      ->orWhere('description', 'like', '%reservation%');
+                        ->orWhere('description', 'like', '%reservation%');
                 })
                 ->sum('balance');
 
@@ -138,8 +140,8 @@ class TenantBillingController extends Controller
 
     public function pay(Request $request)
     {
-        session()->save(); 
-        
+        session()->save();
+
         $validated = $request->validate([
             'invoice_ref'      => ['required', 'string'],
             'payment_method'   => ['required', 'in:gcash,bank,counter,GCash,Bank Transfer,Over The Counter'],
@@ -276,5 +278,66 @@ class TenantBillingController extends Controller
         event(new InvoiceUpdated('cancelled', $invoice->id));
 
         return back()->with('success', 'Submission cancelled. You can pay again.');
+    }
+
+    public function parseReceipt(Request $request)
+    {
+        $request->validate([
+            'receipt' => 'required|image|max:5120', // 5MB limit
+        ]);
+
+        try {
+            $file = $request->file('receipt');
+
+            // Use config key matching your config/ocr-space.php
+            $apiKey = config('ocr-space.api_key') ?? env('OCR_SPACE_API_KEY');
+
+            if (empty($apiKey)) {
+                return response()->json([
+                    'success' => false,
+                    'error'   => 'OCR service is not configured.',
+                ], 500);
+            }
+
+            $response = Http::timeout(30)
+                ->asMultipart()
+                ->attach('file', file_get_contents($file->getPathname()), $file->getClientOriginalName())
+                ->post('https://api.ocr.space/parse/image', [
+                    'apikey'     => $apiKey,
+                    'language'   => 'eng',
+                    'OCREngine'  => '3',      // Engine 3 is better for screenshots
+                    'scale'      => 'true',   // Helps read small text
+                    'isTable'    => 'false',
+                ]);
+
+            if ($response->failed()) {
+                return response()->json(['success' => false, 'error' => 'OCR service unavailable.'], 500);
+            }
+
+            $data = $response->json();
+            if (!empty($data['IsErroredOnProcessing'])) {
+                return response()->json(['success' => false, 'error' => 'OCR could not read image.'], 500);
+            }
+
+            $text = $data['ParsedResults'][0]['ParsedText'] ?? '';
+            $referenceNumber = null;
+
+            // 1. Try to find "Reference No: XXXXX"
+            if (preg_match('/(?:Ref(?:erence)?\s*(?:No\.?|Number)?[:\s]+)(\d[\d\s\-]{7,18}\d)/i', $text, $m)) {
+                $referenceNumber = preg_replace('/[\s\-]+/', '', $m[1]);
+            }
+            // 2. Fallback: Just grab any 9-13 digit number
+            if (!$referenceNumber && preg_match('/\b(\d{9,13})\b/', $text, $m)) {
+                $referenceNumber = $m[1];
+            }
+
+            return response()->json([
+                'success'      => true,
+                'reference_no' => $referenceNumber,
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('[billing.parseReceipt] Exception', ['message' => $e->getMessage()]);
+            return response()->json(['success' => false, 'error' => 'Failed to process receipt.'], 500);
+        }
     }
 }

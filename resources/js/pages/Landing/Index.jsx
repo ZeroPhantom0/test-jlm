@@ -477,7 +477,8 @@ function AmenitiesCarousel() {
                         onTransitionEnd={handleTransitionEnd}
                     >
                         {extended.map((a, i) => {
-                            const isClone = i < clonesCount || i >= clonesCount + total;
+                            const isClone =
+                                i < clonesCount || i >= clonesCount + total;
                             return (
                                 <div
                                     className="amenity-slide"
@@ -486,14 +487,17 @@ function AmenitiesCarousel() {
                                     aria-hidden={isClone ? "true" : undefined}
                                 >
                                     <div className="amenity-card">
-                                        <div className={`amenity-image image-${a.id}`}>
+                                        <div
+                                            className={`amenity-image image-${a.id}`}
+                                        >
                                             <img
                                                 src={a.image}
                                                 alt={a.title}
                                                 className="amenity-img"
                                                 loading="lazy"
                                                 onError={(e) => {
-                                                    e.currentTarget.style.display = "none";
+                                                    e.currentTarget.style.display =
+                                                        "none";
                                                 }}
                                             />
                                             <div className="amenity-icon">
@@ -547,8 +551,12 @@ function RoomsSection({ rooms }) {
     });
 
     const soloRooms = publishedRooms.filter((r) => r.room_type === "Solo Room");
-    const bedspaceRooms = publishedRooms.filter((r) => r.room_type === "Bedspace");
-    const barkadaRooms = publishedRooms.filter((r) => r.room_type === "Barkada Room");
+    const bedspaceRooms = publishedRooms.filter(
+        (r) => r.room_type === "Bedspace",
+    );
+    const barkadaRooms = publishedRooms.filter(
+        (r) => r.room_type === "Barkada Room",
+    );
 
     return (
         <section className="rooms-section" id="rooms">
@@ -586,20 +594,6 @@ function RoomsSection({ rooms }) {
                 </>
             )}
 
-            {bedspaceRooms.length > 0 && (
-                <>
-                    <div className="category-header">
-                        <h3 className="category-title">Bedspace</h3>
-                        <div className="category-line" />
-                    </div>
-                    <div className="rooms-grid-3">
-                        {bedspaceRooms.map((room) => (
-                            <RoomCard key={room.id} room={room} />
-                        ))}
-                    </div>
-                </>
-            )}
-
             {barkadaRooms.length > 0 && (
                 <>
                     <div className="category-header">
@@ -608,6 +602,20 @@ function RoomsSection({ rooms }) {
                     </div>
                     <div className="rooms-grid-3">
                         {barkadaRooms.map((room) => (
+                            <RoomCard key={room.id} room={room} />
+                        ))}
+                    </div>
+                </>
+            )}
+
+            {bedspaceRooms.length > 0 && (
+                <>
+                    <div className="category-header">
+                        <h3 className="category-title">Bedspace</h3>
+                        <div className="category-line" />
+                    </div>
+                    <div className="rooms-grid-3">
+                        {bedspaceRooms.map((room) => (
                             <RoomCard key={room.id} room={room} />
                         ))}
                     </div>

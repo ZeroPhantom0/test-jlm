@@ -16,9 +16,6 @@ use Illuminate\Support\Facades\Auth;
 
 class TenantDashboardController extends Controller
 {
-    /**
-     * Display the tenant's dashboard with live data.
-     */
     public function index()
     {
         /** @var \App\Models\User $user */
@@ -31,7 +28,19 @@ class TenantDashboardController extends Controller
             ->where('user_id', $user->id)
             ->first();
 
+        // Check if the approved reservation has already expired
         $room = $tenant?->room;
+        $reservation = $tenant?->approvedReservation;
+        
+        $isExpired = false;
+        if ($reservation && $reservation->check_out && $reservation->check_out->isPast()) {
+            $isExpired = true;
+        }
+
+        // If the stay is expired, we don't show the room in the dashboard
+        if ($isExpired) {
+            $room = null; 
+        }
 
         // -------------------------------------------------------
         // Outstanding balance — UNPAID INVOICES
@@ -46,22 +55,11 @@ class TenantDashboardController extends Controller
 
         // -------------------------------------------------------
         // Outstanding balance — APPROVED RESERVATION REMAINING
-        //
-        // When a reservation is approved, the admin may or may not
-        // have billed the `remaining` amount as an Invoice yet.
-        //
-        // - If an invoice for it exists (description contains
-        //   "remaining" / "reservation"), the invoice is the
-        //   source of truth — do NOT double-count.
-        // - Otherwise, add the reservation's remaining into the
-        //   outstanding balance so the tenant sees what they owe.
         // -------------------------------------------------------
         $reservationRemaining = 0.0;
 
-        if ($tenant?->approvedReservation) {
-            $approved = $tenant->approvedReservation;
-
-            if ($approved->status === 'Approved' && (float) $approved->remaining > 0) {
+        if ($reservation && !$isExpired) {
+            if ($reservation->status === 'Approved' && (float) $reservation->remaining > 0) {
                 $billedRemaining = (float) Invoice::where('tenant_id', $tenant->id)
                     ->whereIn('status', ['Unpaid', 'Partial', 'Overdue', 'Pending'])
                     ->where(function ($q) {
@@ -70,7 +68,7 @@ class TenantDashboardController extends Controller
                     })
                     ->sum('balance');
 
-                $reservationRemaining = max(0, (float) $approved->remaining - $billedRemaining);
+                $reservationRemaining = max(0, (float) $reservation->remaining - $billedRemaining);
             }
         }
 
@@ -133,11 +131,15 @@ class TenantDashboardController extends Controller
             ->latest()
             ->get()
             ->map(function (Reservation $r) {
-                $status = match ($r->status) {
-                    'Approved' => 'approved',
-                    'Rejected' => 'rejected',
-                    'Expired'  => 'expired',
-                    default    => 'pending',
+                // Treat approved reservations that have passed their checkout as expired
+                $isPast = $r->status === 'Approved' && $r->check_out && $r->check_out->isPast();
+                
+                $status = match (true) {
+                    $r->status === 'Approved' && $isPast => 'expired',
+                    $r->status === 'Approved'            => 'approved',
+                    $r->status === 'Rejected'            => 'rejected',
+                    $r->status === 'Expired'             => 'expired',
+                    default                              => 'pending',
                 };
 
                 return [

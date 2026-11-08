@@ -47,7 +47,6 @@ use App\Models\VirtualTour;
 // PUBLIC ROUTES
 // ============================================================
 
-// Prevent back cache ensures the server checks auth status on back button
 Route::get('/', [LandingController::class, 'index'])
     ->middleware('prevent.back.cache')
     ->name('landing');
@@ -72,7 +71,6 @@ Route::middleware('guest')->group(function () {
     Route::get('/admin/login',  [AuthController::class, 'showAdminLogin'])->name('admin.login');
     Route::post('/admin/login', [AuthController::class, 'adminLogin']);
 
-    // Wrap Admin verification routes in cache prevention
     Route::middleware('prevent.back.cache')->group(function () {
         Route::get('/admin/login/verify',  [AuthController::class, 'showAdminVerify'])->name('admin.login.verify');
         Route::post('/admin/login/verify', [AuthController::class, 'adminVerify'])->name('admin.login.verify.submit');
@@ -91,7 +89,11 @@ Route::middleware('guest')->group(function () {
     Route::get('/auth/google',          [AuthController::class, 'redirectToGoogle'])->name('auth.google');
     Route::get('/auth/google/callback', [AuthController::class, 'handleGoogleCallback'])->name('auth.google.callback');
 
-    // Wrap Tenant verification routes in cache prevention
+    // 🔑 Google Terms gate for brand-new signups
+    Route::get('/auth/google/terms',         [AuthController::class, 'showGoogleTerms'])->name('auth.google.terms');
+    Route::post('/auth/google/terms',        [AuthController::class, 'acceptGoogleTerms'])->name('auth.google.terms.accept');
+    Route::post('/auth/google/terms/cancel', [AuthController::class, 'cancelGoogleTerms'])->name('auth.google.terms.cancel');
+
     Route::middleware('prevent.back.cache')->group(function () {
         Route::get('/login/verify',  [AuthController::class, 'showVerify'])->name('login.verify');
         Route::post('/login/verify', [AuthController::class, 'verify'])->name('login.verify.submit');
@@ -145,6 +147,11 @@ Route::middleware(['auth', 'onboarding.complete', 'prevent.back.cache'])
         Route::get('/notifications/feed', [TenantNotificationController::class, 'index'])
             ->name('notifications.feed');
 
+        Route::post('/reservations/parse-receipt', [TenantReservationController::class, 'parseReceipt'])
+            ->name('reservations.parse-receipt');
+
+        Route::post('/billing/parse-receipt', [TenantBillingController::class, 'parseReceipt'])->name('billing.parse-receipt');
+
         // ---------- Billing ----------
         Route::get('/billing/data',    [TenantBillingController::class, 'data'])->name('billing.data');
         Route::get('/billing',         [TenantBillingController::class, 'index'])->name('billing');
@@ -152,31 +159,34 @@ Route::middleware(['auth', 'onboarding.complete', 'prevent.back.cache'])
         Route::post('/billing/cancel', [TenantBillingController::class, 'cancelPayment'])->name('billing.cancel');
 
         // ---------- Reservations ----------
-        Route::get('/reservations/data',                      [TenantReservationController::class, 'data'])->name('reservations.data');
-        Route::get('/reservations',                           [TenantReservationController::class, 'index'])->name('reservations');
-        Route::post('/reservations',                          [TenantReservationController::class, 'store'])->name('reservations.store');
-        Route::post('/reservations/{reservation}/cancel',     [TenantReservationController::class, 'cancel'])->name('reservations.cancel');
+        Route::get('/reservations/data',                  [TenantReservationController::class, 'data'])->name('reservations.data');
+        Route::get('/reservations',                       [TenantReservationController::class, 'index'])->name('reservations');
+        Route::post('/reservations',                      [TenantReservationController::class, 'store'])->name('reservations.store');
+        Route::post('/reservations/{reservation}/cancel', [TenantReservationController::class, 'cancel'])->name('reservations.cancel');
 
         // ---------- Messages ----------
-        Route::get('/messages',                       [TenantMessageController::class, 'index'])->name('messages');
-        Route::post('/messages',                      [TenantMessageController::class, 'store'])->name('messages.store');
-        Route::get('/messages/{conversation}',        [TenantMessageController::class, 'show'])->name('messages.show');
-        Route::post('/messages/{conversation}/reply', [TenantMessageController::class, 'reply'])->name('messages.reply');
-        Route::delete('/messages/conversation/{conversation}', [TenantMessageController::class, 'deleteConversation'])->name('messages.conversation.delete');
-        Route::delete('/messages/{message}',                    [TenantMessageController::class, 'deleteMessage'])->name('messages.delete');
-        Route::post('/messages/{message}/react',                [TenantMessageController::class, 'reactToMessage'])->name('messages.react');
+        Route::get('/messages',                                 [TenantMessageController::class, 'index'])->name('messages');
+        Route::post('/messages',                                [TenantMessageController::class, 'store'])->name('messages.store');
+        Route::get('/messages/{conversation}',                  [TenantMessageController::class, 'show'])->name('messages.show');
+        Route::post('/messages/{conversation}/reply',           [TenantMessageController::class, 'reply'])->name('messages.reply');
+        Route::delete('/messages/conversation/{conversation}',  [TenantMessageController::class, 'destroyConversation'])->name('messages.conversation.delete');
+        Route::delete('/messages/{message}',                    [TenantMessageController::class, 'destroyMessage'])->name('messages.delete');
+        Route::post('/messages/{message}/react',                [TenantMessageController::class, 'react'])->name('messages.react');
 
         // ---------- Announcements / History ----------
         Route::get('/announcements/data', [TenantAnnouncementController::class, 'data'])->name('announcements.data');
         Route::get('/announcements',      [TenantAnnouncementController::class, 'index'])->name('announcements');
         Route::get('/history',            [TenantHistoryController::class, 'index'])->name('history');
-        Route::get('/history/export',  [TenantHistoryController::class, 'export'])->name('history.export');
+        Route::get('/history/export',     [TenantHistoryController::class, 'export'])->name('history.export');
         Route::get('/history/export-pdf', [TenantHistoryController::class, 'exportPdf'])->name('history.export-pdf');
 
         // ---------- Settings ----------
-        Route::get('/settings',          [TenantSettingsController::class, 'index'])->name('settings');
-        Route::put('/settings/profile',  [TenantSettingsController::class, 'updateProfile'])->name('settings.update');
-        Route::put('/settings/password', [TenantSettingsController::class, 'updatePassword'])->name('settings.password');
+        Route::get('/settings',         [TenantSettingsController::class, 'index'])->name('settings');
+        Route::put('/settings/profile', [TenantSettingsController::class, 'updateProfile'])->name('settings.update');
+
+        // Verification Routes for OTP flow
+        Route::post('/settings/request-verification', [TenantSettingsController::class, 'requestVerification'])->name('settings.request-verification');
+        Route::post('/settings/confirm-verification', [TenantSettingsController::class, 'confirmVerification'])->name('settings.confirm-verification');
 
         // ---------- Services ----------
         Route::prefix('services')->name('services.')->group(function () {
@@ -188,16 +198,16 @@ Route::middleware(['auth', 'onboarding.complete', 'prevent.back.cache'])
             Route::post('/maintenance/{maintenanceRequest}/cancel', [TenantMaintenanceController::class, 'cancel'])->name('maintenance.cancel');
 
             // Room change
-            Route::get('/room-change/data',                         [TenantRoomChangeController::class, 'data'])->name('room-change.data');
-            Route::get('/room-change',                              [TenantRoomChangeController::class, 'index'])->name('room-change');
-            Route::post('/room-change',                             [TenantRoomChangeController::class, 'store'])->name('room-change.store');
-            Route::post('/room-change/{roomChangeRequest}/cancel',  [TenantRoomChangeController::class, 'cancel'])->name('room-change.cancel');
+            Route::get('/room-change/data',                        [TenantRoomChangeController::class, 'data'])->name('room-change.data');
+            Route::get('/room-change',                             [TenantRoomChangeController::class, 'index'])->name('room-change');
+            Route::post('/room-change',                            [TenantRoomChangeController::class, 'store'])->name('room-change.store');
+            Route::post('/room-change/{roomChangeRequest}/cancel', [TenantRoomChangeController::class, 'cancel'])->name('room-change.cancel');
 
             // Stay extension
-            Route::get('/stay-extension/data',                            [TenantStayExtensionController::class, 'data'])->name('stay-extension.data');
-            Route::get('/stay-extension',                                 [TenantStayExtensionController::class, 'index'])->name('stay-extension');
-            Route::post('/stay-extension',                                [TenantStayExtensionController::class, 'store'])->name('stay-extension.store');
-            Route::post('/stay-extension/{stayExtensionRequest}/cancel',  [TenantStayExtensionController::class, 'cancel'])->name('stay-extension.cancel');
+            Route::get('/stay-extension/data',                           [TenantStayExtensionController::class, 'data'])->name('stay-extension.data');
+            Route::get('/stay-extension',                                [TenantStayExtensionController::class, 'index'])->name('stay-extension');
+            Route::post('/stay-extension',                               [TenantStayExtensionController::class, 'store'])->name('stay-extension.store');
+            Route::post('/stay-extension/{stayExtensionRequest}/cancel', [TenantStayExtensionController::class, 'cancel'])->name('stay-extension.cancel');
         });
     });
 
@@ -212,8 +222,8 @@ Route::middleware(['auth', 'admin', 'prevent.back.cache'])->prefix('admin')->nam
     Route::get('/dashboard/data', [DashboardController::class, 'data'])->name('dashboard.data');
 
     // ---------- Notifications ----------
-    Route::get('/notifications/feed',           [AdminNotificationController::class, 'index'])->name('notifications.feed');
-    Route::post('/notifications/message-read',  [AdminNotificationController::class, 'markMessageRead'])->name('notifications.message-read');
+    Route::get('/notifications/feed',          [AdminNotificationController::class, 'index'])->name('notifications.feed');
+    Route::post('/notifications/message-read', [AdminNotificationController::class, 'markMessageRead'])->name('notifications.message-read');
 
     // ---------- Rooms ----------
     Route::get('/rooms',           [RoomController::class, 'index'])->name('rooms');
@@ -227,27 +237,28 @@ Route::middleware(['auth', 'admin', 'prevent.back.cache'])->prefix('admin')->nam
     Route::put('/tenants/{tenant}', [TenantController::class, 'update'])->name('tenants.update');
 
     // ---------- Billing ----------
-    Route::get('/billing/data',   [BillingController::class, 'data'])->name('billing.data');
-    Route::get('/billing',        [BillingController::class, 'index'])->name('billing');
-    Route::post('/billing',       [BillingController::class, 'store'])->name('billing.store');
-    Route::get('/billing/{invoice:transaction_no}',                     [BillingController::class, 'show'])->name('billing.show');
-    Route::put('/billing/{invoice:transaction_no}',                     [BillingController::class, 'update'])->name('billing.update');
-    Route::delete('/billing/{invoice:transaction_no}',                  [BillingController::class, 'destroy'])->name('billing.destroy');
-    Route::post('/billing/{invoice:transaction_no}/mark-paid',          [BillingController::class, 'markPaid'])->name('billing.mark-paid');
-    Route::post('/billing/{invoice:transaction_no}/remind',             [BillingController::class, 'sendReminder'])->name('billing.remind');
-    Route::post('/billing/{invoice:transaction_no}/verify-payment',     [BillingController::class, 'verifyPayment'])->name('billing.verify-payment');
-    Route::post('/billing/{invoice:transaction_no}/reject-payment',     [BillingController::class, 'rejectPayment'])->name('billing.reject-payment');
+    Route::get('/billing/data', [BillingController::class, 'data'])->name('billing.data');
+    Route::get('/billing',      [BillingController::class, 'index'])->name('billing');
+    Route::post('/billing',     [BillingController::class, 'store'])->name('billing.store');
+
+    Route::get('/billing/{invoice:transaction_no}',                      [BillingController::class, 'show'])->name('billing.show');
+    Route::put('/billing/{invoice:transaction_no}',                      [BillingController::class, 'update'])->name('billing.update');
+    Route::delete('/billing/{invoice:transaction_no}',                   [BillingController::class, 'destroy'])->name('billing.destroy');
+    Route::post('/billing/{invoice:transaction_no}/mark-paid',           [BillingController::class, 'markPaid'])->name('billing.mark-paid');
+    Route::post('/billing/{invoice:transaction_no}/remind',              [BillingController::class, 'sendReminder'])->name('billing.remind');
+    Route::post('/billing/{invoice:transaction_no}/verify-payment',      [BillingController::class, 'verifyPayment'])->name('billing.verify-payment');
+    Route::post('/billing/{invoice:transaction_no}/reject-payment',      [BillingController::class, 'rejectPayment'])->name('billing.reject-payment');
     Route::post('/billing/{invoice:transaction_no}/send-overdue-notice', [BillingController::class, 'sendOverdueNotice'])->name('billing.send-overdue-notice');
 
     // ---------- Reservations ----------
-    Route::get('/reservations/data',                    [ReservationController::class, 'data'])->name('reservations.data');
-    Route::get('/reservations',                         [ReservationController::class, 'index'])->name('reservations');
-    Route::post('/reservations',                        [ReservationController::class, 'store'])->name('reservations.store');
-    Route::get('/reservations/{reservation}',           [ReservationController::class, 'show'])->name('reservations.show');
-    Route::put('/reservations/{reservation}',           [ReservationController::class, 'update'])->name('reservations.update');
-    Route::delete('/reservations/{reservation}',        [ReservationController::class, 'destroy'])->name('reservations.destroy');
-    Route::post('/reservations/{reservation}/approve',  [ReservationController::class, 'approve'])->name('reservations.approve');
-    Route::post('/reservations/{reservation}/reject',   [ReservationController::class, 'reject'])->name('reservations.reject');
+    Route::get('/reservations/data',                   [ReservationController::class, 'data'])->name('reservations.data');
+    Route::get('/reservations',                        [ReservationController::class, 'index'])->name('reservations');
+    Route::post('/reservations',                       [ReservationController::class, 'store'])->name('reservations.store');
+    Route::get('/reservations/{reservation}',          [ReservationController::class, 'show'])->name('reservations.show');
+    Route::put('/reservations/{reservation}',          [ReservationController::class, 'update'])->name('reservations.update');
+    Route::delete('/reservations/{reservation}',       [ReservationController::class, 'destroy'])->name('reservations.destroy');
+    Route::post('/reservations/{reservation}/approve', [ReservationController::class, 'approve'])->name('reservations.approve');
+    Route::post('/reservations/{reservation}/reject',  [ReservationController::class, 'reject'])->name('reservations.reject');
 
     // ---------- Announcements ----------
     Route::get('/announcements/data',                       [AnnouncementController::class, 'data'])->name('announcements.data');
@@ -259,19 +270,19 @@ Route::middleware(['auth', 'admin', 'prevent.back.cache'])->prefix('admin')->nam
     Route::post('/announcements/{announcement}/toggle-pin', [AnnouncementController::class, 'togglePin'])->name('announcements.toggle-pin');
 
     // ---------- Messages ----------
-    Route::get('/messages',                       [MessageController::class, 'index'])->name('messages');
-    Route::post('/messages',                      [MessageController::class, 'store'])->name('messages.store');
-    Route::get('/messages/{conversation}',        [MessageController::class, 'show'])->name('messages.show');
-    Route::post('/messages/{conversation}/reply', [MessageController::class, 'reply'])->name('messages.reply');
-    Route::delete('/messages/conversation/{conversation}', [MessageController::class, 'deleteConversation'])->name('messages.conversation.delete');
-    Route::delete('/messages/{message}',                    [MessageController::class, 'deleteMessage'])->name('messages.delete');
-    Route::post('/messages/{message}/react',                [MessageController::class, 'reactToMessage'])->name('messages.react');
+    Route::get('/messages',                                [MessageController::class, 'index'])->name('messages');
+    Route::post('/messages',                               [MessageController::class, 'store'])->name('messages.store');
+    Route::get('/messages/{conversation}',                 [MessageController::class, 'show'])->name('messages.show');
+    Route::post('/messages/{conversation}/reply',          [MessageController::class, 'reply'])->name('messages.reply');
+    Route::delete('/messages/conversation/{conversation}', [MessageController::class, 'destroyConversation'])->name('messages.conversation.delete');
+    Route::delete('/messages/{message}',                   [MessageController::class, 'destroyMessage'])->name('messages.delete');
+    Route::post('/messages/{message}/react',               [MessageController::class, 'react'])->name('messages.react');
 
     // ---------- History / Reports ----------
-    Route::get('/history',        [HistoryController::class, 'index'])->name('history');
-    Route::get('/history/export', [HistoryController::class, 'export'])->name('history.export');
-    Route::get('/reports',        [ReportsController::class, 'index'])->name('reports');
-    Route::get('/reports/export', [ReportsController::class, 'export'])->name('reports.export');
+    Route::get('/history',            [HistoryController::class, 'index'])->name('history');
+    Route::get('/history/export',     [HistoryController::class, 'export'])->name('history.export');
+    Route::get('/reports',            [ReportsController::class, 'index'])->name('reports');
+    Route::get('/reports/export',     [ReportsController::class, 'export'])->name('reports.export');
     Route::get('/reports/export-pdf', [ReportsController::class, 'exportPdf'])->name('reports.export-pdf');
 
     // ---------- Audit Logs ----------
@@ -280,15 +291,16 @@ Route::middleware(['auth', 'admin', 'prevent.back.cache'])->prefix('admin')->nam
     Route::get('/audit-logs/export', [AuditLogController::class, 'export'])->name('audit-logs.export');
 
     // ---------- Settings ----------
-    Route::get('/settings',          [SettingsController::class, 'index'])->name('settings');
-    Route::put('/settings/general',  [SettingsController::class, 'updateGeneral'])->name('settings.general');
-    Route::put('/settings/profile',  [SettingsController::class, 'updateProfile'])->name('settings.profile');
-    Route::put('/settings/password', [SettingsController::class, 'updatePassword'])->name('settings.password');
+    Route::get('/settings',         [SettingsController::class, 'index'])->name('settings');
+    Route::put('/settings/profile', [SettingsController::class, 'updateProfile'])->name('settings.profile');
+
+    // Verification Routes for OTP flow
+    Route::post('/settings/request-verification', [SettingsController::class, 'requestVerification'])->name('settings.request-verification');
+    Route::post('/settings/confirm-verification', [SettingsController::class, 'confirmVerification'])->name('settings.confirm-verification');
 
     // ---------- Data Management ----------
     Route::post('/settings/backup', [SettingsController::class, 'backupDatabase'])->name('settings.backup');
 
-    // Constrain filename to only .sql files (defense-in-depth against path traversal)
     Route::get('/settings/backup/{filename}', [SettingsController::class, 'downloadBackup'])
         ->where('filename', '[A-Za-z0-9_\-]+\.sql')
         ->name('settings.download-backup');
@@ -304,12 +316,12 @@ Route::middleware(['auth', 'admin', 'prevent.back.cache'])->prefix('admin')->nam
         Route::get('/', fn() => redirect()->route('admin.services.maintenance'))->name('index');
 
         // Maintenance
-        Route::get('/maintenance/data',                     [MaintenanceController::class, 'data'])->name('maintenance.data');
-        Route::get('/maintenance',                          [MaintenanceController::class, 'index'])->name('maintenance');
-        Route::post('/maintenance',                         [MaintenanceController::class, 'store'])->name('maintenance.store');
-        Route::get('/maintenance/{maintenanceRequest}',     [MaintenanceController::class, 'show'])->name('maintenance.show');
-        Route::put('/maintenance/{maintenanceRequest}',     [MaintenanceController::class, 'update'])->name('maintenance.update');
-        Route::delete('/maintenance/{maintenanceRequest}',  [MaintenanceController::class, 'destroy'])->name('maintenance.destroy');
+        Route::get('/maintenance/data',                    [MaintenanceController::class, 'data'])->name('maintenance.data');
+        Route::get('/maintenance',                         [MaintenanceController::class, 'index'])->name('maintenance');
+        Route::post('/maintenance',                        [MaintenanceController::class, 'store'])->name('maintenance.store');
+        Route::get('/maintenance/{maintenanceRequest}',    [MaintenanceController::class, 'show'])->name('maintenance.show');
+        Route::put('/maintenance/{maintenanceRequest}',    [MaintenanceController::class, 'update'])->name('maintenance.update');
+        Route::delete('/maintenance/{maintenanceRequest}', [MaintenanceController::class, 'destroy'])->name('maintenance.destroy');
 
         // Room change
         Route::get('/room-change/data',                         [RoomChangeController::class, 'data'])->name('room-change.data');
@@ -322,7 +334,7 @@ Route::middleware(['auth', 'admin', 'prevent.back.cache'])->prefix('admin')->nam
         Route::post('/room-change/{roomChangeRequest}/reject',  [RoomChangeController::class, 'reject'])->name('room-change.reject');
 
         // Stay extension
-        Route::get('/stay-extension/data',                                 [StayExtensionController::class, 'data'])->name('stay-extension.data');
+        Route::get('/stay-extension/data',                            [StayExtensionController::class, 'data'])->name('stay-extension.data');
         Route::get('/stay-extension',                                 [StayExtensionController::class, 'index'])->name('stay-extension');
         Route::post('/stay-extension',                                [StayExtensionController::class, 'store'])->name('stay-extension.store');
         Route::get('/stay-extension/{stayExtensionRequest}',          [StayExtensionController::class, 'show'])->name('stay-extension.show');
@@ -348,9 +360,9 @@ Route::middleware(['auth', 'admin', 'prevent.back.cache'])->prefix('admin')->nam
         })->name('builder');
 
         Route::prefix('{virtualTour}/builder')->name('builder.')->group(function () {
-            Route::get('/data',                  [TourHotspotController::class, 'getTourData'])->name('data');
-            Route::post('/hotspots',             [TourHotspotController::class, 'store'])->name('save-hotspot');
-            Route::post('/hotspots/{hotspot}',   [TourHotspotController::class, 'update'])->name('update-hotspot');
+            Route::get('/data',                [TourHotspotController::class, 'getTourData'])->name('data');
+            Route::post('/hotspots',           [TourHotspotController::class, 'store'])->name('save-hotspot');
+            Route::post('/hotspots/{hotspot}', [TourHotspotController::class, 'update'])->name('update-hotspot');
             Route::match(['POST', 'DELETE'], '/hotspots/{hotspot}', [TourHotspotController::class, 'destroy'])->name('delete-hotspot');
         });
 

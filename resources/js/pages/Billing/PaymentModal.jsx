@@ -26,6 +26,10 @@ export default function PaymentModal() {
     const [referenceNumber, setReferenceNumber] = useState("");
     const [receipt, setReceipt] = useState(null);
 
+    // NEW: OCR State
+    const [ocrLoading, setOcrLoading] = useState(false);
+    const [ocrError, setOcrError] = useState("");
+
     // 1. Read default payload on mount AND listen for live updates
     useEffect(() => {
         const el = document.getElementById("payment-modal-root");
@@ -81,6 +85,8 @@ export default function PaymentModal() {
                 setReferenceNumber("");
                 setReceipt(null);
                 setError("");
+                setOcrError("");
+                setOcrLoading(false);
                 setOpen(true);
                 return;
             }
@@ -103,7 +109,11 @@ export default function PaymentModal() {
     }, []);
 
     const close = () => {
-        if (!saving) setOpen(false);
+        if (!saving) {
+            setOpen(false);
+            setOcrLoading(false);
+            setOcrError("");
+        }
     };
     const closeCancelModal = () => {
         if (cancelSaving) return;
@@ -117,6 +127,48 @@ export default function PaymentModal() {
             return JSON.parse(text);
         } catch {
             return { message: text.slice(0, 300) || `HTTP ${res.status}` };
+        }
+    };
+
+    // NEW: OCR Upload Handler
+    const handleReceiptUpload = async (file) => {
+        if (!file) return;
+
+        setReceipt(file);
+        setOcrError("");
+
+        setOcrLoading(true);
+        const fd = new FormData();
+        fd.append("receipt", file);
+
+        try {
+            const res = await fetch("/tenants/billing/parse-receipt", {
+                method: "POST",
+                headers: {
+                    Accept: "application/json",
+                    "X-CSRF-TOKEN": csrf(),
+                },
+                body: fd,
+            });
+
+            const data = await res.json().catch(() => ({}));
+
+            if (res.ok && data.success && data.reference_no) {
+                setReferenceNumber(data.reference_no);
+            } else if (res.ok && data.success && !data.reference_no) {
+                setOcrError(
+                    "Reference number not detected. Please type it manually.",
+                );
+            } else {
+                setOcrError(
+                    "Could not scan receipt. Please type reference manually.",
+                );
+            }
+        } catch (err) {
+            console.error("OCR failed", err);
+            setOcrError("OCR service unavailable. Please type manually.");
+        } finally {
+            setOcrLoading(false);
         }
     };
 
@@ -321,26 +373,6 @@ export default function PaymentModal() {
                             <>
                                 <div>
                                     <label className="block text-xs font-semibold text-slate-800 mb-1.5">
-                                        Reference / Transaction Number{" "}
-                                        <span className="text-rose-500">*</span>
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={referenceNumber}
-                                        onChange={(e) =>
-                                            setReferenceNumber(e.target.value)
-                                        }
-                                        placeholder={
-                                            method === "gcash"
-                                                ? "e.g. GC-20260323-12345"
-                                                : "e.g. BT-20260323-78901"
-                                        }
-                                        className="w-full border border-slate-200 rounded-lg px-3.5 py-2.5 text-[13px] outline-none focus:border-blue-400"
-                                    />
-                                </div>
-
-                                <div>
-                                    <label className="block text-xs font-semibold text-slate-800 mb-1.5">
                                         Upload Receipt Screenshot{" "}
                                         <span className="text-rose-500">*</span>
                                     </label>
@@ -357,13 +389,50 @@ export default function PaymentModal() {
                                         id="receipt-upload"
                                         type="file"
                                         accept="image/*"
-                                        onChange={(e) =>
-                                            setReceipt(
-                                                e.target.files[0] || null,
-                                            )
-                                        }
+                                        onChange={(e) => {
+                                            const file =
+                                                e.target.files[0] || null;
+                                            if (file) {
+                                                handleReceiptUpload(file);
+                                            } else {
+                                                setReceipt(null);
+                                            }
+                                        }}
                                         className="hidden"
                                     />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-semibold text-slate-800 mb-1.5">
+                                        Reference / Transaction Number{" "}
+                                        <span className="text-rose-500">*</span>
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={referenceNumber}
+                                        onChange={(e) =>
+                                            setReferenceNumber(e.target.value)
+                                        }
+                                        placeholder={
+                                            method === "gcash"
+                                                ? "e.g. GC-20260323-12345"
+                                                : "e.g. BT-20260323-78901"
+                                        }
+                                        className="w-full border border-slate-200 rounded-lg px-3.5 py-2.5 text-[13px] outline-none focus:border-blue-400"
+                                    />
+                                    {/* NEW: OCR Loading/Error Indicators */}
+                                    {ocrLoading && (
+                                        <div className="flex items-center gap-1.5 text-[11px] text-blue-600 mt-1">
+                                            <i className="fa-solid fa-spinner fa-spin"></i>
+                                            Scanning receipt for reference
+                                            number...
+                                        </div>
+                                    )}
+                                    {ocrError && (
+                                        <div className="flex items-center gap-1.5 text-[11px] text-amber-600 mt-1">
+                                            <i className="fa-solid fa-circle-exclamation"></i>
+                                            {ocrError}
+                                        </div>
+                                    )}
                                 </div>
                             </>
                         )}

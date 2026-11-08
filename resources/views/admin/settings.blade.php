@@ -3,6 +3,7 @@
 
 @section('content')
     <div class="p-4 md:p-8 max-w-[1400px] mx-auto space-y-6">
+        <div id="admin-settings-modals"></div>
 
         {{-- Page Header --}}
         <div class="flex items-center gap-3.5 min-w-0">
@@ -30,7 +31,6 @@
                 {{ session('error') }}
             </div>
         @endif
-
         @if ($errors->any())
             <div
                 class="bg-rose-50 border border-rose-200 text-rose-800 text-[13px] rounded-lg px-4 py-3 flex items-start gap-2">
@@ -52,21 +52,13 @@
                         overflow-x-auto lg:overflow-visible
                         lg:sticky lg:top-20
                         scrollbar-thin">
-                <button data-tab="general"
-                    class="settings-tab active whitespace-nowrap shrink-0 flex items-center justify-between gap-2 px-3.5 py-2.5 lg:py-3 rounded-lg text-[13px] lg:text-[13.5px] font-semibold bg-[#02122b] text-white">
-                    <div class="flex items-center gap-2.5">
-                        <i class="fa-regular fa-building text-sm"></i>
-                        <span>General</span>
-                    </div>
-                    <i class="fa-solid fa-chevron-right text-[11px] hidden lg:inline"></i>
-                </button>
-
                 <button data-tab="profile"
-                    class="settings-tab whitespace-nowrap shrink-0 flex items-center justify-between gap-2 px-3.5 py-2.5 lg:py-3 rounded-lg text-[13px] lg:text-[13.5px] font-semibold text-slate-600 hover:bg-slate-50 transition">
+                    class="settings-tab active whitespace-nowrap shrink-0 flex items-center justify-between gap-2 px-3.5 py-2.5 lg:py-3 rounded-lg text-[13px] lg:text-[13.5px] font-semibold bg-[#02122b] text-white">
                     <div class="flex items-center gap-2.5">
                         <i class="fa-regular fa-user text-sm"></i>
                         <span>Profile</span>
                     </div>
+                    <i class="fa-solid fa-chevron-right text-[11px] hidden lg:inline"></i>
                 </button>
 
                 <button data-tab="security"
@@ -97,79 +89,13 @@
             {{-- Right Panels --}}
             <div class="min-w-0 space-y-6">
 
-                {{-- GENERAL --}}
-                <div class="settings-panel" data-panel="general">
-                    <form action="{{ route('admin.settings.general') }}" method="POST">
-                        @csrf
-                        @method('PUT')
-                        <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 sm:p-6 mb-6">
-                            <h3 class="text-base font-bold text-slate-900 mb-1">Owner / Manager Information</h3>
-                            <p class="text-[12.5px] text-slate-500 mb-5">Contact details of the property owner and manager
-                            </p>
-
-                            <div class="mb-4">
-                                <label class="block text-[12.5px] font-medium text-slate-800 mb-1.5">Owner / Manager
-                                    Name</label>
-                                <input type="text" name="name" value="{{ old('name', $user->name) }}"
-                                    class="w-full border border-slate-200 rounded-lg px-3.5 py-2.5 text-[13px] outline-none focus:border-slate-400">
-                            </div>
-
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div>
-                                    <label class="block text-[12.5px] font-medium text-slate-800 mb-1.5">Contact
-                                        Number</label>
-                                    <div class="relative">
-                                        <i
-                                            class="fa-solid fa-phone absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-[13px]"></i>
-                                        <input type="text" name="phone" value="{{ old('phone', $user->phone) }}"
-                                            class="w-full border border-slate-200 rounded-lg pl-9 pr-3.5 py-2.5 text-[13px] outline-none focus:border-slate-400">
-                                    </div>
-                                </div>
-                                <div>
-                                    <label class="block text-[12.5px] font-medium text-slate-800 mb-1.5">Official
-                                        Email</label>
-                                    <div class="relative">
-                                        <i
-                                            class="fa-regular fa-envelope absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-[13px]"></i>
-                                        <input type="email" name="email" value="{{ old('email', $user->email) }}"
-                                            class="w-full border border-slate-200 rounded-lg pl-9 pr-3.5 py-2.5 text-[13px] outline-none focus:border-slate-400">
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 sm:p-6">
-                            <h3 class="text-base font-bold text-slate-900 mb-1">Building Information</h3>
-                            <p class="text-[12.5px] text-slate-500 mb-5">Basic information about your property</p>
-
-                            <div class="mb-4">
-                                <label class="block text-[12.5px] font-medium text-slate-800 mb-1.5">Building Name</label>
-                                <input type="text" value="JLM Cozy Cabin" disabled
-                                    class="w-full border border-slate-200 bg-slate-50 rounded-lg px-3.5 py-2.5 text-[13px] outline-none cursor-not-allowed text-slate-500">
-                            </div>
-
-                            <div class="mb-4">
-                                <label class="block text-[12.5px] font-medium text-slate-800 mb-1.5">Address</label>
-                                <input type="text" value="1517 M.H. Del Pilar St., Ermita, Manila" disabled
-                                    class="w-full border border-slate-200 bg-slate-50 rounded-lg px-3.5 py-2.5 text-[13px] outline-none cursor-not-allowed text-slate-500">
-                            </div>
-
-                            <div class="flex justify-end mt-5">
-                                <button type="submit"
-                                    class="bg-[#02122b] text-white px-5 py-2.5 rounded-lg text-[13px] font-semibold inline-flex items-center gap-2 hover:bg-[#092042] transition">
-                                    <i class="fa-regular fa-floppy-disk"></i> Save Changes
-                                </button>
-                            </div>
-                        </div>
-                    </form>
-                </div>
-
-                {{-- PROFILE --}}
-                <div class="settings-panel hidden" data-panel="profile">
+                {{-- PROFILE (Merged with General) --}}
+                <div class="settings-panel" data-panel="profile">
                     <form action="{{ route('admin.settings.profile') }}" method="POST" enctype="multipart/form-data">
                         @csrf
                         @method('PUT')
-                        <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 sm:p-6">
+
+                        <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 sm:p-6 mb-6">
                             <h3 class="text-base font-bold text-slate-900 mb-1">Personal Information</h3>
                             <p class="text-[12.5px] text-slate-500 mb-5">Update your profile details</p>
 
@@ -202,8 +128,8 @@
                                         class="text-emerald-500 text-xs font-semibold cursor-pointer hover:underline">
                                         Change photo
                                     </label>
-                                    <input type="file" id="profile-photo-input" name="profile_picture"
-                                        accept="image/*" class="hidden">
+                                    <input type="file" id="profile-photo-input" name="profile_picture" accept="image/*"
+                                        class="hidden">
                                 </div>
                             </div>
 
@@ -215,16 +141,24 @@
 
                             <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                                 <div>
-                                    <label class="block text-[12.5px] font-medium text-slate-800 mb-1.5">Email
-                                        Address</label>
-                                    <input type="email" name="email" value="{{ old('email', $user->email) }}"
-                                        class="w-full border border-slate-200 rounded-lg px-3.5 py-2.5 text-[13px] outline-none focus:border-slate-400">
+                                    <div class="flex items-center justify-between mb-1.5">
+                                        <label class="block text-[12.5px] font-medium text-slate-800">Email Address</label>
+                                        <button type="button"
+                                            class="text-[11px] font-bold text-emerald-600 hover:underline"
+                                            onclick="openAdminSettingsModal('email')">Change</button>
+                                    </div>
+                                    <input readonly value="{{ $user->email }}"
+                                        class="w-full border border-slate-200 bg-slate-50 text-slate-500 rounded-lg px-3.5 py-2.5 text-[13px] outline-none cursor-not-allowed">
                                 </div>
                                 <div>
-                                    <label class="block text-[12.5px] font-medium text-slate-800 mb-1.5">Phone
-                                        Number</label>
-                                    <input type="text" name="phone" value="{{ old('phone', $user->phone) }}"
-                                        class="w-full border border-slate-200 rounded-lg px-3.5 py-2.5 text-[13px] outline-none focus:border-slate-400">
+                                    <div class="flex items-center justify-between mb-1.5">
+                                        <label class="block text-[12.5px] font-medium text-slate-800">Phone Number</label>
+                                        <button type="button"
+                                            class="text-[11px] font-bold text-emerald-600 hover:underline"
+                                            onclick="openAdminSettingsModal('phone')">Change</button>
+                                    </div>
+                                    <input readonly value="{{ $user->phone ?? 'Not set' }}"
+                                        class="w-full border border-slate-200 bg-slate-50 text-slate-500 rounded-lg px-3.5 py-2.5 text-[13px] outline-none cursor-not-allowed">
                                 </div>
                             </div>
 
@@ -233,8 +167,25 @@
                                 <input type="text" value="Admin" disabled
                                     class="w-full border border-slate-200 bg-slate-50 text-slate-500 rounded-lg px-3.5 py-2.5 text-[13px] outline-none cursor-not-allowed">
                             </div>
+                        </div>
 
-                            <div class="flex justify-end">
+                        <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 sm:p-6">
+                            <h3 class="text-base font-bold text-slate-900 mb-1">Building Information</h3>
+                            <p class="text-[12.5px] text-slate-500 mb-5">Basic information about your property</p>
+
+                            <div class="mb-4">
+                                <label class="block text-[12.5px] font-medium text-slate-800 mb-1.5">Building Name</label>
+                                <input type="text" value="JLM Cozy Cabin" disabled
+                                    class="w-full border border-slate-200 bg-slate-50 rounded-lg px-3.5 py-2.5 text-[13px] outline-none cursor-not-allowed text-slate-500">
+                            </div>
+
+                            <div class="mb-4">
+                                <label class="block text-[12.5px] font-medium text-slate-800 mb-1.5">Address</label>
+                                <input type="text" value="1517 M.H. Del Pilar St., Ermita, Manila" disabled
+                                    class="w-full border border-slate-200 bg-slate-50 rounded-lg px-3.5 py-2.5 text-[13px] outline-none cursor-not-allowed text-slate-500">
+                            </div>
+
+                            <div class="flex justify-end mt-5">
                                 <button type="submit"
                                     class="bg-[#02122b] text-white px-5 py-2.5 rounded-lg text-[13px] font-semibold inline-flex items-center gap-2 hover:bg-[#092042] transition">
                                     <i class="fa-regular fa-floppy-disk"></i> Save Profile
@@ -246,71 +197,27 @@
 
                 {{-- SECURITY --}}
                 <div class="settings-panel hidden" data-panel="security">
-                    <form action="{{ route('admin.settings.password') }}" method="POST">
-                        @csrf
-                        @method('PUT')
-                        <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 sm:p-6 mb-6">
-                            <h3 class="text-base font-bold text-slate-900 mb-1">Change Password</h3>
-                            <p class="text-[12.5px] text-slate-500 mb-5">Update your account password</p>
+                    <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 sm:p-6 mb-6">
+                        <h3 class="text-base font-bold text-slate-900 mb-1">Security Settings</h3>
+                        <p class="text-[12.5px] text-slate-500 mb-5">Manage your account password</p>
 
-                            {{-- Current Password --}}
-                            <div class="mb-4">
-                                <label class="block text-[12.5px] font-medium text-slate-800 mb-1.5">
-                                    Current Password
-                                </label>
-                                <div class="relative flex items-center">
-                                    <input type="password" name="current_password" autocomplete="current-password"
-                                        class="w-full border border-slate-200 rounded-lg pl-3.5 pr-12 py-2.5 text-[13px] outline-none focus:border-slate-400">
-                                    <button type="button"
-                                        class="password-toggle absolute right-0 h-full w-12 flex items-center justify-center text-slate-400 hover:text-slate-700 transition"
-                                        aria-label="Show password">
-                                        <i class="fa-regular fa-eye text-[14px]"></i>
-                                    </button>
+                        <div class="bg-slate-50 border border-slate-100 rounded-xl p-5 flex items-center justify-between">
+                            <div class="flex items-center gap-3">
+                                <div
+                                    class="w-10 h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-600">
+                                    <i class="fa-solid fa-key"></i>
+                                </div>
+                                <div>
+                                    <div class="text-[14px] font-bold text-slate-900">Password</div>
+                                    <div class="text-[12px] text-slate-500">Update your password securely</div>
                                 </div>
                             </div>
-
-                            {{-- New Password --}}
-                            <div class="mb-4">
-                                <label class="block text-[12.5px] font-medium text-slate-800 mb-1.5">
-                                    New Password
-                                </label>
-                                <div class="relative flex items-center">
-                                    <input type="password" name="password" autocomplete="new-password"
-                                        placeholder="Min. 8 characters"
-                                        class="w-full border border-slate-200 rounded-lg pl-3.5 pr-12 py-2.5 text-[13px] outline-none focus:border-slate-400">
-                                    <button type="button"
-                                        class="password-toggle absolute right-0 h-full w-12 flex items-center justify-center text-slate-400 hover:text-slate-700 transition"
-                                        aria-label="Show password">
-                                        <i class="fa-regular fa-eye text-[14px]"></i>
-                                    </button>
-                                </div>
-                            </div>
-
-                            {{-- Confirm New Password --}}
-                            <div class="mb-4">
-                                <label class="block text-[12.5px] font-medium text-slate-800 mb-1.5">
-                                    Confirm New Password
-                                </label>
-                                <div class="relative flex items-center">
-                                    <input type="password" name="password_confirmation" autocomplete="new-password"
-                                        placeholder="Repeat new password"
-                                        class="w-full border border-slate-200 rounded-lg pl-3.5 pr-12 py-2.5 text-[13px] outline-none focus:border-slate-400">
-                                    <button type="button"
-                                        class="password-toggle absolute right-0 h-full w-12 flex items-center justify-center text-slate-400 hover:text-slate-700 transition"
-                                        aria-label="Show password">
-                                        <i class="fa-regular fa-eye text-[14px]"></i>
-                                    </button>
-                                </div>
-                            </div>
-
-                            <div class="flex justify-end mt-6">
-                                <button type="submit"
-                                    class="bg-[#02122b] text-white px-5 py-2.5 rounded-lg text-[13px] font-semibold inline-flex items-center gap-2 hover:bg-[#092042] transition">
-                                    <i class="fa-solid fa-lock"></i> Update Password
-                                </button>
-                            </div>
+                            <button type="button" onclick="openAdminSettingsModal('password')"
+                                class="bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 px-4 py-2 rounded-lg text-[13px] font-semibold transition">
+                                Change Password
+                            </button>
                         </div>
-                    </form>
+                    </div>
 
                     <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 sm:p-6">
                         <h3 class="text-base font-bold text-slate-900 mb-1">Security Options</h3>
@@ -340,12 +247,8 @@
                                 <div class="flex items-start gap-3 min-w-0">
                                     <i class="{{ $pref['icon'] }} text-[15px] text-slate-900 mt-0.5 shrink-0"></i>
                                     <div class="min-w-0">
-                                        <div class="text-[13.5px] font-semibold text-slate-900">
-                                            {{ $pref['label'] }}
-                                        </div>
-                                        <div class="text-xs text-slate-500">
-                                            {{ $pref['desc'] }}
-                                        </div>
+                                        <div class="text-[13.5px] font-semibold text-slate-900">{{ $pref['label'] }}</div>
+                                        <div class="text-xs text-slate-500">{{ $pref['desc'] }}</div>
                                     </div>
                                 </div>
                                 <label class="relative inline-flex items-center w-11 h-6 cursor-pointer shrink-0">
@@ -363,8 +266,7 @@
 
                 {{-- DATA MANAGEMENT --}}
                 <div class="settings-panel hidden" data-panel="data">
-
-                    {{-- ============ BACKUP DATABASE CARD ============ --}}
+                    {{-- ... [Keep the entire Data Management panel exactly as it is in your current file] ... --}}
                     <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 sm:p-6 mb-6">
                         <h3 class="text-base font-bold text-slate-900 mb-1">Backup Database</h3>
                         <p class="text-[12.5px] text-slate-500 mb-5">Create and manage database snapshots to protect your
@@ -458,13 +360,11 @@
                         </div>
                     </div>
 
-                    {{-- ============ EXPORT SYSTEM DATA CARD ============ --}}
                     <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 sm:p-6 mb-6">
                         <h3 class="text-base font-bold text-slate-900 mb-1">Export System Data</h3>
                         <p class="text-[12.5px] text-slate-500 mb-5">Download records for reporting, compliance, or
                             migration</p>
 
-                        {{-- Export Format Options --}}
                         <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mb-5">
                             <label
                                 class="export-format-card selected border-2 border-emerald-500 bg-emerald-50 rounded-[10px] p-4 text-center cursor-pointer transition"
@@ -528,13 +428,8 @@
                                 <div class="text-[11px] text-slate-500">{{ $stats['maintenance'] }} requests</div>
                             </a>
                         </div>
-                        <p class="text-[11px] text-slate-400 mt-2">
-                            <i class="fa-solid fa-circle-info mr-1"></i>
-                            Select a format above, then click a module to download.
-                        </p>
                     </div>
 
-                    {{-- ============ ARCHIVE RECORDS CARD ============ --}}
                     <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 sm:p-6">
                         <h3 class="text-base font-bold text-slate-900 mb-1">Archive Records</h3>
                         <p class="text-[12.5px] text-slate-500 mb-5">Move old, inactive records to long-term cold storage
@@ -543,8 +438,8 @@
                         <div class="bg-amber-50 border border-amber-200 rounded-[10px] p-4 flex gap-3.5 mb-6">
                             <i class="fa-solid fa-triangle-exclamation text-amber-600 text-base mt-0.5 shrink-0"></i>
                             <div class="text-[13px] text-amber-900 leading-relaxed">
-                                Archived records are moved to read-only cold storage. They remain accessible in History
-                                but no longer appear in active views. This action can be reversed by an administrator.
+                                Archived records are moved to read-only cold storage. They remain accessible in History but
+                                no longer appear in active views.
                             </div>
                         </div>
 
@@ -563,11 +458,9 @@
                                             <div class="min-w-0">
                                                 <div
                                                     class="archive-title text-sm font-semibold text-slate-900 break-words">
-                                                    {{ $arc['title'] }}
-                                                </div>
-                                                <div class="archive-sub text-[12.5px] text-slate-500">
-                                                    {{ $arc['count'] }} records
-                                                    @if ($isEmpty)
+                                                    {{ $arc['title'] }}</div>
+                                                <div class="archive-sub text-[12.5px] text-slate-500">{{ $arc['count'] }}
+                                                    records @if ($isEmpty)
                                                         <span class="text-slate-400">• nothing to archive</span>
                                                     @endif
                                                 </div>
@@ -599,11 +492,16 @@
 
 @push('scripts')
     <script>
-        (function() {
+        window.openAdminSettingsModal = function(action) {
+            window.dispatchEvent(new CustomEvent('admin-settings:open-modal', {
+                detail: {
+                    action
+                }
+            }));
+        };
 
-            // ============================================================
+        (function() {
             // 1. TAB SWITCHING
-            // ============================================================
             const tabs = document.querySelectorAll('.settings-tab');
             const panels = document.querySelectorAll('.settings-panel');
 
@@ -630,46 +528,22 @@
                 tab.addEventListener('click', () => activateTab(tab));
             });
 
-            // ============================================================
-            // 2. RESTORE ACTIVE TAB FROM URL HASH
-            // ============================================================
+            // 2. RESTORE ACTIVE TAB
             (function restoreTab() {
                 const hash = window.location.hash.replace(/^#/, '');
                 let wanted = null;
-
                 if (hash.startsWith('tab=')) {
                     wanted = hash.slice(4);
                 } else if (hash && document.querySelector(`.settings-tab[data-tab="${hash}"]`)) {
                     wanted = hash;
                 }
-
                 if (wanted) {
                     const tab = document.querySelector(`.settings-tab[data-tab="${wanted}"]`);
                     if (tab) activateTab(tab);
                 }
             })();
 
-            // ============================================================
-            // 3. PASSWORD VISIBILITY TOGGLES
-            // ============================================================
-            document.querySelectorAll('.password-toggle').forEach(btn => {
-                btn.addEventListener('click', () => {
-                    const input = btn.closest('.relative')?.querySelector('input');
-                    if (!input) return;
-                    const show = input.type === 'password';
-                    input.type = show ? 'text' : 'password';
-                    const icon = btn.querySelector('i');
-                    if (icon) {
-                        icon.classList.toggle('fa-eye', !show);
-                        icon.classList.toggle('fa-eye-slash', show);
-                    }
-                    btn.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
-                });
-            });
-
-            // ============================================================
-            // 4. CHANGE PHOTO — preview
-            // ============================================================
+            // 3. CHANGE PHOTO PREVIEW
             const photoInput = document.getElementById('profile-photo-input');
             if (photoInput) {
                 photoInput.addEventListener('change', () => {
@@ -686,9 +560,7 @@
                 });
             }
 
-            // ============================================================
-            // 5. EXPORT FORMAT SELECTION
-            // ============================================================
+            // 4. EXPORT FORMAT SELECTION
             const formatCards = document.querySelectorAll('.export-format-card');
             let selectedFormat = 'csv';
 
@@ -698,7 +570,6 @@
                         c.classList.remove('selected', 'border-2', 'border-emerald-500',
                             'bg-emerald-50');
                         c.classList.add('border', 'border-slate-200', 'bg-white');
-
                         const icon = c.querySelector('i');
                         const title = c.querySelector('span:first-of-type');
                         if (icon) {
@@ -713,7 +584,6 @@
 
                     card.classList.add('selected', 'border-2', 'border-emerald-500', 'bg-emerald-50');
                     card.classList.remove('border', 'border-slate-200', 'bg-white');
-
                     const icon = card.querySelector('i');
                     const title = card.querySelector('span:first-of-type');
                     if (icon) {
@@ -742,9 +612,7 @@
             }
             updateExportLinks();
 
-            // ============================================================
-            // 6. ARCHIVE SELECTION COUNTER
-            // ============================================================
+            // 5. ARCHIVE SELECTION COUNTER
             const archiveItems = document.querySelectorAll('.archive-item');
             const archiveCountEl = document.getElementById('archive-count');
             const archiveSubmitBtn = document.getElementById('archive-submit-btn');

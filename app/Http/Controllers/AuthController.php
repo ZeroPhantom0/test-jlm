@@ -9,6 +9,7 @@ use App\Mail\PasswordResetMail;
 use App\Models\IdentityVerification;
 use App\Models\LoginVerificationCode;
 use App\Models\PersonalInformation;
+use App\Models\Tenant;
 use App\Models\User;
 use App\Services\AuditLogger;
 use Illuminate\Http\Request;
@@ -16,6 +17,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Password;
 use Inertia\Inertia;
@@ -135,6 +137,7 @@ class AuthController extends Controller
         }
     }
 
+    // ⬇️ CHANGED — brand-new users are NOT persisted until Terms are accepted
     public function handleGoogleCallback(Request $request)
     {
         if ($request->has('error')) {
@@ -163,16 +166,110 @@ class AuthController extends Controller
             );
         }
 
+        $remember = (bool) $request->session()->pull('google_remember', false);
+
         $user = User::where('email', $email)->first();
+
+        // ────────────────────────────────────────────────────────
+        // EXISTING user → straight to OTP (no terms gate)
+        // ────────────────────────────────────────────────────────
+        if ($user) {
+            if ($user->isAdmin()) {
+                return redirect()->route('admin.login')->with(
+                    'error',
+                    'Administrators must log in via the admin portal.'
+                );
+            }
+
+            // Safety: if an existing user somehow has no terms_accepted_at,
+            // send them back through the gate rather than skipping it.
+            if (Schema::hasColumn('users', 'terms_accepted_at') && $user->terms_accepted_at === null) {
+                session([
+                    'google_pending_terms' => [
+                        'remember' => $remember,
+                        'user_id'  => $user->id,
+                        'profile'  => [
+                            'name'  => $user->name,
+                            'email' => $user->email,
+                        ],
+                    ],
+                ]);
+
+                return redirect()->route('auth.google.terms');
+            }
+
+            return $this->beginVerification($user, $remember, 'google');
+        }
+
+        // ────────────────────────────────────────────────────────
+        // NEW user → stash profile in session only. NO DB writes.
+        // The user/tenant rows are created in acceptGoogleTerms().
+        // ────────────────────────────────────────────────────────
+        session([
+            'google_pending_terms' => [
+                'remember' => $remember,
+                'profile'  => [
+                    'name'  => $googleUser->getName() ?: explode('@', $email)[0],
+                    'email' => $email,
+                ],
+            ],
+        ]);
+
+        return redirect()->route('auth.google.terms');
+    }
+
+    // ⬇️ NEW — show the Terms acceptance gate
+    public function showGoogleTerms(Request $request)
+    {
+        $pending = session('google_pending_terms');
+
+        if (! $pending || empty($pending['profile']['email'])) {
+            return redirect()->route('login');
+        }
+
+        return Inertia::render('Auth/GoogleTerms', [
+            'name'  => $pending['profile']['name'],
+            'email' => $this->maskEmail($pending['profile']['email']),
+        ]);
+    }
+
+    // ⬇️ NEW — create the account only after Terms are accepted
+    public function acceptGoogleTerms(Request $request)
+    {
+        $request->validate([
+            'accepted' => ['accepted'],
+        ]);
+
+        $pending = session('google_pending_terms');
+
+        if (! $pending || empty($pending['profile']['email'])) {
+            return redirect()->route('login')->with(
+                'error',
+                'Your session expired. Please sign in again.'
+            );
+        }
+
+        $email    = $pending['profile']['email'];
+        $name     = $pending['profile']['name'];
+        $remember = (bool) ($pending['remember'] ?? false);
+
+        // Resolve an existing user (race condition safeguard) or create one.
+        $user = User::where('email', $email)->first();
+
+        $isNewAccount = false;
 
         if (! $user) {
             $user = User::create([
-                'name'     => $googleUser->getName() ?: explode('@', $email)[0],
-                'email'    => $email,
-                'phone'    => null,
-                'password' => Hash::make(Str::random(32)),
-                'role'     => 'tenant',
+                'name'              => $name,
+                'email'             => $email,
+                'phone'             => null,
+                'password'          => Hash::make(Str::random(32)),
+                'role'              => 'tenant',
+                'terms_accepted_at' => now(),
             ]);
+
+            // 🔑 Create the Tenant shell row now that the account is real
+            Tenant::ensureForUser($user);
 
             AuditLogger::log([
                 'action'       => 'CREATE',
@@ -183,16 +280,39 @@ class AuthController extends Controller
             ]);
 
             $this->sendWelcomeEmail($user);
+
+            $isNewAccount = true;
+        } else {
+            // Existing user reached the gate (legacy terms-accepted was null)
+            if (Schema::hasColumn('users', 'terms_accepted_at') && $user->terms_accepted_at === null) {
+                $user->forceFill(['terms_accepted_at' => now()])->save();
+            }
+
+            Tenant::ensureForUser($user); // idempotent
         }
 
-        // Block admins from Google Login if they try
-        if ($user->isAdmin()) {
-            return redirect()->route('admin.login')->with('error', 'Administrators must log in via the admin portal.');
-        }
+        AuditLogger::log([
+            'action'       => 'SUBMIT',
+            'module'       => 'AUTHENTICATION',
+            'description'  => 'Accepted Terms via Google ' . ($isNewAccount ? 'signup' : 're-acceptance') . ': ' . $email,
+            'subject_type' => User::class,
+            'subject_id'   => $user->id,
+        ]);
 
-        $remember = (bool) $request->session()->pull('google_remember', false);
+        $request->session()->forget('google_pending_terms');
 
         return $this->beginVerification($user, $remember, 'google');
+    }
+
+    // ⬇️ NEW — clear the pending session. Nothing is in the DB yet.
+    public function cancelGoogleTerms(Request $request)
+    {
+        $request->session()->forget('google_pending_terms');
+
+        return redirect()->route('login')->with(
+            'error',
+            'You must accept the Terms and Conditions to create an account.'
+        );
     }
 
     // ============ TENANT VERIFICATION CODE (STEP 2) ============
@@ -222,7 +342,6 @@ class AuthController extends Controller
     {
         $pending = session('login_pending');
 
-        // If there's no pending session, they shouldn't be here.
         if (! $pending) {
             return redirect()->route('login')->with('error', 'Your session expired. Please sign in again.');
         }
@@ -239,6 +358,7 @@ class AuthController extends Controller
             'method' => $pending['method'],
         ]);
     }
+
     public function verify(Request $request)
     {
         $pending = session('login_pending');
@@ -445,7 +565,6 @@ class AuthController extends Controller
 
     private function redirectAfterLogin(User $user)
     {
-        // If they are an admin, they shouldn't be using the tenant login.
         if ($user->isAdmin()) {
             Auth::logout();
             session()->flash('error', 'Please use the Administrator login page.');
@@ -493,12 +612,16 @@ class AuthController extends Controller
         ]);
 
         $user = User::create([
-            'name'     => $validated['fullname'],
-            'email'    => $validated['email'],
-            'phone'    => $validated['phone'],
-            'password' => Hash::make($validated['password']),
-            'role'     => 'tenant',
+            'name'              => $validated['fullname'],
+            'email'             => $validated['email'],
+            'phone'             => $validated['phone'],
+            'password'          => Hash::make($validated['password']),
+            'role'              => 'tenant',
+            'terms_accepted_at' => now(),
         ]);
+
+        // 🔑 Create the shell Tenant row immediately so messaging works
+        Tenant::ensureForUser($user);
 
         Auth::login($user);
         $request->session()->regenerate();
@@ -511,7 +634,6 @@ class AuthController extends Controller
             'subject_id'   => $user->id,
         ]);
 
-        // Send welcome email — non-blocking
         $this->sendWelcomeEmail($user);
 
         return redirect()->route('personal-information');
@@ -522,10 +644,8 @@ class AuthController extends Controller
     {
         $user = Auth::user();
 
-        // Capture role BEFORE invalidating the session
         $wasAdmin = $user?->role === 'admin';
 
-        // Safety net: if role flag wasn't set but referrer is an admin page
         if (! $wasAdmin) {
             $referer = $request->headers->get('referer', '');
             $wasAdmin = str_contains($referer, '/admin');
@@ -543,7 +663,6 @@ class AuthController extends Controller
         $request->session()->invalidate();
         $request->session()->regenerateToken();
 
-        // Pick the correct login page for each role
         $redirectTo = $wasAdmin
             ? route('admin.login')
             : route('login');
@@ -554,8 +673,6 @@ class AuthController extends Controller
             'Expires'       => 'Sat, 01 Jan 2000 00:00:00 GMT',
         ];
 
-        // If the request came from fetch() (Accept: application/json),
-        // return JSON so JS can navigate. Otherwise do a normal redirect.
         if ($request->expectsJson()) {
             return response()->json([
                 'success'     => true,
@@ -585,14 +702,12 @@ class AuthController extends Controller
 
         $user = User::where('email', $validated['email'])->first();
 
-        // Check if user exists FIRST
         if (! $user) {
             return back()->withErrors([
                 'email' => 'We could not find an account associated with this email address.',
             ])->onlyInput('email');
         }
 
-        // If they exist, generate token and send email
         $token = Str::random(64);
 
         DB::table('password_reset_tokens')->updateOrInsert(
@@ -660,7 +775,6 @@ class AuthController extends Controller
             ]);
         }
 
-        // Token expires after 60 minutes
         if (now()->diffInMinutes($record->created_at) > 60) {
             DB::table('password_reset_tokens')->where('email', $validated['email'])->delete();
             return back()->withErrors([
@@ -862,7 +976,7 @@ class AuthController extends Controller
         try {
             Mail::to($user->email)->send(new AccountRegisteredMail($user));
         } catch (\Throwable $e) {
-            report($e); // never block signup if email fails
+            report($e);
         }
     }
 }

@@ -25,29 +25,26 @@
         <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div class="bg-white rounded-2xl px-5 py-4 border border-slate-200 shadow-sm">
                 <span class="text-[13px] text-slate-500 font-medium">Total</span>
-                <div class="text-[22px] font-bold text-slate-900 mt-2">{{ $metrics['total'] }}</div>
+                <div class="text-[22px] font-bold text-slate-900 mt-2" id="metric-total">{{ $metrics['total'] }}</div>
             </div>
             <div class="bg-white rounded-2xl px-5 py-4 border border-slate-200 shadow-sm">
                 <span class="text-[13px] text-slate-500 font-medium">Pending</span>
                 <div class="mt-2">
-                    <div
-                        class="w-7 h-7 rounded-full bg-yellow-100 text-amber-700 flex items-center justify-center text-[13px] font-bold">
+                    <div class="w-7 h-7 rounded-full bg-yellow-100 text-amber-700 flex items-center justify-center text-[13px] font-bold" id="metric-pending">
                         {{ $metrics['pending'] }}</div>
                 </div>
             </div>
             <div class="bg-white rounded-2xl px-5 py-4 border border-slate-200 shadow-sm">
                 <span class="text-[13px] text-slate-500 font-medium">Approved</span>
                 <div class="mt-2">
-                    <div
-                        class="w-7 h-7 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-[13px] font-bold">
+                    <div class="w-7 h-7 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-[13px] font-bold" id="metric-approved">
                         {{ $metrics['approved'] }}</div>
                 </div>
             </div>
             <div class="bg-white rounded-2xl px-5 py-4 border border-slate-200 shadow-sm">
                 <span class="text-[13px] text-slate-500 font-medium">Rejected</span>
                 <div class="mt-2">
-                    <div
-                        class="w-7 h-7 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center text-[13px] font-bold">
+                    <div class="w-7 h-7 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center text-[13px] font-bold" id="metric-rejected">
                         {{ $metrics['rejected'] }}</div>
                 </div>
             </div>
@@ -57,9 +54,8 @@
             <div class="overflow-x-auto">
                 <table class="w-full text-left">
                     <thead>
-                        <tr
-                            class="bg-slate-50 text-[11px] font-bold text-slate-500 uppercase tracking-wide border-b border-slate-200">
-                            <th class="py-3.5 px-5">Resident</th>
+                        <tr class="bg-slate-50 text-[11px] font-bold text-slate-500 uppercase tracking-wide border-b border-slate-200">
+                            <th class="py-3.5 px-5">Tenant</th>
                             <th class="py-3.5 px-5">Current Lease End</th>
                             <th class="py-3.5 px-5">Requested End</th>
                             <th class="py-3.5 px-5">Extension</th>
@@ -71,7 +67,10 @@
                         @forelse($activeRequests as $req)
                             <tr class="border-b border-slate-50 last:border-0" data-request-id="{{ $req->id }}">
                                 <td class="py-4 px-5">
-                                    <div class="text-sm font-bold text-slate-900">{{ $req->tenant_name }}</div>
+                                    {{-- FIXED: Accessing relationship safely --}}
+                                    <div class="text-sm font-bold text-slate-900">
+                                        {{ $req->tenant?->user?->name ?? 'Unknown Tenant' }}
+                                    </div>
                                     <div class="text-xs text-slate-400 mt-0.5">{{ $req->room_number }}</div>
                                 </td>
                                 <td class="py-4 px-5">
@@ -87,14 +86,12 @@
                                     </div>
                                 </td>
                                 <td class="py-4 px-5">
-                                    <span
-                                        class="inline-block bg-purple-100 text-purple-700 text-[11px] font-bold px-2.5 py-1 rounded-xl">
+                                    <span class="inline-block bg-purple-100 text-purple-700 text-[11px] font-bold px-2.5 py-1 rounded-xl">
                                         {{ $req->extension_label }}
                                     </span>
                                 </td>
                                 <td class="py-4 px-5">
-                                    <span
-                                        class="inline-block px-3 py-1 rounded-full text-xs font-semibold {{ $req->status_class }}">{{ $req->status }}</span>
+                                    <span class="inline-block px-3 py-1 rounded-full text-xs font-semibold {{ $req->status_class }}">{{ $req->status }}</span>
                                 </td>
                                 <td class="py-4 px-5">
                                     <div class="flex items-center justify-end gap-3 text-slate-400 text-sm">
@@ -162,7 +159,8 @@
                                 tbody.innerHTML = active.map(r => `
                             <tr class="border-b border-slate-50 last:border-0" data-request-id="${r.id}">
                                 <td class="py-4 px-5">
-                                    <div class="text-sm font-bold text-slate-900">${r.tenant_name}</div>
+                                    {{-- FIXED: Fallback to r.tenant if r.tenant_name is empty --}}
+                                    <div class="text-sm font-bold text-slate-900">${r.tenant_name || r.tenant || 'Unknown'}</div>
                                     <div class="text-xs text-slate-400 mt-0.5">${r.room_number}</div>
                                 </td>
                                 <td class="py-4 px-5">

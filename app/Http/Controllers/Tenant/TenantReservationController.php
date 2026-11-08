@@ -14,8 +14,13 @@ use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Codesmiths\LaravelOcrSpace\Facades\OcrSpace;
+use Codesmiths\LaravelOcrSpace\OcrSpaceOptions;
+use Codesmiths\LaravelOcrSpace\Enums\Language;
+use Codesmiths\LaravelOcrSpace\Enums\OcrSpaceEngine;
 
 class TenantReservationController extends Controller
 {
@@ -36,7 +41,7 @@ class TenantReservationController extends Controller
         $pendingReservations = $allMyReservations->where('status', 'Pending')->values();
 
         $reservationCards = $this->buildReservationCards($pendingReservations);
-        $rooms            = $this->buildRoomCards($allMyReservations);   // ← use full list
+        $rooms            = $this->buildRoomCards($allMyReservations);
 
         $myReservationsForReact = $allMyReservations->mapWithKeys(function ($r) {
             return [
@@ -95,7 +100,7 @@ class TenantReservationController extends Controller
             'myReservations' => $reservationCards,
             'rooms'          => $rooms,
             'reservations'   => $myReservationsForReact,
-        ]);
+        ])->header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0'); // <-- PREVENT CACHING
     }
 
     private function buildReservationCards($myReservations)
@@ -261,7 +266,6 @@ class TenantReservationController extends Controller
 
     public function store(Request $request)
     {
-
         session()->save();
 
         $user = Auth::user();
@@ -484,7 +488,7 @@ class TenantReservationController extends Controller
             });
             $lap('db_transaction', 'db_start');
 
-            // ── Broadcast event timing (the likely culprit) ────
+            // ── Broadcast event timing ────
             $mark('events_start');
             event(new ReservationUpdated('created', $reservation->id));
             $lap('event_reservation', 'events_start');
@@ -499,7 +503,7 @@ class TenantReservationController extends Controller
                 'success' => true,
                 'message' => 'Reservation submitted. Awaiting admin approval.',
                 'data'    => ['reference_no' => $reservation->reference_no],
-            ])->header('Connection', 'close');;
+            ])->header('Connection', 'close');
         } catch (\RuntimeException $e) {
             if (Storage::disk('public')->exists($receiptPath)) {
                 Storage::disk('public')->delete($receiptPath);
@@ -522,7 +526,6 @@ class TenantReservationController extends Controller
                 'message' => 'Something went wrong. Please try again.',
             ], 500);
         } finally {
-            // Total time — useful even on failure
             if (isset($t['start'])) {
                 Log::channel('single')->info('[reservation.timing] TOTAL', [
                     'ms'      => round((microtime(true) - $t['start']) * 1000),
@@ -598,5 +601,89 @@ class TenantReservationController extends Controller
             'success' => true,
             'message' => 'Reservation cancelled.',
         ]);
+    }
+
+    public function parseReceipt(Request $request)
+    {
+        $request->validate([
+            'receipt' => 'required|image|max:5120',
+        ]);
+
+        try {
+            $file = $request->file('receipt');
+            $apiKey = config('ocr-space.api_key') ?? env('OCR_SPACE_API_KEY');
+
+            if (empty($apiKey)) {
+                Log::error('[parseReceipt] OCR API key is missing.');
+                return response()->json([
+                    'success' => false,
+                    'error'   => 'OCR service is not configured. Please enter the reference number manually.',
+                ], 500);
+            }
+
+            $response = Http::timeout(30)
+                ->asMultipart()
+                ->attach('file', file_get_contents($file->getPathname()), $file->getClientOriginalName())
+                ->post(config('ocr-space.api_url', 'https://api.ocr.space/parse/image'), [
+                    'apikey'     => $apiKey,
+                    'language'   => 'eng',
+                    'OCREngine'  => '3',
+                    'scale'      => 'true',
+                    'isTable'    => 'false',
+                ]);
+
+            if ($response->failed()) {
+                Log::error('[parseReceipt] OCR HTTP failed', [
+                    'status' => $response->status(),
+                    'body'   => substr($response->body(), 0, 500),
+                ]);
+                return response()->json([
+                    'success' => false,
+                    'error'   => 'OCR service unavailable. Please enter the reference number manually.',
+                ], 500);
+            }
+
+            $data = $response->json();
+
+            if (!empty($data['IsErroredOnProcessing'])) {
+                Log::error('[parseReceipt] OCR processing error', [
+                    'errors' => $data['ErrorMessage'] ?? 'Unknown',
+                ]);
+                return response()->json([
+                    'success' => false,
+                    'error'   => 'OCR could not read this image. Please enter the reference number manually.',
+                ], 500);
+            }
+
+            $text = $data['ParsedResults'][0]['ParsedText'] ?? '';
+            Log::info('[parseReceipt] OCR raw text', ['text' => $text]);
+
+            $referenceNumber = null;
+
+            if (preg_match('/(?:Ref(?:erence)?\s*(?:No\.?|Number)?[:\s]+)(\d[\d\s\-]{7,18}\d)/i', $text, $m)) {
+                $referenceNumber = preg_replace('/[\s\-]+/', '', $m[1]);
+            }
+
+            if (!$referenceNumber && preg_match('/\b(\d{9,13})\b/', $text, $m)) {
+                $referenceNumber = $m[1];
+            }
+
+            return response()->json([
+                'success'      => true,
+                'reference_no' => $referenceNumber,
+                'raw_text'     => $text,
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('[parseReceipt] Exception', [
+                'message' => $e->getMessage(),
+                'file'    => $e->getFile(),
+                'line'    => $e->getLine(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'error'   => 'Failed to process receipt. Please enter the reference number manually.',
+            ], 500);
+        }
     }
 }

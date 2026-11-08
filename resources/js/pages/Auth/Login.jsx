@@ -6,8 +6,7 @@ export default function Login() {
     const { props } = usePage();
     const flashError = props.flash?.error;
     const [showPassword, setShowPassword] = useState(false);
-    
-    // Local state for client-side validation errors
+
     const [localErrors, setLocalErrors] = useState({});
 
     const { data, setData, post, processing, errors, reset } = useForm({
@@ -18,26 +17,21 @@ export default function Login() {
 
     const handleLogin = (e) => {
         e.preventDefault();
-        
-        // ── Client-side validation ──
+
         const newErrors = {};
         if (!data.email.trim()) {
             newErrors.email = 'Please enter your email address.';
         } else if (!/\S+@\S+\.\S+/.test(data.email)) {
             newErrors.email = 'Please enter a valid email address.';
         }
-        
         if (!data.password) {
             newErrors.password = 'Please enter your password.';
         }
-
-        // If there are errors, update state and STOP the request
         if (Object.keys(newErrors).length > 0) {
             setLocalErrors(newErrors);
             return;
         }
 
-        // Clear local errors and proceed with Inertia POST
         setLocalErrors({});
         post('/login', { onFinish: () => reset('password') });
     };
@@ -50,11 +44,9 @@ export default function Login() {
 
     const handleBackHome = (e) => {
         e.preventDefault();
-        // Instantly visit the landing page
         router.visit('/', { replace: true });
     };
 
-    // Combine server errors and local errors for display
     const displayErrors = { ...errors, ...localErrors };
 
     return (
@@ -62,48 +54,69 @@ export default function Login() {
             <Head title="Login | JLM Cozy Cabin" />
 
             <div className="login-container">
-                <div className="login-left">
+                {/* ===== LEFT SIDE (custom bg + info) ===== */}
+                <div
+                    className="login-left"
+                    style={{
+                        backgroundImage:
+                            "linear-gradient(rgba(0,29,76,0.72), rgba(0,29,76,0.72)), url('/images/bg-login.jpg')",
+                        backgroundSize: 'cover',
+                        backgroundPosition: 'center',
+                        backgroundRepeat: 'no-repeat',
+                    }}
+                >
                     <div className="login-brand">
-                        <div className="login-logo"><img src="/images/jlm-logo.png" alt="Logo" /></div>
+                        <div className="login-logo">
+                            <img src="/images/jlm-logo.png" alt="Logo" />
+                        </div>
                         <span>JLM Cozy Cabin</span>
                     </div>
+
+                    {/* Address + contact (matches the signage in your photo) */}
                     <div className="login-intro">
-                        <h1>Your Comfortable<br />Living <span>Space Awaits</span></h1>
-                        <p>Manage your rental experience with our comprehensive tenant portal</p>
-                        <div className="login-benefits">
-                            <div className="login-benefit"><span><i className="bi bi-check"></i></span><p>Submit maintenance requests instantly</p></div>
-                            <div className="login-benefit"><span><i className="bi bi-check"></i></span><p>Track payments and billing history</p></div>
-                            <div className="login-benefit"><span><i className="bi bi-check"></i></span><p>Browse available rooms virtually</p></div>
-                            <div className="login-benefit"><span><i className="bi bi-check"></i></span><p>Stay updated with announcements</p></div>
-                        </div>
+                        <h1>
+                            Your Comfortable
+                            <br />
+                            Living <span>Space Awaits</span>
+                        </h1>
+                        <p>
+                            Manage your rental experience with our comprehensive
+                            tenant portal
+                        </p>
                     </div>
                 </div>
 
+                {/* ===== RIGHT SIDE (unchanged) ===== */}
                 <div className="login-right">
                     <form className="login-form-container" onSubmit={handleLogin} noValidate>
                         <a href="/" onClick={handleBackHome} className="back-home-link">
                             <i className="bi bi-arrow-left"></i> Back to Home
                         </a>
-                        
+
                         <h2>Welcome Back!</h2>
                         <p className="login-subtitle">Sign in to access your tenant portal</p>
 
-                        {flashError && <div className="login-global-error"><i className="bi bi-exclamation-circle"></i>{flashError}</div>}
+                        {flashError && (
+                            <div className="login-global-error">
+                                <i className="bi bi-exclamation-circle"></i>
+                                {flashError}
+                            </div>
+                        )}
 
                         <div className="login-form-group">
                             <label>Email Address</label>
                             <div className={`login-input-wrapper ${displayErrors.email ? 'border-rose-500' : ''}`}>
                                 <span className="login-input-icon"><i className="bi bi-envelope"></i></span>
-                                <input 
-                                    type="email" 
-                                    placeholder="name@example.com" 
-                                    value={data.email} 
+                                <input
+                                    type="email"
+                                    placeholder="name@example.com"
+                                    value={data.email}
                                     onChange={(e) => {
                                         setData('email', e.target.value);
                                         if (localErrors.email) setLocalErrors({ ...localErrors, email: null });
-                                    }} 
-                                    autoComplete="email" 
-                                    autoFocus 
+                                    }}
+                                    autoComplete="email"
+                                    autoFocus
                                     className={displayErrors.email ? 'text-rose-600' : ''}
                                 />
                             </div>
@@ -119,15 +132,15 @@ export default function Login() {
                             <label>Password</label>
                             <div className={`login-input-wrapper ${displayErrors.password ? 'border-rose-500' : ''}`}>
                                 <span className="login-input-icon"><i className="bi bi-lock"></i></span>
-                                <input 
-                                    type={showPassword ? 'text' : 'password'} 
-                                    placeholder="Enter your password" 
-                                    value={data.password} 
+                                <input
+                                    type={showPassword ? 'text' : 'password'}
+                                    placeholder="Enter your password"
+                                    value={data.password}
                                     onChange={(e) => {
                                         setData('password', e.target.value);
                                         if (localErrors.password) setLocalErrors({ ...localErrors, password: null });
-                                    }} 
-                                    autoComplete="current-password" 
+                                    }}
+                                    autoComplete="current-password"
                                     className={displayErrors.password ? 'text-rose-600' : ''}
                                 />
                                 <button type="button" className="password-toggle" onClick={() => setShowPassword(!showPassword)}>
@@ -144,23 +157,63 @@ export default function Login() {
 
                         <div className="login-options">
                             <label className="remember-me">
-                                <input type="checkbox" checked={data.remember} onChange={(e) => setData('remember', e.target.checked)} />
+                                <input
+                                    type="checkbox"
+                                    checked={data.remember}
+                                    onChange={(e) => setData('remember', e.target.checked)}
+                                />
                                 <span>Remember me</span>
                             </label>
                             <Link href="/forgot-password">Forgot password?</Link>
                         </div>
 
-                        <button type="submit" className="login-submit-btn" disabled={processing} style={{ opacity: processing ? 0.7 : 1 }}>
-                            {processing ? <><i className="bi bi-arrow-repeat" style={{ animation: 'spin 1s linear infinite' }}></i> Signing in...</> : 'Log In'}
+                        <button
+                            type="submit"
+                            className="login-submit-btn"
+                            disabled={processing}
+                            style={{ opacity: processing ? 0.7 : 1 }}
+                        >
+                            {processing ? (
+                                <>
+                                    <i className="bi bi-arrow-repeat" style={{ animation: 'spin 1s linear infinite' }}></i>
+                                    Signing in...
+                                </>
+                            ) : (
+                                'Log In'
+                            )}
                         </button>
 
-                        <div className="login-divider"><span></span><p>OR</p><span></span></div>
+                        <div className="login-divider">
+                            <span></span>
+                            <p>OR</p>
+                            <span></span>
+                        </div>
 
-                        <button type="button" onClick={handleGoogleLogin} className="google-login-btn" style={{ width: '100%', padding: '12px 16px', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, fontWeight: 600, background: '#fff', border: '1.5px solid #e2e8f0', cursor: 'pointer' }}>
-                            <strong style={{ fontSize: 18, color: '#4285f4' }}>G</strong> Continue with Google
+                        <button
+                            type="button"
+                            onClick={handleGoogleLogin}
+                            className="google-login-btn"
+                            style={{
+                                width: '100%',
+                                padding: '12px 16px',
+                                borderRadius: 10,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: 10,
+                                fontWeight: 600,
+                                background: '#fff',
+                                border: '1.5px solid #e2e8f0',
+                                cursor: 'pointer',
+                            }}
+                        >
+                            <strong style={{ fontSize: 18, color: '#4285f4' }}>G</strong>
+                            Continue with Google
                         </button>
 
-                        <p className="signup-text">Don't have an account? <Link href="/signup">Sign up</Link></p>
+                        <p className="signup-text">
+                            Don't have an account? <Link href="/signup">Sign up</Link>
+                        </p>
                     </form>
                 </div>
             </div>

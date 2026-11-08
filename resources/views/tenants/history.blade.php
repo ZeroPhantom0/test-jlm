@@ -66,7 +66,7 @@
                     <div>
                         <div class="text-xs text-blue-300">Total Paid</div>
                         <div class="text-2xl font-extrabold leading-none">
-                            ₱{{ number_format($metrics['total_paid'], 0) }}
+                            {{ number_format($metrics['total_paid'], 0) }}
                         </div>
                     </div>
                     <div class="text-[11px] text-blue-300">

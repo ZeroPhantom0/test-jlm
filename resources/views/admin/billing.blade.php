@@ -115,11 +115,13 @@
                                                 title="Verify Payment" data-tn="{{ $inv->transaction_no }}"></i>
                                             <i class="fa-solid fa-circle-xmark text-rose-500 text-[15px] cursor-pointer hover:text-rose-700 transition icon-reject"
                                                 title="Reject Payment" data-tn="{{ $inv->transaction_no }}"></i>
+                                        @else
+                                            <i class="fa-solid fa-bell text-slate-700 text-[15px] cursor-pointer hover:text-orange-500 transition icon-remind"
+                                                title="Send Reminder" data-tn="{{ $inv->transaction_no }}"></i>
                                         @endif
+                                        
                                         <i class="fa-solid fa-pen text-slate-700 text-[15px] cursor-pointer hover:text-orange-500 transition icon-edit"
                                             title="Edit Invoice" data-tn="{{ $inv->transaction_no }}"></i>
-                                        <i class="fa-solid fa-bell text-slate-700 text-[15px] cursor-pointer hover:text-orange-500 transition icon-remind"
-                                            title="Send Reminder" data-tn="{{ $inv->transaction_no }}"></i>
                                         <i class="fa-solid fa-eye text-slate-700 text-[15px] cursor-pointer hover:text-orange-500 transition icon-view"
                                             title="View Summary" data-tn="{{ $inv->transaction_no }}"></i>
                                     </div>
@@ -222,9 +224,11 @@
                                             ${inv.status === 'Pending' ? `
                                                 <i class="fa-solid fa-circle-check text-emerald-600 text-[15px] cursor-pointer hover:text-emerald-800 transition icon-verify" title="Verify Payment" data-tn="${inv.transaction_no}"></i>
                                                 <i class="fa-solid fa-circle-xmark text-rose-500 text-[15px] cursor-pointer hover:text-rose-700 transition icon-reject" title="Reject Payment" data-tn="${inv.transaction_no}"></i>
-                                            ` : ''}
+                                            ` : `
+                                                <i class="fa-solid fa-bell text-slate-700 text-[15px] cursor-pointer hover:text-orange-500 transition icon-remind" title="Send Reminder" data-tn="${inv.transaction_no}"></i>
+                                            `}
+                                            
                                             <i class="fa-solid fa-pen text-slate-700 text-[15px] cursor-pointer hover:text-orange-500 transition icon-edit" title="Edit Invoice" data-tn="${inv.transaction_no}"></i>
-                                            <i class="fa-solid fa-bell text-slate-700 text-[15px] cursor-pointer hover:text-orange-500 transition icon-remind" title="Send Reminder" data-tn="${inv.transaction_no}"></i>
                                             <i class="fa-solid fa-eye text-slate-700 text-[15px] cursor-pointer hover:text-orange-500 transition icon-view" title="View Summary" data-tn="${inv.transaction_no}"></i>
                                         </div>
                                     </td>
