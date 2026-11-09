@@ -390,8 +390,10 @@
                         iconBox.classList.remove('bg-amber-100', 'text-amber-600');
                         iconBox.classList.add('bg-slate-100', 'text-[#041d40]');
 
-                        const badge = item.querySelector('.bg-\\[\\#e06800\\]');
-                        if (badge) badge.remove();
+                        // Remove all badges when read
+                        item.querySelectorAll('.badge-unread').forEach(b => b.remove());
+
+                        updateTenantGlobalUnreadCount();
                     }
 
                     const delConvBtn = document.getElementById('delete-conversation-btn');
@@ -507,7 +509,6 @@
                 }, 50);
             }
 
-            // ── Attachments renderer — same look, but images open in lightbox ──
             function renderAttachments(attachments) {
                 if (!attachments || attachments.length === 0) return '';
 
@@ -603,7 +604,6 @@
                 }
             }
 
-            // ── Attachments picker (unchanged) ────────────────────
             const tenantSelected = {
                 new: [],
                 reply: []
@@ -836,14 +836,8 @@
                 })[s]);
             }
 
-            // ============================================================
-            // FACEBOOK-MESSENGER-STYLE IMAGE LIGHTBOX
-            // Click any image thumbnail → it scales up into a full-screen
-            // overlay. Arrow keys cycle within the same message. Esc /
-            // backdrop / ✕ closes. No new tab ever opens.
-            // ============================================================
             let lb, lbImg, lbDownload, lbPrev, lbNext, lbCounter;
-            let lbGallery = []; // [{url, name}]
+            let lbGallery = [];
             let lbIndex = 0;
 
             function ensureLightbox() {
@@ -901,7 +895,6 @@
                 lbNext = document.getElementById('fb-lb-next');
                 lbCounter = document.getElementById('fb-lb-counter');
 
-                // Close on backdrop click only (not when clicking the image)
                 lb.addEventListener('click', (e) => {
                     if (e.target === lb) closeLightbox();
                 });
@@ -916,7 +909,6 @@
                     showNext();
                 });
 
-                // Keyboard: Esc closes, ←/→ navigate
                 document.addEventListener('keydown', (e) => {
                     if (!lb || lb.style.display !== 'flex') return;
                     if (e.key === 'Escape') closeLightbox();
@@ -933,13 +925,11 @@
                 applyCurrentImage();
 
                 lb.style.display = 'flex';
-                // Trigger the fade/scale transition
                 requestAnimationFrame(() => {
                     lb.style.opacity = '1';
                     lbImg.style.transform = 'scale(1)';
                 });
 
-                // Prevent body scroll while open
                 document.body.style.overflow = 'hidden';
             }
 
@@ -969,7 +959,6 @@
                 const current = lbGallery[lbIndex];
                 if (!current) return;
 
-                // tiny fade-out/in so switching feels smooth
                 lbImg.style.opacity = '0';
                 setTimeout(() => {
                     lbImg.src = current.url;
@@ -991,9 +980,6 @@
                 }
             }
 
-            // Delegate: any click on a thumbnail opens the lightbox.
-            // Grouping by message bubble so ← → only cycle within
-            // images from the SAME message — exactly like Messenger.
             document.addEventListener('click', (e) => {
                 const trigger = e.target.closest('.fb-attach-thumb');
                 if (!trigger) return;
@@ -1009,6 +995,32 @@
                 const idx = allThumbs.indexOf(trigger);
                 openLightbox(gallery, Math.max(0, idx));
             });
+
+            // ============================================================
+            // REAL-TIME UNREAD COUNTER UPDATE FUNCTION
+            // ============================================================
+            function updateTenantGlobalUnreadCount() {
+                const unreadRows = document.querySelectorAll('.conversation-item[data-unread="true"]');
+                let totalUnread = 0;
+
+                unreadRows.forEach(row => {
+                    const badge = row.querySelector('.badge-unread');
+                    if (badge) {
+                        totalUnread += parseInt(badge.innerText.replace(/\D/g, '')) || 0;
+                    }
+                });
+
+                const counterEl = document.getElementById('unreadCountText');
+                if (counterEl) {
+                    if (totalUnread > 0) {
+                        counterEl.className = 'text-[#e06800] font-bold';
+                        counterEl.innerText = `${totalUnread} unread message(s)`;
+                    } else {
+                        counterEl.className = 'text-slate-400';
+                        counterEl.innerText = `0 unread message(s)`;
+                    }
+                }
+            }
 
             // ============================================================
             // ECHO — Tenant realtime
@@ -1056,19 +1068,42 @@
                                         iconBox.classList.remove('bg-slate-100', 'text-[#041d40]');
                                         iconBox.classList.add('bg-amber-100', 'text-amber-600');
                                     }
+
+                                    // 1. FIND EXISTING BADGE & GET COUNT
+                                    let currentUnread = 0;
+                                    const existingBadge = listItem.querySelector('.badge-unread');
+                                    if (existingBadge) {
+                                        currentUnread = parseInt(existingBadge.innerText.replace(/\D/g, '')) || 0;
+                                    }
+
+                                    // 2. REMOVE OLD BADGE
+                                    if (existingBadge) existingBadge.remove();
+
+                                    // 3. CALCULATE NEW COUNT
+                                    const newUnread = currentUnread + 1;
+
+                                    // 4. APPEND NEW BADGE TO BOTTOM ROW
                                     const bottomRow = listItem.querySelector('.flex.justify-between.items-center');
                                     if (bottomRow) {
-                                        const currentBadge = bottomRow.querySelector('.badge-unread');
-                                        let currentUnread = 0;
-                                        if (currentBadge) currentUnread = parseInt(currentBadge.innerText) || 1;
-                                        const newUnread = currentUnread + 1;
+                                        // Remove any leftover badges in the bottom row just in case
+                                        bottomRow.querySelectorAll('.badge-unread').forEach(b => b.remove());
+
                                         bottomRow.innerHTML = `
                                             <span class="text-xs text-slate-400">Building Management</span>
                                             <span class="badge-unread bg-[#e06800] text-white text-[11px] font-semibold px-2.5 py-0.5 rounded-full">${newUnread} new</span>
                                         `;
                                     }
                                 }
-                                document.getElementById('conversationsContainer').prepend(listItem);
+
+                                const container = document.getElementById('conversationsContainer');
+                                if (container.contains(listItem)) {
+                                    listItem.remove();
+                                }
+                                container.prepend(listItem);
+
+                                // UPDATE GLOBAL COUNTER
+                                updateTenantGlobalUnreadCount();
+
                             } else if (!currentConvId) {
                                 window.location.reload();
                             }

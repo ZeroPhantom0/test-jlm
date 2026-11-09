@@ -8,15 +8,19 @@ use App\Http\Controllers\Controller;
 use App\Models\Conversation;
 use App\Models\Message;
 use App\Models\Tenant;
+use App\Models\User; // Added User model
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
+use App\Services\SmsService;
 
 class TenantMessageController extends Controller
 {
     public function index()
     {
+        cache()->put('user_online_' . Auth::id(), true, now()->addMinutes(30));
+
         $tenant = Tenant::ensureForCurrentUser();
 
         $conversations = Conversation::with(['latestMessage'])
@@ -42,6 +46,8 @@ class TenantMessageController extends Controller
 
     public function show(int $id): JsonResponse
     {
+        cache()->put('user_online_' . Auth::id(), true, now()->addMinutes(30));
+
         $tenant = Tenant::ensureForCurrentUser();
 
         $conversation = Conversation::with(['messages.sender', 'messages.reactions'])
@@ -116,6 +122,23 @@ class TenantMessageController extends Controller
             messageId:      $message->id,
         ));
 
+        // ==========================================
+        // SMS LOGIC: Fetch Admin from Database
+        // ==========================================
+        // Get the first admin user who has a phone number
+        $admin = User::where('role', 'admin')->whereNotNull('phone')->first();
+        
+        if ($admin) {
+            // Check if this specific admin is offline
+            if (!cache()->has('admin_online_' . $admin->id)) { 
+                SmsService::send(
+                    $admin->phone, 
+                    "You have a new message from {$tenant->user->name}. Please log in to your account to read it."
+                );
+            }
+        }
+        // ==========================================
+
         return response()->json([
             'success' => true,
             'data'    => [
@@ -163,6 +186,21 @@ class TenantMessageController extends Controller
             body:           $message->body,
             messageId:      $message->id,
         ));
+
+        // ==========================================
+        // SMS LOGIC: Fetch Admin from Database
+        // ==========================================
+        $admin = User::where('role', 'admin')->whereNotNull('phone')->first();
+        
+        if ($admin) {
+            if (!cache()->has('admin_online_' . $admin->id)) { 
+                SmsService::send(
+                    $admin->phone, 
+                    "You have a new message from {$tenant->user->name}. Please log in to your account to read it."
+                );
+            }
+        }
+        // ==========================================
 
         return response()->json([
             'success' => true,

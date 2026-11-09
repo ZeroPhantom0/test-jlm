@@ -24,14 +24,28 @@
         <span><strong>Note:</strong> You can cancel a request while it is <strong>Pending</strong>. Once approved, it becomes view-only.</span>
     </div>
 
-    <div id="tenant-no-warning"
-         class="bg-amber-50 border border-amber-200 rounded-lg px-5 py-4 text-[13px] text-amber-800 flex items-start gap-2.5 mb-5 @if($tenant && $tenant->room) hidden @endif">
-        <i class="fa-regular fa-circle-info mt-0.5"></i>
-        <div>
-            <strong>You're not yet assigned to a room.</strong>
-            Please contact the admin to be assigned before submitting room change requests.
+    {{-- ── APPROVED RESERVATION REQUIRED ── --}}
+    @if(! $hasApprovedReservation)
+        <div id="tenant-no-warning"
+             class="bg-amber-50 border border-amber-200 rounded-lg px-5 py-4 text-[13px] text-amber-800 flex items-start gap-2.5 mb-5">
+            <i class="fa-regular fa-circle-info mt-0.5"></i>
+            <div>
+                <strong>Room change requires an approved reservation.</strong>
+                Your current booking is still awaiting admin approval. Once your reservation is approved,
+                you'll be able to request a room change here. If you need to modify your booking before
+                approval, please contact the admin directly.
+            </div>
         </div>
-    </div>
+    @elseif(! $tenant || ! $tenant->room)
+        <div id="tenant-no-warning"
+             class="bg-amber-50 border border-amber-200 rounded-lg px-5 py-4 text-[13px] text-amber-800 flex items-start gap-2.5 mb-5">
+            <i class="fa-regular fa-circle-info mt-0.5"></i>
+            <div>
+                <strong>You're not yet assigned to a room.</strong>
+                Please contact the admin to be assigned before submitting room change requests.
+            </div>
+        </div>
+    @endif
 
     <div class="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
         <div class="flex justify-between items-center mb-5">
@@ -40,7 +54,8 @@
             </span>
             <button id="open-new-room-change"
                     class="bg-[#001838] hover:bg-[#0d2347] disabled:opacity-50 text-white px-4 py-2.5 rounded-lg font-medium text-[13px] inline-flex items-center gap-2"
-                    {{ (!$tenant || !$tenant->room) ? 'disabled' : '' }}>
+                    {{ ! $canRequestChange ? 'disabled' : '' }}
+                    title="{{ ! $canRequestChange ? 'An approved reservation is required to request a room change.' : '' }}">
                 <i class="fa-solid fa-plus"></i> New Request
             </button>
         </div>

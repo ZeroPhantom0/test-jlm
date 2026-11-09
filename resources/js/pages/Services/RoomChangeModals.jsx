@@ -6,6 +6,32 @@ const csrf = () =>
     document.querySelector('meta[name="csrf-token"]')?.content ||
     document.querySelector('input[name="_token"]')?.value;
 
+// ── Billing helpers ──
+const formatMoney = (n) =>
+    '₱' + Number(n).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+const computeEstimate = (room) => {
+    if (!room || !room.daily_rent || !room.tenant_check_out) return null;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const checkOut = new Date(room.tenant_check_out);
+    checkOut.setHours(0, 0, 0, 0);
+
+    const msPerDay = 1000 * 60 * 60 * 24;
+    const days = Math.max(0, Math.round((checkOut - today) / msPerDay));
+
+    if (days <= 0) return null;
+
+    return {
+        days,
+        rate: room.daily_rent,
+        total: days * room.daily_rent,
+        checkOut: room.tenant_check_out,
+    };
+};
+
 export default function RoomChangeModals() {
     const [showSubmit, setShowSubmit]     = useState(false);
     const [showDetails, setShowDetails]   = useState(false);
@@ -228,13 +254,16 @@ export default function RoomChangeModals() {
             setShowDelete(false);
             setDeleteTarget(null);
             setShowDetails(false);
-            document.dispatchEvent(new CustomEvent('room-change:refresh:refresh')); 
+            document.dispatchEvent(new CustomEvent('room-change:refresh'));
         } catch (err) {
             alert(err.message);
         } finally {
             setSaving(false);
         }
     };
+
+    // ── Live billing estimate for the selected room ──
+    const estimate = computeEstimate(selectedRoomData);
 
     return (
         <>
@@ -295,6 +324,43 @@ export default function RoomChangeModals() {
                                     <p className="text-[11px] text-rose-500 mt-1">No other rooms are currently available.</p>
                                 )}
                             </div>
+
+                            {/* ── BILLING ESTIMATE (below Requested Room) ── */}
+                            {estimate && (
+                                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                                    <div className="flex items-center gap-2 text-[13px] font-bold text-amber-800 mb-2.5">
+                                        <i className="fa-solid fa-receipt"></i>
+                                        Estimated Bill for This Room
+                                    </div>
+
+                                    <div className="flex flex-col gap-1.5 text-[12.5px] text-slate-700">
+                                        <div className="flex justify-between">
+                                            <span className="text-slate-500">Daily rent</span>
+                                            <span className="font-semibold">{formatMoney(estimate.rate)} / day</span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                            <span className="text-slate-500">
+                                                Days (today → check-out{' '}
+                                                {new Date(estimate.checkOut).toLocaleDateString('en-PH', {
+                                                    month: 'short', day: 'numeric', year: 'numeric',
+                                                })})
+                                            </span>
+                                            <span className="font-semibold">
+                                                {estimate.days} day{estimate.days === 1 ? '' : 's'}
+                                            </span>
+                                        </div>
+                                        <div className="flex justify-between border-t border-amber-200 pt-1.5 mt-1">
+                                            <span className="font-bold text-slate-900">Total estimate</span>
+                                            <span className="font-bold text-amber-800">{formatMoney(estimate.total)}</span>
+                                        </div>
+                                    </div>
+
+                                    <p className="text-[11px] text-amber-700 mt-2 leading-snug">
+                                        <i className="fa-solid fa-circle-info mr-1"></i>
+                                        This is an estimate based on today's date until your check-out. Final billing is confirmed by the admin upon approval.
+                                    </p>
+                                </div>
+                            )}
 
                             {/* BED SLOT SELECTION */}
                             {selectedRoomData?.bed_slots?.length > 0 && (

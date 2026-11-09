@@ -136,7 +136,6 @@ export default function ReservationsModal() {
     const [room, setRoom] = useState(FALLBACK_ROOM);
     const [saving, setSaving] = useState(false);
 
-    // NEW: OCR state for GCash receipt auto-fill
     const [ocrLoading, setOcrLoading] = useState(false);
     const [ocrError, setOcrError] = useState("");
 
@@ -145,6 +144,7 @@ export default function ReservationsModal() {
 
     const [reservationsData, setReservationsData] = useState({});
 
+    // New form state to include Barkada room details
     const [form, setForm] = useState({
         check_in_date: "",
         check_in_time: "",
@@ -157,6 +157,11 @@ export default function ReservationsModal() {
         receipt: null,
         room_bed_id: "",
         agreed_to_terms: false,
+        // Barkada specific fields
+        num_occupants: 4,
+        num_fixed_beds: 4,
+        num_extra_mattresses: 0,
+        companion_names: [],
     });
 
     const [needsReceiptReupload, setNeedsReceiptReupload] = useState(false);
@@ -267,6 +272,11 @@ export default function ReservationsModal() {
 
                 const data = JSON.parse(reserveBtn.dataset.room || "{}");
                 setRoom({ ...FALLBACK_ROOM, ...data });
+                
+                // Determine default occupants based on room type
+                const isBarkada = data.name?.includes("Barkada");
+                const defaultOccupants = isBarkada ? (data.total_beds || 4) : 1;
+                
                 setForm({
                     check_in_date: "",
                     check_in_time: "",
@@ -279,6 +289,10 @@ export default function ReservationsModal() {
                     receipt: null,
                     room_bed_id: "",
                     agreed_to_terms: false,
+                    num_occupants: defaultOccupants,
+                    num_fixed_beds: defaultOccupants,
+                    num_extra_mattresses: 0,
+                    companion_names: Array(defaultOccupants - 1).fill(""),
                 });
                 setNeedsReceiptReupload(false);
                 setShowReserve(true);
@@ -329,8 +343,16 @@ export default function ReservationsModal() {
     const updateField = (key, value) =>
         setForm((f) => ({ ...f, [key]: value }));
 
+    const isBarkadaRoom = room.name?.includes("Barkada") || room.total_beds >= 4;
     const roomRate = Number(room.price) || 0;
-    const companionFee = form.has_companion ? 150 : 0;
+
+    // Dynamic calculations for Barkada Rooms
+    const fixedBeds = form.num_fixed_beds || 0;
+    const extraMattresses = form.num_extra_mattresses || 0;
+    
+    const companionFee = isBarkadaRoom 
+        ? (extraMattresses * 150) 
+        : (form.has_companion ? 150 : 0);
 
     const computeDays = () => {
         const inD = new Date(form.check_in_date);
@@ -341,11 +363,44 @@ export default function ReservationsModal() {
     };
 
     const days = computeDays();
-    const roomSubtotal = roomRate * days;
-    const totalCharges = roomSubtotal + companionFee;
+    
+    // Per night calculation
+    const nightlyRate = isBarkadaRoom 
+        ? (fixedBeds * roomRate) + companionFee 
+        : roomRate + companionFee;
+        
+    const roomSubtotal = nightlyRate * days;
+    const totalCharges = roomSubtotal;
     const halfPayment = totalCharges / 2;
     const payNow = form.payment_option === "half" ? halfPayment : totalCharges;
     const remaining = totalCharges - payNow;
+
+    // Handle changes to number of occupants in Barkada room
+    const handleOccupantsChange = (e) => {
+        const val = parseInt(e.target.value) || 0;
+        let fixed = Math.min(val, room.total_beds);
+        let extra = Math.max(0, val - room.total_beds);
+
+        // Update companion names array
+        const companionCount = Math.max(0, val - 1);
+        const newNames = [...form.companion_names];
+        while (newNames.length < companionCount) newNames.push("");
+        while (newNames.length > companionCount) newNames.pop();
+
+        setForm(f => ({
+            ...f,
+            num_occupants: val,
+            num_fixed_beds: fixed,
+            num_extra_mattresses: extra,
+            companion_names: newNames
+        }));
+    };
+
+    const handleCompanionNameChange = (index, value) => {
+        const newNames = [...form.companion_names];
+        newNames[index] = value;
+        updateField("companion_names", newNames);
+    };
 
     const minCheckOutDate = useMemo(() => {
         if (!form.check_in_date) return "";
@@ -403,16 +458,13 @@ export default function ReservationsModal() {
         alert("GCash number copied!");
     };
 
-    // NEW: OCR handler — uploads the receipt and auto-fills the reference number
     const handleReceiptUpload = async (file) => {
         if (!file) return;
 
-        // Store the file in form first
         updateField("receipt", file);
         setNeedsReceiptReupload(false);
         setOcrError("");
 
-        // Kick off OCR in background
         setOcrLoading(true);
         const fd = new FormData();
         fd.append("receipt", file);
@@ -430,7 +482,6 @@ export default function ReservationsModal() {
             const data = await res.json().catch(() => ({}));
 
             if (res.ok && data.success && data.reference_no) {
-                // Auto-fill the reference number
                 updateField("reference_no", data.reference_no);
             } else if (res.ok && data.success && !data.reference_no) {
                 setOcrError(
@@ -520,6 +571,16 @@ export default function ReservationsModal() {
             }
         }
 
+        // Validate Barkada companions
+        if (isBarkadaRoom && form.num_occupants > 1) {
+            const missingNames = form.companion_names.some(n => !n.trim());
+            if (missingNames) {
+                inFlightRef.current = false;
+                alert("Please fill in all companion names.");
+                return;
+            }
+        }
+
         if (!form.reference_no.trim()) {
             inFlightRef.current = false;
             alert("Please enter your GCash reference number.");
@@ -547,13 +608,19 @@ export default function ReservationsModal() {
             fd.append("check_in_time", form.check_in_time);
             fd.append("check_out_date", form.check_out_date);
             fd.append("check_out_time", form.check_out_time);
-            fd.append("has_companion", form.has_companion ? "1" : "0");
+            fd.append("has_companion", isBarkadaRoom ? "1" : (form.has_companion ? "1" : "0")); // Send generic true if barkada
             fd.append("notes", form.notes);
             fd.append("payment_option", form.payment_option);
             fd.append("reference_no", form.reference_no);
             fd.append("receipt", form.receipt);
-            fd.append("room_bed_id", form.room_bed_id);
+            fd.append("room_bed_id", form.room_bed_id || "");
             fd.append("agreed_to_terms", form.agreed_to_terms ? "1" : "0");
+            
+            // Add Barkada specific data
+            if (isBarkadaRoom) {
+                fd.append("num_occupants", form.num_occupants);
+                fd.append("companion_names", JSON.stringify(form.companion_names));
+            }
 
             const res = await fetch("/tenants/reservations", {
                 method: "POST",
@@ -578,12 +645,10 @@ export default function ReservationsModal() {
             setOcrLoading(false);
             setOcrError("");
 
-            // DELAY the local refresh by 600ms so the DB and WebSocket can finish
             setTimeout(() => {
                 window.dispatchEvent(new Event("reservation:refresh"));
             }, 600);
 
-            // Keep the lock for 2 seconds so the WebSocket doesn't double-fire
             setTimeout(() => {
                 inFlightRef.current = false;
                 setSaving(false);
@@ -595,8 +660,6 @@ export default function ReservationsModal() {
             setSaving(false);
             if (modalEl) delete modalEl.dataset.saving;
         } finally {
-            // After the POST finishes, force a local refresh just in case
-            // the WebSocket event arrived while we were saving
             window.dispatchEvent(new Event("reservation:refresh"));
         }
     };
@@ -949,7 +1012,97 @@ export default function ReservationsModal() {
                             )}
                         </div>
 
-                        {room.bed_slots && room.bed_slots.length > 0 && (
+                        {/* --- BARKADA ROOM BREAKDOWN UI --- */}
+                        {isBarkadaRoom && (
+                            <div className="bg-[#f0f7ff] border border-blue-100 rounded-xl p-4">
+                                <div className="flex items-center gap-2 text-[14px] font-bold text-blue-800 mb-3">
+                                    <i className="fa-solid fa-users"></i>
+                                    Barkada Room
+                                </div>
+                                <div className="bg-[#e0f0ff] rounded-lg p-4 mb-4">
+                                    <div className="flex items-center gap-2 text-[13px] font-bold text-blue-800 mb-3">
+                                        <i className="fa-solid fa-user-group"></i>
+                                        Barkada Room Breakdown of Beds
+                                    </div>
+                                    
+                                    <div className="mb-4">
+                                        <label className="block text-[12px] font-semibold text-slate-700 mb-1.5">
+                                            No. of Occupants <span className="text-rose-500">*</span>
+                                        </label>
+                                        <input
+                                            type="number"
+                                            min="1"
+                                            max={room.total_beds + 2} // Allow up to 2 extra mattresses
+                                            value={form.num_occupants}
+                                            onChange={handleOccupantsChange}
+                                            className="w-full bg-white border border-blue-200 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-blue-400"
+                                        />
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-[12px] font-semibold text-slate-700 mb-1">
+                                                Fixed Beds:
+                                            </label>
+                                            <div className="text-[11px] text-slate-500 mb-1.5">
+                                                Per head Fee: ₱{roomRate.toFixed(2)}
+                                            </div>
+                                            <input
+                                                type="text"
+                                                readOnly
+                                                value={form.num_fixed_beds}
+                                                className="w-full bg-slate-100 border border-slate-200 rounded-lg px-3 py-2 text-[13px] text-slate-600 cursor-not-allowed"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[12px] font-semibold text-slate-700 mb-1">
+                                                Extra Mattresses:
+                                            </label>
+                                            <div className="text-[11px] text-slate-500 mb-1.5">
+                                                Extra pax fee: ₱150.00
+                                            </div>
+                                            <input
+                                                type="text"
+                                                readOnly
+                                                value={form.num_extra_mattresses}
+                                                className="w-full bg-slate-100 border border-slate-200 rounded-lg px-3 py-2 text-[13px] text-slate-600 cursor-not-allowed"
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="text-[13px] font-bold text-slate-800 mb-2">
+                                    List of Occupant Names:
+                                </div>
+                                
+                                <div className="mb-3">
+                                    <label className="block text-[12px] font-semibold text-slate-600 mb-1">Lead Guest:</label>
+                                    <input
+                                        type="text"
+                                        readOnly
+                                        value="Elle Dela Cruz" // You can pass the actual user name here if available in props/context
+                                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-[13px] text-slate-500 cursor-not-allowed"
+                                    />
+                                </div>
+
+                                {form.companion_names.map((name, idx) => (
+                                    <div key={idx} className="mb-3">
+                                        <label className="block text-[12px] font-semibold text-slate-600 mb-1">
+                                            Companion {idx + 1}
+                                        </label>
+                                        <input
+                                            type="text"
+                                            placeholder="Enter companion full name"
+                                            value={name}
+                                            onChange={(e) => handleCompanionNameChange(idx, e.target.value)}
+                                            className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-blue-400"
+                                        />
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
+                        {!isBarkadaRoom && room.bed_slots && room.bed_slots.length > 0 && (
                             <div className="bg-teal-50 border border-teal-100 rounded-xl p-4">
                                 <div className="flex items-center gap-2 text-[14px] font-bold text-teal-800 mb-2">
                                     <i className="fa-solid fa-bed"></i>
@@ -1023,7 +1176,7 @@ export default function ReservationsModal() {
                             </div>
                         )}
 
-                        {room.total_beds === 1 && (
+                        {!isBarkadaRoom && room.total_beds === 1 && (
                             <div className="bg-blue-50 rounded-xl p-4">
                                 <div className="flex items-center gap-2 text-[13px] font-bold text-blue-800 mb-3">
                                     <i className="fa-regular fa-user"></i>
@@ -1164,50 +1317,97 @@ export default function ReservationsModal() {
                             </div>
                         </div>
 
-                        <div className="bg-emerald-50 rounded-xl p-4">
-                            <div className="flex items-center gap-2 text-[14px] font-bold text-emerald-800 mb-3">
+                        {/* Summary of Charges based on Barkada or Standard */}
+                        <div className="bg-[#f4f7fc] border border-blue-100 rounded-xl p-4">
+                            <div className="flex items-center gap-2 text-[14px] font-bold text-slate-800 mb-3">
                                 <i className="fa-solid fa-peso-sign"></i>
                                 Summary of Charges
                             </div>
-                            <div className="flex justify-between text-[12px] text-emerald-700 mb-2">
-                                <span>Room Rate</span>
-                                <strong>₱{roomRate.toLocaleString()}.00</strong>
-                            </div>
-                            <div className="flex justify-between text-[12px] text-emerald-700 mb-2">
-                                <span>
-                                    ₱{roomRate.toLocaleString()}/day x ({days})
-                                    day(s)
-                                </span>
-                                <strong>
-                                    ₱{roomSubtotal.toLocaleString()}.00
-                                </strong>
-                            </div>
-                            {form.has_companion && (
-                                <div className="flex justify-between text-[12px] text-emerald-700 mb-2">
-                                    <span>Companion Fee:</span>
-                                    <strong>₱{companionFee}.00</strong>
-                                </div>
+                            
+                            {isBarkadaRoom ? (
+                                <>
+                                    <div className="flex justify-between text-[12px] text-slate-700 mb-1.5">
+                                        <span>Room Rate</span>
+                                        <strong>₱{roomRate.toLocaleString()}.00 / person / night</strong>
+                                    </div>
+                                    <div className="flex justify-between text-[12px] text-slate-700 mb-1.5">
+                                        <span>Regular Occupants: {fixedBeds} pax × ₱{roomRate.toLocaleString()}</span>
+                                        <strong>₱{(fixedBeds * roomRate).toLocaleString()}.00</strong>
+                                    </div>
+                                    {extraMattresses > 0 && (
+                                        <div className="flex justify-between text-[12px] text-slate-700 mb-1.5">
+                                            <span>Extra Pax Fee: {extraMattresses} pax × ₱150.00</span>
+                                            <strong>₱{(extraMattresses * 150).toLocaleString()}.00</strong>
+                                        </div>
+                                    )}
+                                    <div className="flex justify-between text-[13px] font-bold text-slate-800 border-t border-slate-300 pt-2 mt-2 mb-1.5">
+                                        <span>Subtotal per Night:</span>
+                                        <strong>₱{nightlyRate.toLocaleString()}.00</strong>
+                                    </div>
+                                    <div className="flex justify-between text-[13px] font-bold text-slate-800 mb-2">
+                                        <span>Total Stay: {days} nights × ₱{nightlyRate.toLocaleString()}</span>
+                                        <strong>₱{roomSubtotal.toLocaleString()}.00</strong>
+                                    </div>
+                                    <div className="flex justify-between text-[14px] font-extrabold text-slate-900 border-t border-slate-300 pt-2 mb-3">
+                                        <span>Total Charges</span>
+                                        <strong>₱{totalCharges.toLocaleString()}.00</strong>
+                                    </div>
+                                    <div className="flex justify-between text-[13px] text-slate-700 mb-1">
+                                        <span>{form.payment_option === "half" ? "50% Down Payment:" : "Full Payment:"}</span>
+                                        <strong>₱{payNow.toLocaleString()}.00</strong>
+                                    </div>
+                                    <div className="flex justify-between text-[13px] font-bold text-slate-800 mt-2">
+                                        <span>Amount to Settle:</span>
+                                        <strong className="text-blue-600">₱{payNow.toLocaleString()}.00</strong>
+                                    </div>
+                                    <div className="flex justify-between text-[13px] font-bold text-slate-800 mt-1">
+                                        <span>Remaining Balance:</span>
+                                        <strong>₱{remaining.toLocaleString()}.00</strong>
+                                    </div>
+                                </>
+                            ) : (
+                                <>
+                                    <div className="flex justify-between text-[12px] text-slate-700 mb-2">
+                                        <span>Room Rate</span>
+                                        <strong>₱{roomRate.toLocaleString()}.00</strong>
+                                    </div>
+                                    <div className="flex justify-between text-[12px] text-slate-700 mb-2">
+                                        <span>
+                                            ₱{roomRate.toLocaleString()}/day x ({days})
+                                            day(s)
+                                        </span>
+                                        <strong>
+                                            ₱{(roomRate * days).toLocaleString()}.00
+                                        </strong>
+                                    </div>
+                                    {form.has_companion && (
+                                        <div className="flex justify-between text-[12px] text-slate-700 mb-2">
+                                            <span>Companion Fee:</span>
+                                            <strong>₱{companionFee}.00</strong>
+                                        </div>
+                                    )}
+                                    <div className="flex justify-between text-[14px] font-extrabold text-slate-900 border-t border-slate-300 pt-2.5 mt-2.5">
+                                        <span>Total Charges:</span>
+                                        <strong>
+                                            ₱{totalCharges.toLocaleString()}.00
+                                        </strong>
+                                    </div>
+                                    <div className="flex justify-between text-[12px] text-slate-700 mt-2">
+                                        <span>
+                                            {form.payment_option === "half"
+                                                ? "50% (Down Payment):"
+                                                : "Full Payment:"}
+                                        </span>
+                                        <strong>₱{payNow.toLocaleString()}.00</strong>
+                                    </div>
+                                    <div className="flex justify-between text-[14px] font-extrabold text-slate-900 mt-1.5">
+                                        <span>Remaining Balance:</span>
+                                        <strong>
+                                            ₱{remaining.toLocaleString()}.00
+                                        </strong>
+                                    </div>
+                                </>
                             )}
-                            <div className="flex justify-between text-[14px] font-extrabold text-emerald-600 border-t border-emerald-200 pt-2.5 mt-2.5">
-                                <span>Total Charges:</span>
-                                <strong>
-                                    ₱{totalCharges.toLocaleString()}.00
-                                </strong>
-                            </div>
-                            <div className="flex justify-between text-[12px] text-emerald-700 mt-2">
-                                <span>
-                                    {form.payment_option === "half"
-                                        ? "50% (Down Payment):"
-                                        : "Full Payment:"}
-                                </span>
-                                <strong>₱{payNow.toLocaleString()}.00</strong>
-                            </div>
-                            <div className="flex justify-between text-[14px] font-extrabold text-emerald-700 mt-1.5">
-                                <span>Remaining Balance:</span>
-                                <strong>
-                                    ₱{remaining.toLocaleString()}.00
-                                </strong>
-                            </div>
                         </div>
 
                         <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">

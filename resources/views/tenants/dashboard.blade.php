@@ -119,15 +119,39 @@
                 <div class="flex items-center gap-2.5 text-base font-bold mb-4">
                     <i class="fa-solid fa-bullhorn text-blue-500"></i>
                     <span>Announcements</span>
+                    {{-- Increment the badge count by 1 to account for the hardcoded House Rules --}}
                     @if ($announcements->count() > 0)
                         <span class="bg-blue-500 text-white text-[10px] rounded-full w-4 h-4 flex items-center justify-center ml-0.5">
-                            {{ $announcements->count() }}
+                            {{ $announcements->count() + 1 }}
+                        </span>
+                    @else
+                        <span class="bg-blue-500 text-white text-[10px] rounded-full w-4 h-4 flex items-center justify-center ml-0.5">
+                            1
                         </span>
                     @endif
                 </div>
 
+                {{-- ============================================================ --}}
+                {{-- STATIC HOUSE RULES CARD (Always Pinned First) --}}
+                {{-- ============================================================ --}}
+                <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-3.5 mb-2.5">
+                    <span class="inline-block bg-indigo-100 text-indigo-700 text-[9px] font-bold px-1.5 py-0.5 rounded mb-1.5">
+                        <i class="fa-solid fa-thumbtack"></i> PINNED
+                    </span>
+                    <h5 class="text-xs font-bold mb-1">JLM Cozy Cabin - House Rules & Boarding Contract</h5>
+                    <p class="text-[11px] text-slate-500 leading-snug">
+                        HOUSE RULES & BOARDING CONTRACT JLM Cozy Cabin — Effective: January 2026 1. QUIET HOURS Quiet hours are strictly observed...
+                    </p>
+                </div>
+
+                {{-- ============================================================ --}}
+                {{-- DYNAMIC ANNOUNCEMENTS --}}
+                {{-- ============================================================ --}}
                 @forelse ($announcements as $ann)
                     @php
+                        // Skip rendering if the admin actually created a duplicate DB entry for House Rules
+                        if ($ann->title === 'JLM Cozy Cabin - House Rules & Boarding Contract') continue;
+
                         $isPinned    = $ann->is_pinned;
                         $isImportant = $ann->priority === 'Important' || $ann->priority === 'Urgent';
                         $boxClass    = $isPinned ? 'bg-yellow-50 border border-yellow-200' :
@@ -146,9 +170,7 @@
                         </p>
                     </div>
                 @empty
-                    <div class="text-center text-slate-400 text-xs py-4">
-                        No announcements yet.
-                    </div>
+                    {{-- If there are no DB announcements, we don't show the empty state because the House Rules is already there --}}
                 @endforelse
 
                 <a href="/tenants/announcements" class="block text-right text-[#16a34a] text-[11px] font-bold pt-1.5">

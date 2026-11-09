@@ -7,6 +7,7 @@ use App\Events\ServiceRequestUpdated;
 use App\Http\Controllers\Controller;
 use App\Models\StayExtensionRequest;
 use App\Models\Tenant;
+use App\Models\Reservation;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -22,7 +23,16 @@ class TenantStayExtensionController extends Controller
             ->where('user_id', $user->id)
             ->first();
 
+        // ── APPROVED RESERVATION CHECK ──
+        $hasApprovedReservation = $tenant
+            ? Reservation::where('user_id', $user->id)
+                ->where('status', 'Approved')
+                ->when($tenant->room_id, fn ($q) => $q->where('room_id', $tenant->room_id))
+                ->exists()
+            : false;
+
         $currentCheckOut = $tenant?->approvedReservation?->check_out;
+        $canRequestExtension = $hasApprovedReservation && (bool) $currentCheckOut;
 
         $currentLeaseEnd = $currentCheckOut
             ? $currentCheckOut->format('M j, Y')
@@ -31,6 +41,9 @@ class TenantStayExtensionController extends Controller
         $minRequestedDate = $currentCheckOut
             ? $currentCheckOut->copy()->addDay()->toDateString()
             : now()->toDateString();
+
+        // Daily rent for the billing preview
+        $dailyRent = (float) ($tenant?->rent_rate ?: ($tenant?->room?->daily_rent ?? 0));
 
         $requests = StayExtensionRequest::with('room')
             ->where('tenant_id', $tenant?->id)
@@ -63,7 +76,10 @@ class TenantStayExtensionController extends Controller
             'currentLeaseEnd',
             'minRequestedDate',
             'requests',
-            'requestsForReact'
+            'requestsForReact',
+            'hasApprovedReservation',
+            'canRequestExtension',
+            'dailyRent' // ← passed to frontend
         ));
     }
 
@@ -79,6 +95,20 @@ class TenantStayExtensionController extends Controller
         if (!$tenant) {
             return response()->json([
                 'message' => 'You are not yet assigned to a room. Please contact the admin.',
+            ], 422);
+        }
+
+        // ── APPROVED RESERVATION REQUIRED ──
+        $hasApprovedReservation = Reservation::where('user_id', $user->id)
+            ->where('status', 'Approved')
+            ->where('room_id', $tenant->room_id)
+            ->exists();
+
+        if (!$hasApprovedReservation) {
+            return response()->json([
+                'message' => 'A stay extension can only be requested for an approved reservation. '
+                           . 'Your current booking is not yet approved — please wait for admin confirmation '
+                           . 'or contact support if you believe this is a mistake.',
             ], 422);
         }
 
@@ -170,10 +200,18 @@ class TenantStayExtensionController extends Controller
             ];
         })->values();
 
+        $hasApprovedReservation = $tenant
+            ? Reservation::where('user_id', $user->id)
+                ->where('status', 'Approved')
+                ->when($tenant->room_id, fn ($q) => $q->where('room_id', $tenant->room_id))
+                ->exists()
+            : false;
+
         return response()->json([
             'rows' => $rows,
             'react' => $requestsForReact,
             'has_tenant' => (bool) $tenant,
+            'has_approved_reservation' => $hasApprovedReservation,
         ]);
     }
 
@@ -198,8 +236,6 @@ class TenantStayExtensionController extends Controller
 
         $stayExtensionRequest->update([
             'status' => 'Rejected',
-            // NOTE: processed_by is NOT set — that's how the admin bell
-            // distinguishes "tenant cancelled" from "admin rejected".
         ]);
 
         // Notify admin bell — tenant cancelled stay extension

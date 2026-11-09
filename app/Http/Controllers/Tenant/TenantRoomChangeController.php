@@ -22,6 +22,20 @@ class TenantRoomChangeController extends Controller
 
         $tenant = Tenant::with('room')->where('user_id', $user->id)->first();
 
+        // ── APPROVED RESERVATION CHECK ──
+        // A tenant may only request a room change if they hold an
+        // APPROVED reservation for their currently assigned room.
+        $approvedReservation = $tenant
+            ? Reservation::where('user_id', $user->id)
+                ->where('status', 'Approved')
+                ->when($tenant->room_id, fn ($q) => $q->where('room_id', $tenant->room_id))
+                ->latest()
+                ->first()
+            : null;
+
+        $hasApprovedReservation = (bool) $approvedReservation;
+        $canRequestChange       = $hasApprovedReservation && (bool) $tenant?->room;
+
         $currentRoom = $tenant?->room?->room_bed_id
             ?? $tenant?->room?->room_number
             ?? '—';
@@ -30,6 +44,12 @@ class TenantRoomChangeController extends Controller
             ->where('tenant_id', $tenant?->id)
             ->latest()
             ->get();
+
+        // Tenant's check-out date — used for prorating the room-change bill.
+        // Falls back to +30 days if the tenant has no check-out set.
+        $tenantCheckOut = $tenant?->check_out
+            ? \Carbon\Carbon::parse($tenant->check_out)->toDateString()
+            : now()->addDays(30)->toDateString();
 
         // ── FETCH AVAILABLE ROOMS WITH BED SLOTS ──
         $allRooms = Room::withCount([
@@ -42,7 +62,7 @@ class TenantRoomChangeController extends Controller
         $availableRooms = $allRooms->filter(function ($room) {
             $emptyBeds = $room->total_beds - $room->occupied_count;
             return $emptyBeds > 0;
-        })->map(function ($room) use ($tenant) {
+        })->map(function ($room) use ($tenant, $tenantCheckOut) {
             $emptyBeds = $room->total_beds - $room->occupied_count;
 
             $bedSlots = [];
@@ -92,6 +112,10 @@ class TenantRoomChangeController extends Controller
                 'room_type' => $room->room_type,
                 'label' => 'Room ' . $room->room_number . ' (' . $room->room_type . ' - ' . $emptyBeds . ' slot' . ($emptyBeds > 1 ? 's' : '') . ' left)',
                 'bed_slots' => $bedSlots,
+
+                // ── BILLING DATA ──
+                'daily_rent'       => (float) $room->daily_rent,
+                'tenant_check_out' => $tenantCheckOut,
             ];
         })->values();
 
@@ -115,7 +139,9 @@ class TenantRoomChangeController extends Controller
             'currentRoom',
             'requests',
             'requestsForReact',
-            'availableRooms'
+            'availableRooms',
+            'hasApprovedReservation',
+            'canRequestChange'
         ));
     }
 
@@ -131,6 +157,20 @@ class TenantRoomChangeController extends Controller
         if (!$tenant || !$tenant->room) {
             return response()->json([
                 'message' => 'You are not yet assigned to a room. Please contact the admin.',
+            ], 422);
+        }
+
+        // ── APPROVED RESERVATION REQUIRED ──
+        $hasApprovedReservation = Reservation::where('user_id', $user->id)
+            ->where('status', 'Approved')
+            ->where('room_id', $tenant->room_id)
+            ->exists();
+
+        if (!$hasApprovedReservation) {
+            return response()->json([
+                'message' => 'A room change can only be requested for an approved reservation. '
+                           . 'Your current booking is not yet approved — please wait for admin confirmation '
+                           . 'or contact support if you believe this is a mistake.',
             ], 422);
         }
 
@@ -252,10 +292,18 @@ class TenantRoomChangeController extends Controller
             ];
         })->values();
 
+        $hasApprovedReservation = $tenant
+            ? Reservation::where('user_id', $user->id)
+                ->where('status', 'Approved')
+                ->when($tenant->room_id, fn ($q) => $q->where('room_id', $tenant->room_id))
+                ->exists()
+            : false;
+
         return response()->json([
             'rows' => $rows,
             'react' => $requestsForReact,
             'has_tenant' => (bool) $tenant && (bool) $tenant->room,
+            'has_approved_reservation' => $hasApprovedReservation,
         ]);
     }
 }

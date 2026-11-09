@@ -156,7 +156,7 @@ class TenantReservationController extends Controller
                 });
                 $hasReserved = (bool) $existingReservation;
 
-                $isBookable = ($emptyBeds > 0 || $room->status === 'Available') && !$hasReserved;
+                $isBookable = ($emptyBeds > 0 && $room->status === 'Available') && !$hasReserved;
 
                 return [
                     'id'          => $room->id,

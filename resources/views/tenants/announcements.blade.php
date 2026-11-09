@@ -176,11 +176,23 @@
         const pinned  = allRows.filter(a => a.is_pinned);
         const regular = allRows.filter(a => !a.is_pinned);
 
-        pinnedList.innerHTML = pinned.map(a => cardTemplate(a, true)).join('');
-        regularList.innerHTML = regular.map(a => cardTemplate(a, false)).join('');
+        // =========================================================
+        // CHANGE: Filter out the hardcoded House Rules from the dynamic list
+        // because it's already hardcoded in the HTML above.
+        // =========================================================
+        const houseRulesTitle = "JLM Cozy Cabin - House Rules & Boarding Contract";
+        const filteredPinned = pinned.filter(a => a.title !== houseRulesTitle);
+        const filteredRegular = regular.filter(a => a.title !== houseRulesTitle);
 
-        pinnedSection.classList.toggle('hidden', pinned.length === 0);
-        emptyState.classList.toggle('hidden', allRows.length > 0);
+        pinnedList.innerHTML = filteredPinned.map(a => cardTemplate(a, true)).join('');
+        regularList.innerHTML = filteredRegular.map(a => cardTemplate(a, false)).join('');
+
+        // Keep pinned section hidden if there are no OTHER pinned announcements
+        pinnedSection.classList.toggle('hidden', filteredPinned.length === 0);
+        
+        // Adjust empty state to consider the hardcoded House Rules card
+        const hasContent = filteredPinned.length > 0 || filteredRegular.length > 0;
+        emptyState.classList.toggle('hidden', hasContent);
 
         applyFilters();
     }

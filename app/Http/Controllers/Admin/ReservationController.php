@@ -53,10 +53,6 @@ class ReservationController extends Controller
         ));
     }
 
-    /**
-     * Live data endpoint for polling / Echo refresh.
-     * GET /admin/reservations/data
-     */
     public function data(Request $request)
     {
         $filters = $request->only(['search', 'status']);
@@ -202,7 +198,12 @@ class ReservationController extends Controller
 
     public function approve(Request $request, Reservation $reservation)
     {
-        // Removed session()->save()
+        // Guard clause: Prevent approving if it's a walk-in reservation not linked to a user
+        if (!$reservation->user_id) {
+            return response()->json([
+                'message' => 'Cannot approve this reservation because it is not linked to a registered User account. Please link a user first to ensure billing works correctly.',
+            ], 422);
+        }
 
         $validated = $request->validate([
             'admin_notes' => ['nullable', 'string'],
@@ -235,7 +236,6 @@ class ReservationController extends Controller
             }
         }
 
-        // Captured out of the transaction so we can broadcast the invoice ID
         $settledInvoice = null;
 
         DB::transaction(function () use ($request, $reservation, $validated, &$settledInvoice) {
@@ -246,28 +246,24 @@ class ReservationController extends Controller
                 'processed_at' => now(),
             ]);
 
-            $tenant = null;
-            if ($reservation->user_id) {
-                $tenant = Tenant::updateOrCreate(
-                    ['user_id' => $reservation->user_id],
-                    [
-                        'room_id'                 => $reservation->room_id,
-                        'approved_reservation_id' => $reservation->id,
-                        'rent_rate'               => $reservation->total_charges,
-                        'status'                  => 'active',
-                    ]
-                );
-            }
+            // Since we guaranteed user_id exists above, Tenant::updateOrCreate will always have an ID
+            $tenant = Tenant::updateOrCreate(
+                ['user_id' => $reservation->user_id],
+                [
+                    'room_id'                 => $reservation->room_id,
+                    'approved_reservation_id' => $reservation->id,
+                    'rent_rate'               => $reservation->total_charges,
+                    'status'                  => 'active',
+                ]
+            );
 
             if ($reservation->room) {
                 $reservation->room->syncStatus();
             }
 
-            // Now returns ?Invoice
             $settledInvoice = $this->settleReservationInvoice($reservation, $tenant);
         });
 
-        // ── Send Approval Email via QUEUE ──
         try {
             $email = $reservation->email ?? $reservation->user?->email;
             if ($email) {
@@ -277,12 +273,10 @@ class ReservationController extends Controller
             report($e);
         }
 
-        // ── Send Approval SMS 
         try {
             $phone = $reservation->phone ?? $reservation->user?->phone;
 
             if ($phone) {
-                // Clean the phone number: remove spaces, dashes, and leading 0 or +63
                 $phone = preg_replace('/[^0-9]/', '', $phone);
                 if (str_starts_with($phone, '0')) {
                     $phone = '63' . substr($phone, 1);
@@ -295,7 +289,6 @@ class ReservationController extends Controller
                 $msg = "Your reservation {$reservation->reference_no} has been APPROVED. Log in to your portal to view your billing details.";
                 $sent = SmsService::send($phone, $msg);
 
-                // If it fails, log it so you can see why
                 if (!$sent) {
                     \Illuminate\Support\Facades\Log::warning('SMS failed to send for Reservation Approval', ['phone' => $phone]);
                 }
@@ -329,8 +322,6 @@ class ReservationController extends Controller
 
     public function reject(Request $request, Reservation $reservation)
     {
-        // Removed session()->save()
-
         $validated = $request->validate([
             'admin_notes' => ['nullable', 'string'],
         ]);
@@ -352,7 +343,6 @@ class ReservationController extends Controller
             $deletedInvoiceIds = $this->deleteInvoicesOnRejection($reservation);
         });
 
-        // ── Send Rejection Email via QUEUE ──
         try {
             $email = $reservation->email ?? $reservation->user?->email;
             if ($email) {
@@ -364,12 +354,10 @@ class ReservationController extends Controller
             report($e);
         }
 
-        // ── Send Rejection SMS
         try {
             $phone = $reservation->phone ?? $reservation->user?->phone;
 
             if ($phone) {
-                // Clean the phone number
                 $phone = preg_replace('/[^0-9]/', '', $phone);
                 if (str_starts_with($phone, '0')) {
                     $phone = '63' . substr($phone, 1);
@@ -403,9 +391,6 @@ class ReservationController extends Controller
 
         event(new ReservationUpdated('rejected', $reservation->id));
 
-        // Multiple invoices may have been deleted. The listener does a full
-        // refresh anyway, so we pass null when more than one was removed and
-        // the single ID when exactly one was.
         if (count($deletedInvoiceIds) === 1) {
             event(new InvoiceUpdated('deleted', $deletedInvoiceIds[0]));
         } elseif (count($deletedInvoiceIds) > 1) {
@@ -472,12 +457,7 @@ class ReservationController extends Controller
         return $checkIn->copy()->addMonths(3);
     }
 
-    /**
-     * Creates or updates the invoice tied to the reservation.
-     * Returns the Invoice (fresh) so callers can broadcast its ID,
-     * or null if nothing was changed (already paid).
-     */
-    private function settleReservationInvoice(Reservation $reservation, ?Tenant $tenant): ?Invoice
+    private function settleReservationInvoice(Reservation $reservation, Tenant $tenant): ?Invoice
     {
         $totalCharges = (float) $reservation->total_charges;
         $paidAmount   = (float) $reservation->reservation_fee;
@@ -511,7 +491,7 @@ class ReservationController extends Controller
         if (! $invoice) {
             $invoice = Invoice::create([
                 'transaction_no' => Invoice::generateTransactionNo(),
-                'tenant_id'      => $tenant?->id,
+                'tenant_id'      => $tenant->id, // Guaranteed to have an ID now
                 'room_id'        => $reservation->room_id,
                 'tenant_name'    => $reservation->tenant_name,
                 'room_number'    => $reservation->room?->room_number
@@ -538,6 +518,7 @@ class ReservationController extends Controller
         }
 
         $invoice->update([
+            'tenant_id'    => $tenant->id, // Ensure it links properly on updates too
             'total_amount' => $totalCharges,
             'amount_paid'  => $paidAmount,
             'balance'      => $balance,
@@ -557,10 +538,6 @@ class ReservationController extends Controller
         return $invoice->fresh();
     }
 
-    /**
-     * Deletes invoices tied to the reservation on rejection.
-     * Returns the list of deleted invoice IDs (was: a count).
-     */
     private function deleteInvoicesOnRejection(Reservation $reservation): array
     {
         $invoices = Invoice::query()

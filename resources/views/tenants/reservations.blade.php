@@ -132,9 +132,6 @@
                         ]);
 
                         $displayStatus = $room['status'];
-                        if ($room['is_bookable'] && $room['status'] === 'Occupied') {
-                            $displayStatus = 'Available';
-                        }
                     @endphp
 
                     <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden flex flex-col shadow-sm">
@@ -192,21 +189,21 @@
                                     <i class="fa-regular fa-eye"></i> Details
                                 </button>
 
-                                @if ($room['is_bookable'])
+                                @if ($room['has_reserved'])
+                                    <button disabled
+                                        class="bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg py-2 text-xs font-semibold cursor-not-allowed text-center inline-flex items-center justify-center gap-1.5">
+                                        <i class="fa-solid fa-check"></i> Reserved
+                                    </button>
+                                @elseif ($room['is_bookable'])
                                     <button type="button"
                                         class="open-reserve-modal-btn bg-[#02122c] hover:bg-[#0d2347] text-white rounded-lg py-2 text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition"
                                         data-room="{{ json_encode($roomData) }}">
                                         <i class="fa-regular fa-calendar-check"></i> Reserve
                                     </button>
-                                @elseif($room['has_reserved'])
-                                    <button disabled
-                                        class="bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg py-2 text-xs font-semibold cursor-not-allowed text-center inline-flex items-center justify-center gap-1.5">
-                                        <i class="fa-solid fa-check"></i> Reserved
-                                    </button>
                                 @else
                                     <button disabled
-                                        class="bg-slate-100 text-slate-400 rounded-lg py-2 text-xs font-semibold cursor-not-allowed text-center">
-                                        Not Available
+                                        class="bg-slate-100 text-slate-400 rounded-lg py-2 text-xs font-semibold cursor-not-allowed text-center inline-flex items-center justify-center gap-1.5">
+                                        <i class="fa-solid fa-ban"></i> {{ $displayStatus }}
                                     </button>
                                 @endif
                             </div>
@@ -379,9 +376,6 @@
                     const tourUrl = `/tour/${room.tourId}?from=${encodeURIComponent(fromPath)}`;
 
                     let displayStatus = room.status;
-                    if (room.is_bookable && room.status === 'Occupied') {
-                        displayStatus = 'Available';
-                    }
 
                     // Status badges styling
                     let statusBadge = '';
@@ -399,20 +393,20 @@
 
                     // Action button logic
                     let actionBtn = '';
-                    if (room.is_bookable) {
-                        actionBtn = `
-                    <button type="button" class="open-reserve-modal-btn bg-[#02122c] hover:bg-[#0d2347] text-white rounded-lg py-2 text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition" data-room='${JSON.stringify(roomData)}'>
-                        <i class="fa-regular fa-calendar-check"></i> Reserve
-                    </button>`;
-                    } else if (room.has_reserved) {
+                    if (room.has_reserved) {
                         actionBtn = `
                     <button disabled class="bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg py-2 text-xs font-semibold cursor-not-allowed text-center inline-flex items-center justify-center gap-1.5">
                         <i class="fa-solid fa-check"></i> Reserved
                     </button>`;
+                    } else if (room.is_bookable) {
+                        actionBtn = `
+                    <button type="button" class="open-reserve-modal-btn bg-[#02122c] hover:bg-[#0d2347] text-white rounded-lg py-2 text-xs font-semibold inline-flex items-center justify-center gap-1.5 transition" data-room='${JSON.stringify(roomData)}'>
+                        <i class="fa-regular fa-calendar-check"></i> Reserve
+                    </button>`;
                     } else {
                         actionBtn = `
-                    <button disabled class="bg-slate-100 text-slate-400 rounded-lg py-2 text-xs font-semibold cursor-not-allowed text-center">
-                        Not Available
+                    <button disabled class="bg-slate-100 text-slate-400 rounded-lg py-2 text-xs font-semibold cursor-not-allowed text-center inline-flex items-center justify-center gap-1.5">
+                        <i class="fa-solid fa-ban"></i> ${room.status}
                     </button>`;
                     }
 

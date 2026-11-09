@@ -45,20 +45,26 @@ class TenantDashboardController extends Controller
         // -------------------------------------------------------
         // Outstanding balance — UNPAID INVOICES
         // -------------------------------------------------------
-        $unpaidInvoices = Invoice::where('tenant_id', $tenant?->id)
-            ->whereIn('status', ['Unpaid', 'Partial', 'Overdue'])
-            ->orderBy('due_date')
-            ->get();
+        $invoiceBalance = 0.0;
+        $invoiceCount = 0;
 
-        $invoiceBalance = (float) $unpaidInvoices->sum('balance');
-        $invoiceCount   = $unpaidInvoices->count();
+        // Only query invoices if the user actually has a Tenant record
+        if ($tenant) {
+            $unpaidInvoices = Invoice::where('tenant_id', $tenant->id)
+                ->whereIn('status', ['Unpaid', 'Partial', 'Overdue'])
+                ->orderBy('due_date')
+                ->get();
+
+            $invoiceBalance = (float) $unpaidInvoices->sum('balance');
+            $invoiceCount   = $unpaidInvoices->count();
+        }
 
         // -------------------------------------------------------
         // Outstanding balance — APPROVED RESERVATION REMAINING
         // -------------------------------------------------------
         $reservationRemaining = 0.0;
 
-        if ($reservation && !$isExpired) {
+        if ($tenant && $reservation && !$isExpired) {
             if ($reservation->status === 'Approved' && (float) $reservation->remaining > 0) {
                 $billedRemaining = (float) Invoice::where('tenant_id', $tenant->id)
                     ->whereIn('status', ['Unpaid', 'Partial', 'Overdue', 'Pending'])

@@ -13,11 +13,14 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
+use App\Services\SmsService;
 
 class MessageController extends Controller
 {
     public function index()
     {
+        cache()->put('admin_online_' . Auth::id(), true, now()->addMinutes(30));
+
         $conversations = Conversation::with(['tenant.user', 'latestMessage'])
             ->where('deleted_by_admin', false)
             ->whereNull('deleted_at')
@@ -57,6 +60,8 @@ class MessageController extends Controller
 
     public function show(int $id): JsonResponse
     {
+        cache()->put('admin_online_' . Auth::id(), true, now()->addMinutes(30));
+
         $conversation = Conversation::with(['tenant.user', 'messages.sender', 'messages.reactions'])
             ->where('deleted_by_admin', false)
             ->findOrFail($id);
@@ -122,6 +127,17 @@ class MessageController extends Controller
 
         $this->broadcast($conversation, $message, $tenant);
 
+        // ==========================================
+        // SMS LOGIC
+        // ==========================================
+        if (!cache()->has('user_online_' . $tenant->user_id) && $tenant->user->phone) {
+            SmsService::send(
+                $tenant->user->phone,
+                "You have a new message from the Admin. Please log in to your account to read it."
+            );
+        }
+        // ==========================================
+
         return response()->json([
             'success' => true,
             'data'    => [
@@ -159,6 +175,18 @@ class MessageController extends Controller
         $conversation->update(['last_message_at' => now()]);
 
         $this->broadcast($conversation, $message, $conversation->tenant);
+
+        // ==========================================
+        // SMS LOGIC
+        // ==========================================
+        $tenantUser = $conversation->tenant->user;
+        if ($tenantUser && !cache()->has('user_online_' . $tenantUser->id) && $tenantUser->phone) {
+            SmsService::send(
+                $tenantUser->phone,
+                "You have a new message from the Admin. Please log in to your account to read it."
+            );
+        }
+        // ==========================================
 
         return response()->json([
             'success' => true,

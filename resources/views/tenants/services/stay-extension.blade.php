@@ -25,14 +25,29 @@
                 becomes view-only.</span>
         </div>
 
-        <div id="tenant-no-warning"
-            class="bg-amber-50 border border-amber-200 rounded-lg px-5 py-4 text-[13px] text-amber-800 flex items-start gap-2.5 mb-5 @if ($tenant) hidden @endif">
-            <i class="fa-regular fa-circle-info mt-0.5"></i>
-            <div>
-                <strong>You're not yet assigned to a room.</strong>
-                Please contact the admin to be assigned before submitting stay extension requests.
+        {{-- ── APPROVED RESERVATION REQUIRED ── --}}
+        @if(! $hasApprovedReservation)
+            <div id="tenant-no-warning"
+                 class="bg-amber-50 border border-amber-200 rounded-lg px-5 py-4 text-[13px] text-amber-800 flex items-start gap-2.5 mb-5">
+                <i class="fa-regular fa-circle-info mt-0.5"></i>
+                <div>
+                    <strong>Stay extension requires an approved reservation.</strong>
+                    Your current booking is still awaiting admin approval. Once your reservation is approved,
+                    you'll be able to request an extension here. If you need to modify your booking before
+                    approval, please contact the admin directly.
+                </div>
             </div>
-        </div>
+        {{-- 👇 Fixed this line to use the relationship directly instead of the undefined variable --}}
+        @elseif(! $tenant || ! $tenant->approvedReservation?->check_out)
+            <div id="tenant-no-warning"
+                 class="bg-amber-50 border border-amber-200 rounded-lg px-5 py-4 text-[13px] text-amber-800 flex items-start gap-2.5 mb-5">
+                <i class="fa-regular fa-circle-info mt-0.5"></i>
+                <div>
+                    <strong>You have no active lease.</strong>
+                    Please contact the admin to ensure your reservation check-out date is set before requesting an extension.
+                </div>
+            </div>
+        @endif
 
         <div class="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
             <div class="flex justify-between items-center mb-5">
@@ -41,7 +56,8 @@
                 </span>
                 <button id="open-new-stay-extension"
                     class="bg-[#001838] hover:bg-[#0d2347] disabled:opacity-50 text-white px-4 py-2.5 rounded-lg font-medium text-[13px] inline-flex items-center gap-2"
-                    {{ !$tenant ? 'disabled' : '' }}>
+                    {{ ! $canRequestExtension ? 'disabled' : '' }}
+                    title="{{ ! $canRequestExtension ? 'An approved reservation is required to request a stay extension.' : '' }}">
                     <i class="fa-solid fa-plus"></i> New Request
                 </button>
             </div>
@@ -74,8 +90,7 @@
                                         <td class="py-4 px-4 text-[13.5px]">{{ $req->current_lease_end }}</td>
                                         <td class="py-4 px-4 text-[13.5px]">{{ $req->requested_lease_end }}</td>
                                         <td class="py-4 px-4">
-                                            <span
-                                                class="bg-amber-100 text-amber-700 text-[11.5px] font-semibold px-2.5 py-1 rounded-full inline-flex items-center gap-1">
+                                            <span class="bg-amber-100 text-amber-700 text-[11.5px] font-semibold px-2.5 py-1 rounded-full inline-flex items-center gap-1">
                                                 <i class="fa-regular fa-clock"></i> Pending
                                             </span>
                                         </td>
@@ -97,11 +112,15 @@
         </div>
     </div>
 
-    <div id="services-stay-extension-root" data-room-number="{{ $roomNumber }}"
-        data-current-lease-end="{{ $currentLeaseEnd }}" data-min-requested-date="{{ $minRequestedDate }}"
-        data-requests='@json($requestsForReact)'></div>
+    <div id="services-stay-extension-root" 
+         data-room-number="{{ $roomNumber }}"
+         data-current-lease-end="{{ $currentLeaseEnd }}" 
+         data-min-requested-date="{{ $minRequestedDate }}"
+         data-daily-rent="{{ $dailyRent }}"
+         data-requests='@json($requestsForReact)'></div>
 @endsection
 
+{{-- The JS script remains exactly the same --}}
 @push('scripts')
     <script>
         (function() {
@@ -120,11 +139,9 @@
                         const container = document.getElementById('tenant-stay-extension-container');
                         const active = (data.rows || []).filter(r => r.is_pending);
 
-                        // Update counter
                         const countEl = document.querySelector('[data-active-count]');
                         if (countEl) {
-                            countEl.textContent =
-                                `${active.length} active request${active.length === 1 ? '' : 's'}`;
+                            countEl.textContent = `${active.length} active request${active.length === 1 ? '' : 's'}`;
                         }
 
                         if (!container) return;

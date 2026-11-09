@@ -21,7 +21,7 @@
         <div class="flex items-center justify-between text-[13px]">
             <span class="text-slate-500" id="admin-msg-count">Showing {{ $total }} of {{ $total }}
                 conversation(s)</span>
-            <span class="{{ $unreadCount > 0 ? 'text-rose-600 font-bold' : 'text-slate-500' }}">
+            <span id="admin-unread-count" class="{{ $unreadCount > 0 ? 'text-rose-600 font-bold' : 'text-slate-500' }}">
                 {{ $unreadCount }} unread message(s)
             </span>
         </div>
@@ -63,7 +63,9 @@
                                 <div class="text-sm font-bold text-slate-900">{{ $c->tenant->user->name ?? 'Unknown' }}
                                 </div>
                                 <div class="text-[11px] text-slate-400">
-                                    {{ $c->last_message_at?->format('M d, h:i A') ?? '' }}</div>
+                                    {{ $c->last_message_at?->format('M d, h:i A') ?? '' }}
+                                </div>
+                                {{-- REMOVED TOP BADGE HERE --}}
                             </div>
                             <div class="text-xs text-slate-500 mb-1.5">{{ $c->subject }}</div>
                             <div class="text-[12.5px] text-slate-600 leading-relaxed mb-2 line-clamp-2">
@@ -72,8 +74,8 @@
                             <div class="flex items-center justify-between">
                                 <div class="text-[11px] text-slate-400">{{ $c->messages()->count() }} message(s)</div>
                                 @if ($unread > 0)
-                                    <span
-                                        class="bg-[#e06800] text-white text-[10px] font-bold px-2 py-0.5 rounded-full">{{ $unread }}
+                                    <span data-count="{{ $unread }}"
+                                        class="badge-unread bg-[#e06800] text-white text-[10px] font-bold px-2 py-0.5 rounded-full">{{ $unread }}
                                         new</span>
                                 @endif
                             </div>
@@ -382,11 +384,16 @@
                         item.classList.remove('bg-amber-50/40');
                         item.classList.add('bg-white');
 
-                        item.querySelector('.w-11').classList.remove('bg-amber-100', 'text-amber-600');
-                        item.querySelector('.w-11').classList.add('bg-slate-100', 'text-slate-500');
+                        const iconBox = item.querySelector('.w-11');
+                        if (iconBox) {
+                            iconBox.classList.remove('bg-amber-100', 'text-amber-600');
+                            iconBox.classList.add('bg-slate-100', 'text-slate-500');
+                        }
 
-                        const badge = item.querySelector('.bg-\\[\\#e06800\\]');
-                        if (badge) badge.remove();
+                        // Remove all badges when read
+                        item.querySelectorAll('.badge-unread').forEach(b => b.remove());
+
+                        updateAdminGlobalUnreadCount();
                     }
 
                     const delConvBtn = document.getElementById('admin-delete-conversation-btn');
@@ -576,9 +583,6 @@
                 }
             }
 
-            // ============================================================
-            // ATTACHMENTS
-            // ============================================================
             const adminSelected = {
                 new: [],
                 reply: []
@@ -704,9 +708,6 @@
                 e.target.value = '';
             };
 
-            // ============================================================
-            // SUBMIT — New Message (FormData)
-            // ============================================================
             document.getElementById('admin-new-message-form').addEventListener('submit', async (e) => {
                 e.preventDefault();
 
@@ -757,9 +758,6 @@
                 }
             });
 
-            // ============================================================
-            // SUBMIT — Reply (FormData)
-            // ============================================================
             document.getElementById('admin-reply-send-btn').addEventListener('click', async () => {
                 const ta = document.getElementById('admin-reply-textarea');
                 const body = ta.value.trim();
@@ -803,9 +801,6 @@
                 }
             });
 
-            // ============================================================
-            // TABS / SEARCH
-            // ============================================================
             const tabBtns = document.querySelectorAll('.tab-btn');
             tabBtns.forEach(btn => btn.addEventListener('click', () => {
                 tabBtns.forEach(b => {
@@ -872,6 +867,32 @@
             });
 
             // ============================================================
+            // REAL-TIME UNREAD COUNTER UPDATE FUNCTION
+            // ============================================================
+            function updateAdminGlobalUnreadCount() {
+                const unreadRows = document.querySelectorAll('.admin-conversation-item[data-unread="true"]');
+                let totalUnread = 0;
+
+                unreadRows.forEach(row => {
+                    const badge = row.querySelector('.badge-unread');
+                    if (badge && badge.dataset.count) {
+                        totalUnread += parseInt(badge.dataset.count) || 0;
+                    }
+                });
+
+                const counterSpan = document.getElementById('admin-unread-count');
+                if (counterSpan) {
+                    if (totalUnread > 0) {
+                        counterSpan.className = 'text-rose-600 font-bold';
+                        counterSpan.innerText = `${totalUnread} unread message(s)`;
+                    } else {
+                        counterSpan.className = 'text-slate-500';
+                        counterSpan.innerText = `0 unread message(s)`;
+                    }
+                }
+            }
+
+            // ============================================================
             // ECHO — Admin realtime
             // ============================================================
             function initAdminMessageListener() {
@@ -920,26 +941,44 @@
                                         iconBox.classList.add('bg-amber-100', 'text-amber-600');
                                     }
 
+                                    // 1. FIND EXISTING BADGE & GET COUNT
+                                    let currentUnread = 0;
+                                    const existingBadge = listItem.querySelector('.badge-unread');
+                                    if (existingBadge && existingBadge.dataset.count) {
+                                        currentUnread = parseInt(existingBadge.dataset.count) || 0;
+                                    }
+
+                                    // 2. REMOVE OLD BADGE
+                                    if (existingBadge) existingBadge.remove();
+
+                                    // 3. CALCULATE NEW COUNT
+                                    const newUnread = currentUnread + 1;
+
+                                    // 4. APPEND NEW BADGE TO BOTTOM ROW
                                     const bottomRow = listItem.querySelector('.flex.items-center.justify-between');
                                     if (bottomRow) {
                                         const countText = bottomRow.querySelector('.text-\\[11px\\].text-slate-400')
                                             ?.innerText || '0 message(s)';
 
-                                        const currentBadge = bottomRow.querySelector('.badge-unread');
-                                        let currentUnread = 0;
-                                        if (currentBadge) {
-                                            currentUnread = parseInt(currentBadge.innerText) || 1;
-                                        }
-                                        const newUnread = currentUnread + 1;
+                                        // Remove any leftover badges in the bottom row just in case
+                                        bottomRow.querySelectorAll('.badge-unread').forEach(b => b.remove());
 
                                         bottomRow.innerHTML = `
                                             <div class="text-[11px] text-slate-400">${countText}</div>
-                                            <span class="badge-unread bg-[#e06800] text-white text-[10px] font-bold px-2 py-0.5 rounded-full">${newUnread} new</span>
+                                            <span class="badge-unread bg-[#e06800] text-white text-[10px] font-bold px-2 py-0.5 rounded-full" data-count="${newUnread}">${newUnread} new</span>
                                         `;
                                     }
                                 }
 
-                                document.getElementById('admin-conversations-container').prepend(listItem);
+                                const container = document.getElementById('admin-conversations-container');
+                                if (container.contains(listItem)) {
+                                    listItem.remove();
+                                }
+                                container.prepend(listItem);
+
+                                // UPDATE GLOBAL COUNTER
+                                updateAdminGlobalUnreadCount();
+
                             } else if (!currentConvId) {
                                 window.location.reload();
                             }
@@ -948,163 +987,6 @@
                     console.error('Echo admin.messages bind failed:', e);
                 }
             }
-
-            // ============================================================
-            // FACEBOOK-MESSENGER-STYLE IMAGE LIGHTBOX
-            // ============================================================
-            let lb, lbImg, lbDownload, lbPrev, lbNext, lbCounter;
-            let lbGallery = [];
-            let lbIndex = 0;
-
-            function ensureLightbox() {
-                if (lb) return;
-                lb = document.createElement('div');
-                lb.id = 'fb-lightbox';
-                lb.style.cssText = `
-        position: fixed; inset: 0; z-index: 9999;
-        background: rgba(10, 12, 16, 0.92);
-        display: none; align-items: center; justify-content: center;
-        opacity: 0; transition: opacity .18s ease;
-        padding: 16px; cursor: zoom-out;
-        -webkit-user-select: none; user-select: none;
-    `;
-                lb.innerHTML = `
-        <button type="button" id="fb-lb-close" aria-label="Close"
-            style="position:absolute;top:14px;right:18px;background:transparent;border:0;
-                   color:#fff;font-size:24px;cursor:pointer;padding:6px;line-height:1;
-                   border-radius:8px;transition:background .15s;">
-            <i class="fa-solid fa-xmark"></i>
-        </button>
-        <button type="button" id="fb-lb-prev" aria-label="Previous"
-            style="position:absolute;left:14px;top:50%;transform:translateY(-50%);
-                   background:rgba(255,255,255,.1);border:0;color:#fff;font-size:22px;
-                   cursor:pointer;padding:10px 14px;border-radius:999px;transition:background .15s;">
-            <i class="fa-solid fa-chevron-left"></i>
-        </button>
-        <button type="button" id="fb-lb-next" aria-label="Next"
-            style="position:absolute;right:14px;top:50%;transform:translateY(-50%);
-                   background:rgba(255,255,255,.1);border:0;color:#fff;font-size:22px;
-                   cursor:pointer;padding:10px 14px;border-radius:999px;transition:background .15s;">
-            <i class="fa-solid fa-chevron-right"></i>
-        </button>
-        <img id="fb-lb-img" src="" alt=""
-             style="max-width:92vw;max-height:88vh;border-radius:12px;
-                    box-shadow:0 20px 60px rgba(0,0,0,.6);
-                    transform:scale(.9);transition:transform .18s ease;cursor:default;">
-        <div id="fb-lb-counter"
-             style="position:absolute;bottom:20px;left:50%;transform:translateX(-50%);
-                    color:#fff;font-size:12px;font-weight:600;opacity:.85;
-                    background:rgba(255,255,255,.1);padding:4px 10px;border-radius:999px;display:none;">
-        </div>
-        <a id="fb-lb-download" href="#" download
-           style="position:absolute;bottom:20px;right:20px;background:#fff;color:#0f172a;
-                  padding:8px 14px;border-radius:8px;font-size:13px;font-weight:600;
-                  text-decoration:none;display:inline-flex;align-items:center;gap:6px;">
-            <i class="fa-solid fa-download"></i> Download
-        </a>
-    `;
-                document.body.appendChild(lb);
-
-                lbImg = document.getElementById('fb-lb-img');
-                lbDownload = document.getElementById('fb-lb-download');
-                lbPrev = document.getElementById('fb-lb-prev');
-                lbNext = document.getElementById('fb-lb-next');
-                lbCounter = document.getElementById('fb-lb-counter');
-
-                lb.addEventListener('click', (e) => {
-                    if (e.target === lb) closeLightbox();
-                });
-                document.getElementById('fb-lb-close').addEventListener('click', closeLightbox);
-                lbPrev.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    showPrev();
-                });
-                lbNext.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    showNext();
-                });
-
-                document.addEventListener('keydown', (e) => {
-                    if (!lb || lb.style.display !== 'flex') return;
-                    if (e.key === 'Escape') closeLightbox();
-                    if (e.key === 'ArrowLeft') showPrev();
-                    if (e.key === 'ArrowRight') showNext();
-                });
-            }
-
-            function openLightbox(gallery, index) {
-                ensureLightbox();
-                lbGallery = gallery;
-                lbIndex = index;
-                applyCurrentImage();
-                lb.style.display = 'flex';
-                requestAnimationFrame(() => {
-                    lb.style.opacity = '1';
-                    lbImg.style.transform = 'scale(1)';
-                });
-                document.body.style.overflow = 'hidden';
-            }
-
-            function closeLightbox() {
-                if (!lb) return;
-                lb.style.opacity = '0';
-                lbImg.style.transform = 'scale(.9)';
-                setTimeout(() => {
-                    lb.style.display = 'none';
-                    document.body.style.overflow = '';
-                }, 180);
-            }
-
-            function showPrev() {
-                if (lbGallery.length <= 1) return;
-                lbIndex = (lbIndex - 1 + lbGallery.length) % lbGallery.length;
-                applyCurrentImage();
-            }
-
-            function showNext() {
-                if (lbGallery.length <= 1) return;
-                lbIndex = (lbIndex + 1) % lbGallery.length;
-                applyCurrentImage();
-            }
-
-            function applyCurrentImage() {
-                const current = lbGallery[lbIndex];
-                if (!current) return;
-                lbImg.style.opacity = '0';
-                setTimeout(() => {
-                    lbImg.src = current.url;
-                    lbImg.alt = current.name || '';
-                    lbDownload.href = current.url;
-                    lbDownload.setAttribute('download', current.name || 'image');
-                    lbImg.style.opacity = '1';
-                }, 90);
-                if (lbGallery.length > 1) {
-                    lbCounter.style.display = 'inline-block';
-                    lbCounter.textContent = `${lbIndex + 1} / ${lbGallery.length}`;
-                    lbPrev.style.display = 'inline-flex';
-                    lbNext.style.display = 'inline-flex';
-                } else {
-                    lbCounter.style.display = 'none';
-                    lbPrev.style.display = 'none';
-                    lbNext.style.display = 'none';
-                }
-            }
-
-            document.addEventListener('click', (e) => {
-                const trigger = e.target.closest('.fb-attach-thumb');
-                if (!trigger) return;
-                e.preventDefault();
-                e.stopPropagation();
-
-                const parentBubble = trigger.closest('.bubble-wrap') || document;
-                const allThumbs = Array.from(parentBubble.querySelectorAll('.fb-attach-thumb'));
-                const gallery = allThumbs.map(t => ({
-                    url: t.dataset.src,
-                    name: t.dataset.name
-                }));
-                const idx = allThumbs.indexOf(trigger);
-                openLightbox(gallery, Math.max(0, idx));
-            });
 
             initAdminMessageListener();
         })();

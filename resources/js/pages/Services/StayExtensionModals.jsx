@@ -25,6 +25,9 @@ const toKeyedMap = (input) => {
     return {};
 };
 
+const formatMoney = (n) =>
+    '₱' + Number(n).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
 export default function StayExtensionModals() {
     const [showSubmit, setShowSubmit] = useState(false);
     const [showDetails, setShowDetails] = useState(false);
@@ -36,6 +39,7 @@ export default function StayExtensionModals() {
     const [roomNumber, setRoomNumber] = useState("");
     const [currentLeaseEnd, setCurrentLeaseEnd] = useState("");
     const [minRequestedDate, setMinRequestedDate] = useState("");
+    const [dailyRent, setDailyRent] = useState(0);
 
     // Form state
     const [form, setForm] = useState({
@@ -54,6 +58,7 @@ export default function StayExtensionModals() {
         setRoomNumber(el.dataset.roomNumber || "");
         setCurrentLeaseEnd(el.dataset.currentLeaseEnd || "");
         setMinRequestedDate(el.dataset.minRequestedDate || "");
+        setDailyRent(Number(el.dataset.dailyRent) || 0);
 
         if (el.dataset.requests) {
             try {
@@ -122,8 +127,6 @@ export default function StayExtensionModals() {
                 if (data) {
                     setRequest(data);
                     setShowDetails(true);
-                } else {
-                    console.warn("[StayExtensionModals] No data for id", id);
                 }
                 return;
             }
@@ -135,11 +138,6 @@ export default function StayExtensionModals() {
                 if (data) {
                     setDeleteTarget(data);
                     setShowDelete(true);
-                } else {
-                    console.warn(
-                        "[StayExtensionModals] No data for cancel id",
-                        id,
-                    );
                 }
                 return;
             }
@@ -241,6 +239,32 @@ export default function StayExtensionModals() {
         }
     };
 
+    // ── Billing Estimate Logic ──
+    const computeEstimate = () => {
+        if (!dailyRent || !form.requested_lease_end) return null;
+
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        const requestedDate = new Date(form.requested_lease_end);
+        requestedDate.setHours(0, 0, 0, 0);
+
+        const msPerDay = 1000 * 60 * 60 * 24;
+        // Math from TODAY until the newly requested date
+        const days = Math.max(0, Math.round((requestedDate - today) / msPerDay));
+
+        if (days <= 0) return null;
+
+        return {
+            days,
+            rate: dailyRent,
+            total: days * dailyRent,
+            requestedDateStr: form.requested_lease_end,
+        };
+    };
+
+    const estimate = computeEstimate();
+
     return (
         <>
             {/* ============================================================ */}
@@ -330,6 +354,42 @@ export default function StayExtensionModals() {
                                         )}
                                     </div>
                                 </div>
+
+                                {/* ── BILLING ESTIMATE (below Date, above Reason) ── */}
+                                {estimate && (
+                                    <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                                        <div className="flex items-center gap-2 text-[13px] font-bold text-amber-800 mb-2.5">
+                                            <i className="fa-solid fa-receipt"></i>
+                                            Estimated Extension Bill
+                                        </div>
+
+                                        <div className="flex flex-col gap-1.5 text-[12.5px] text-slate-700">
+                                            <div className="flex justify-between">
+                                                <span className="text-slate-500">Daily rent</span>
+                                                <span className="font-semibold">{formatMoney(estimate.rate)} / day</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span className="text-slate-500">
+                                                    Days (today → {new Date(estimate.requestedDateStr).toLocaleDateString('en-PH', {
+                                                        month: 'short', day: 'numeric', year: 'numeric',
+                                                    })})
+                                                </span>
+                                                <span className="font-semibold">
+                                                    {estimate.days} day{estimate.days === 1 ? '' : 's'}
+                                                </span>
+                                            </div>
+                                            <div className="flex justify-between border-t border-amber-200 pt-1.5 mt-1">
+                                                <span className="font-bold text-slate-900">Total estimate</span>
+                                                <span className="font-bold text-amber-800">{formatMoney(estimate.total)}</span>
+                                            </div>
+                                        </div>
+
+                                        <p className="text-[11px] text-amber-700 mt-2 leading-snug">
+                                            <i className="fa-solid fa-circle-info mr-1"></i>
+                                            This is an estimate based on today's date until your requested end date. Final billing is confirmed by the admin upon approval.
+                                        </p>
+                                    </div>
+                                )}
 
                                 <div>
                                     <label className="block text-[12.5px] font-semibold text-slate-700 mb-1.5">

@@ -240,6 +240,10 @@ class RoomChangeController extends Controller
     // HELPERS
     // ============================================================
 
+    /**
+     * Bill the tenant from TODAY until their check-out date,
+     * prorated at the new room's daily rent.
+     */
     private function createBillingForNewRoom(RoomChangeRequest $request, Room $newRoom): ?Invoice
     {
         $tenant = $request->tenant;
@@ -248,8 +252,19 @@ class RoomChangeController extends Controller
             return null;
         }
 
-        $ratePerDay  = (float) $newRoom->daily_rent;
-        $days        = 1;
+        $ratePerDay = (float) $newRoom->daily_rent;
+
+        // Bill from TODAY → tenant's check-out.
+        // Fallback to +30 days if the tenant has no check-out set,
+        // matching the estimate shown on the tenant side.
+        $startDate = now()->startOfDay();
+        $endDate   = $tenant->check_out
+            ? \Carbon\Carbon::parse($tenant->check_out)->startOfDay()
+            : now()->addDays(30)->startOfDay();
+
+        // Guard against a check-out that is today or already in the past.
+        $days = max(1, (int) $startDate->diffInDays($endDate));
+
         $totalAmount = $ratePerDay * $days;
 
         return Invoice::create([
@@ -258,9 +273,10 @@ class RoomChangeController extends Controller
             'room_id'        => $newRoom->id,
             'tenant_name'    => $tenant->user->name ?? 'Unknown',
             'room_number'    => $newRoom->room_number,
-            'description'    => 'Room Change Fee — Moved to Room ' . $newRoom->room_number . ' (Ref: ' . $request->reference_no . ')',
-            'check_in'       => now(),
-            'check_out'      => now()->addDays($days),
+            'description'    => 'Room Change Fee — Moved to Room ' . $newRoom->room_number
+                                . ' (' . $days . ' day' . ($days === 1 ? '' : 's') . ', Ref: ' . $request->reference_no . ')',
+            'check_in'       => $startDate,
+            'check_out'      => $endDate,
             'rate_per_day'   => $ratePerDay,
             'days'           => $days,
             'total_amount'   => $totalAmount,

@@ -68,7 +68,7 @@
                                     ($tenant->user->name        ?? '') . ' ' . 
                                     ($tenant->user->email       ?? '') . ' ' . 
                                     ($tenant->user->phone       ?? '') . ' ' . 
-                                    ($tenant->room->room_number ?? '')
+                                    ($tenant->room?->room_number ?? '') // Added ?-> here
                                 ));
                             @endphp
                             <tr class="tenant-row border-b border-slate-100 last:border-0 hover:bg-slate-50/50 transition-colors"
@@ -96,7 +96,8 @@
                                     </div>
                                 </td>
                                 <td class="py-3.5 px-4 text-[13px] font-semibold text-slate-900 tracking-tight">
-                                    {{ $tenant->room->room_number ? 'Room ' . $tenant->room->room_number : '—' }}
+                                    {{-- 🔥 FIXED: Added ?-> here to prevent crashing when room is null --}}
+                                    {{ $tenant->room?->room_number ? 'Room ' . $tenant->room->room_number : '—' }}
                                 </td>
                                 <td class="py-3.5 px-4 text-[13.5px] font-bold text-slate-900 tracking-tight">
                                     ₱{{ number_format($tenant->rent_rate, 0) }}

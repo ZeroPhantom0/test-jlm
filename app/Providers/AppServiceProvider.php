@@ -3,6 +3,8 @@
 namespace App\Providers;
 
 use Illuminate\Support\ServiceProvider;
+use Illuminate\Auth\Events\Logout;
+use Illuminate\Support\Facades\Event;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -19,6 +21,12 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        //
+        // Instantly mark the user as "offline" when they click Logout
+        Event::listen(function (Logout $event) {
+            if ($event->user) {
+                cache()->forget('user_online_' . $event->user->id);
+                cache()->forget('admin_online_' . $event->user->id);
+            }
+        });
     }
 }
