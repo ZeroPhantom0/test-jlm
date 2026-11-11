@@ -1,5 +1,5 @@
 // resources/js/pages/Billing/PaymentModal.jsx
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Modal from "../../components/Modal";
 
 const csrf = () =>
@@ -26,61 +26,94 @@ export default function PaymentModal() {
     const [referenceNumber, setReferenceNumber] = useState("");
     const [receipt, setReceipt] = useState(null);
 
-    // NEW: OCR State
     const [ocrLoading, setOcrLoading] = useState(false);
     const [ocrError, setOcrError] = useState("");
 
-    // 1. Read default payload on mount AND listen for live updates
+    const invoiceRef = useRef(invoice);
+    useEffect(() => {
+        invoiceRef.current = invoice;
+    }, [invoice]);
+
+    // Hydrate from #payment-modal-root
     useEffect(() => {
         const el = document.getElementById("payment-modal-root");
+        if (!el) return;
 
-        // Initial load
-        if (el?.dataset?.invoice) {
+        const read = () => {
+            const raw = el.dataset?.invoice;
+            if (!raw) return;
             try {
-                setInvoice(JSON.parse(el.dataset.invoice));
+                setInvoice(JSON.parse(raw));
             } catch (e) {
                 console.error("Invalid default invoice JSON", e);
             }
-        }
-
-        // ── Live update listener (Triggered by your Blade script) ──
-        const handleLiveUpdate = (e) => {
-            // e.detail contains the fresh payload from the controller
-            if (e.detail) {
-                setInvoice(e.detail);
-            } else if (el?.dataset?.invoice) {
-                // Fallback: read from the DOM if detail is empty
-                try {
-                    setInvoice(JSON.parse(el.dataset.invoice));
-                } catch (err) {}
-            }
         };
 
+        read();
+
+        const handleLiveUpdate = (e) => {
+            if (e.detail) setInvoice(e.detail);
+            else read();
+        };
         window.addEventListener("billing:data-updated", handleLiveUpdate);
 
+        const mo = new MutationObserver((mutations) => {
+            for (const m of mutations) {
+                if (m.attributeName === "data-invoice") {
+                    read();
+                    break;
+                }
+            }
+        });
+        mo.observe(el, { attributes: true, attributeFilter: ["data-invoice"] });
+
         return () => {
-            window.removeEventListener(
-                "billing:data-updated",
-                handleLiveUpdate,
-            );
+            window.removeEventListener("billing:data-updated", handleLiveUpdate);
+            mo.disconnect();
         };
     }, []);
 
-    // 2. Global click listener
+    // Document-level listener for "Pay Now"
     useEffect(() => {
         const handler = (e) => {
-            // Open Payment Modal
-            const payBtn = e.target.closest(".open-payment-modal");
+            const target = e.target;
+            if (!(target instanceof Element)) return;
+
+            // If modal is open, we DO NOTHING. Let React's normal
+            // onClick handlers on the buttons inside the modal take over.
+            if (open || showCancel) return;
+
+            const payBtn = target.closest(".open-payment-modal");
             if (payBtn) {
                 e.preventDefault();
+                e.stopPropagation();
+
+                let payload = null;
                 const raw = payBtn.getAttribute("data-invoice");
-                if (raw) {
+                if (raw && raw.trim() !== "") {
                     try {
-                        setInvoice(JSON.parse(raw));
-                    } catch (err) {
-                        console.error("Invalid button invoice JSON", err);
+                        payload = JSON.parse(raw);
+                    } catch (err) {}
+                }
+
+                if (!payload) payload = invoiceRef.current;
+
+                if (!payload) {
+                    const root = document.getElementById("payment-modal-root");
+                    const rawRoot = root?.dataset?.invoice;
+                    if (rawRoot) {
+                        try {
+                            payload = JSON.parse(rawRoot);
+                        } catch {}
                     }
                 }
+
+                if (!payload) {
+                    setError("No invoice available to pay. Please refresh the page.");
+                    return;
+                }
+
+                setInvoice(payload);
                 setMethod("gcash");
                 setReferenceNumber("");
                 setReceipt(null);
@@ -91,10 +124,10 @@ export default function PaymentModal() {
                 return;
             }
 
-            // Open Cancel Modal
-            const cancelBtn = e.target.closest(".cancel-payment-btn");
+            const cancelBtn = target.closest(".cancel-payment-btn");
             if (cancelBtn) {
                 e.preventDefault();
+                e.stopPropagation();
                 const ref = cancelBtn.dataset.invoiceRef;
                 if (ref) {
                     setCancelTarget({ ref });
@@ -104,9 +137,21 @@ export default function PaymentModal() {
             }
         };
 
-        document.addEventListener("click", handler);
-        return () => document.removeEventListener("click", handler);
-    }, []);
+        document.addEventListener("click", handler, true);
+        return () => document.removeEventListener("click", handler, true);
+    }, [open, showCancel]);
+
+    // Handle Escape key to close
+    useEffect(() => {
+        const handleEscape = (e) => {
+            if (e.key === "Escape" && !saving) {
+                setOpen(false);
+                setShowCancel(false);
+            }
+        };
+        document.addEventListener("keydown", handleEscape);
+        return () => document.removeEventListener("keydown", handleEscape);
+    }, [saving]);
 
     const close = () => {
         if (!saving) {
@@ -115,6 +160,7 @@ export default function PaymentModal() {
             setOcrError("");
         }
     };
+
     const closeCancelModal = () => {
         if (cancelSaving) return;
         setShowCancel(false);
@@ -130,19 +176,18 @@ export default function PaymentModal() {
         }
     };
 
-    // NEW: OCR Upload Handler
     const handleReceiptUpload = async (file) => {
         if (!file) return;
 
         setReceipt(file);
         setOcrError("");
-
         setOcrLoading(true);
+        
         const fd = new FormData();
         fd.append("receipt", file);
 
         try {
-            const res = await fetch("/tenants/billing/parse-receipt", {
+            const res = await fetch("/tenants/dashboard/parse-receipt", {
                 method: "POST",
                 headers: {
                     Accept: "application/json",
@@ -156,13 +201,9 @@ export default function PaymentModal() {
             if (res.ok && data.success && data.reference_no) {
                 setReferenceNumber(data.reference_no);
             } else if (res.ok && data.success && !data.reference_no) {
-                setOcrError(
-                    "Reference number not detected. Please type it manually.",
-                );
+                setOcrError("Reference number not detected. Please type it manually.");
             } else {
-                setOcrError(
-                    "Could not scan receipt. Please type reference manually.",
-                );
+                setOcrError("Could not scan receipt. Please type reference manually.");
             }
         } catch (err) {
             console.error("OCR failed", err);
@@ -194,7 +235,7 @@ export default function PaymentModal() {
             fd.append("reference_number", referenceNumber || "");
             if (receipt) fd.append("receipt", receipt);
 
-            const res = await fetch("/tenants/billing/pay", {
+            const res = await fetch("/tenants/dashboard/pay", {
                 method: "POST",
                 headers: { Accept: "application/json", "X-CSRF-TOKEN": csrf() },
                 body: fd,
@@ -203,26 +244,16 @@ export default function PaymentModal() {
             if (!res.ok) {
                 if (data.errors) {
                     const first = Object.values(data.errors)[0]?.[0];
-                    throw new Error(
-                        first ||
-                            data.message ||
-                            `Validation failed (HTTP ${res.status}).`,
-                    );
+                    throw new Error(first || data.message || `Validation failed.`);
                 }
-                throw new Error(
-                    data.message || `Request failed (HTTP ${res.status}).`,
-                );
+                throw new Error(data.message || `Request failed.`);
             }
             close();
-
-            // Tell the page to refresh locally
             window.dispatchEvent(new Event("billing:refresh"));
         } catch (err) {
             setError(err.message);
         } finally {
             setSaving(false);
-
-            // REMOVE THE LOCK AFTER 2 SECONDS
             setTimeout(() => {
                 if (modalRoot) delete modalRoot.dataset.saving;
             }, 2000);
@@ -233,7 +264,7 @@ export default function PaymentModal() {
         if (!cancelTarget) return;
         setCancelSaving(true);
         try {
-            const res = await fetch("/tenants/billing/cancel", {
+            const res = await fetch("/tenants/dashboard/cancel", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -257,7 +288,6 @@ export default function PaymentModal() {
 
     return (
         <>
-            {/* Payment Modal */}
             {open && invoice && (
                 <Modal onClose={close} maxWidth="max-w-[480px]">
                     <div className="p-5 pb-4 flex items-center justify-between border-b border-slate-100">
@@ -268,6 +298,7 @@ export default function PaymentModal() {
                             onClick={close}
                             disabled={saving}
                             className="text-slate-400 hover:text-slate-700 text-lg disabled:opacity-50"
+                            type="button"
                         >
                             <i className="fa-solid fa-xmark"></i>
                         </button>
@@ -344,17 +375,13 @@ export default function PaymentModal() {
                                         className="fa-regular fa-copy text-sm cursor-pointer"
                                         onClick={() =>
                                             navigator.clipboard?.writeText(
-                                                (
-                                                    invoice.gcash_number || ""
-                                                ).replace(/\D/g, ""),
+                                                (invoice.gcash_number || "").replace(/\D/g, "")
                                             )
                                         }
                                     ></i>
                                 </div>
                                 <div className="text-[11px] text-blue-500 mt-1.5">
-                                    Send ₱
-                                    {Number(invoice.amount).toLocaleString()}{" "}
-                                    then enter the reference number below.
+                                    Send ₱{Number(invoice.amount).toLocaleString()} then enter the reference number below.
                                 </div>
                             </div>
                         )}
@@ -363,8 +390,7 @@ export default function PaymentModal() {
                             <div className="bg-green-50 rounded-lg p-3 text-[11px] text-green-800 flex gap-2.5">
                                 <i className="fa-solid fa-circle-info mt-0.5"></i>
                                 <span>
-                                    Over-the-counter payments will be marked as
-                                    paid by the admin when confirmed.
+                                    Over-the-counter payments will be marked as paid by the admin when confirmed.
                                 </span>
                             </div>
                         )}
@@ -372,65 +398,49 @@ export default function PaymentModal() {
                         {method !== "counter" && (
                             <>
                                 <div>
-                                    <label className="block text-xs font-semibold text-slate-800 mb-1.5">
-                                        Upload Receipt Screenshot{" "}
-                                        <span className="text-rose-500">*</span>
+                                    <label htmlFor="receipt-upload" className="block text-xs font-semibold text-slate-800 mb-1.5">
+                                        Upload Receipt Screenshot <span className="text-rose-500">*</span>
                                     </label>
                                     <label
                                         htmlFor="receipt-upload"
                                         className="border border-dashed border-slate-200 rounded-lg py-3.5 text-center text-slate-400 text-xs cursor-pointer block hover:bg-slate-50 transition"
                                     >
                                         <i className="fa-solid fa-arrow-up-from-bracket mr-1.5"></i>
-                                        {receipt
-                                            ? receipt.name
-                                            : "Click to upload screenshot (JPG/PNG/WEBP, ≤10 MB)"}
+                                        {receipt ? receipt.name : "Click to upload screenshot"}
                                     </label>
                                     <input
                                         id="receipt-upload"
                                         type="file"
                                         accept="image/*"
                                         onChange={(e) => {
-                                            const file =
-                                                e.target.files[0] || null;
-                                            if (file) {
-                                                handleReceiptUpload(file);
-                                            } else {
-                                                setReceipt(null);
-                                            }
+                                            const file = e.target.files[0] || null;
+                                            if (file) handleReceiptUpload(file);
+                                            else setReceipt(null);
                                         }}
                                         className="hidden"
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-semibold text-slate-800 mb-1.5">
-                                        Reference / Transaction Number{" "}
-                                        <span className="text-rose-500">*</span>
+                                    <label htmlFor="reference-number" className="block text-xs font-semibold text-slate-800 mb-1.5">
+                                        Reference / Transaction Number <span className="text-rose-500">*</span>
                                     </label>
                                     <input
+                                        id="reference-number"
+                                        name="reference_number"
                                         type="text"
                                         value={referenceNumber}
-                                        onChange={(e) =>
-                                            setReferenceNumber(e.target.value)
-                                        }
-                                        placeholder={
-                                            method === "gcash"
-                                                ? "e.g. GC-20260323-12345"
-                                                : "e.g. BT-20260323-78901"
-                                        }
+                                        onChange={(e) => setReferenceNumber(e.target.value)}
+                                        placeholder={method === "gcash" ? "e.g. GC-20260323-12345" : "e.g. BT-20260323-78901"}
                                         className="w-full border border-slate-200 rounded-lg px-3.5 py-2.5 text-[13px] outline-none focus:border-blue-400"
                                     />
-                                    {/* NEW: OCR Loading/Error Indicators */}
                                     {ocrLoading && (
                                         <div className="flex items-center gap-1.5 text-[11px] text-blue-600 mt-1">
-                                            <i className="fa-solid fa-spinner fa-spin"></i>
-                                            Scanning receipt for reference
-                                            number...
+                                            <i className="fa-solid fa-spinner fa-spin"></i> Scanning receipt...
                                         </div>
                                     )}
                                     {ocrError && (
                                         <div className="flex items-center gap-1.5 text-[11px] text-amber-600 mt-1">
-                                            <i className="fa-solid fa-circle-exclamation"></i>
-                                            {ocrError}
+                                            <i className="fa-solid fa-circle-exclamation"></i> {ocrError}
                                         </div>
                                     )}
                                 </div>
@@ -441,7 +451,6 @@ export default function PaymentModal() {
                             <i className="fa-solid fa-circle-info mt-0.5"></i>
                             <span>
                                 Your payment will be reviewed by the admin.
-                                You'll be notified once verified.
                             </span>
                         </div>
                     </div>
@@ -451,6 +460,7 @@ export default function PaymentModal() {
                             onClick={close}
                             disabled={saving}
                             className="text-slate-500 text-[13px] font-semibold px-4 py-2.5 disabled:opacity-50"
+                            type="button"
                         >
                             Cancel
                         </button>
@@ -459,16 +469,13 @@ export default function PaymentModal() {
                             disabled={saving}
                             className="bg-[#02122c] hover:bg-[#0d2347] disabled:opacity-50 text-white px-5 py-2.5 rounded-lg text-[13px] font-semibold inline-flex items-center gap-2"
                         >
-                            <i
-                                className={`fa-solid ${saving ? "fa-spinner fa-spin" : "fa-check"}`}
-                            ></i>
+                            <i className={`fa-solid ${saving ? "fa-spinner fa-spin" : "fa-check"}`}></i>
                             {saving ? "Submitting…" : "Submit Payment"}
                         </button>
                     </div>
                 </Modal>
             )}
 
-            {/* Cancel Confirmation Modal */}
             {showCancel && cancelTarget && (
                 <Modal onClose={closeCancelModal} maxWidth="max-w-[460px]">
                     <div className="p-5 pb-4 flex items-center justify-between border-b border-slate-100 shrink-0">
@@ -479,6 +486,7 @@ export default function PaymentModal() {
                             onClick={closeCancelModal}
                             disabled={cancelSaving}
                             className="text-slate-400 hover:text-slate-700 text-lg disabled:opacity-50"
+                            type="button"
                         >
                             <i className="fa-solid fa-xmark"></i>
                         </button>
@@ -500,9 +508,7 @@ export default function PaymentModal() {
                         <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-left">
                             <p className="text-[12px] text-amber-800 leading-snug">
                                 <i className="fa-solid fa-circle-info mr-1"></i>
-                                This will remove the uploaded proof and you will
-                                need to submit a new payment request.{" "}
-                                <strong>This action cannot be undone.</strong>
+                                This will remove the uploaded proof and you will need to submit a new payment request. <strong>This action cannot be undone.</strong>
                             </p>
                         </div>
                     </div>
@@ -512,6 +518,7 @@ export default function PaymentModal() {
                             onClick={closeCancelModal}
                             disabled={cancelSaving}
                             className="text-slate-600 text-[13.5px] font-semibold px-4 py-2 disabled:opacity-50"
+                            type="button"
                         >
                             Keep Payment
                         </button>
@@ -519,16 +526,15 @@ export default function PaymentModal() {
                             onClick={confirmCancelPayment}
                             disabled={cancelSaving}
                             className="bg-rose-500 hover:bg-rose-600 disabled:opacity-50 text-white px-5 py-2.5 rounded-lg text-[13.5px] font-semibold inline-flex items-center gap-2 transition"
+                            type="button"
                         >
                             {cancelSaving ? (
                                 <>
-                                    <i className="fa-solid fa-spinner fa-spin"></i>
-                                    Cancelling…
+                                    <i className="fa-solid fa-spinner fa-spin"></i> Cancelling…
                                 </>
                             ) : (
                                 <>
-                                    <i className="fa-solid fa-ban"></i>
-                                    Yes, Cancel
+                                    <i className="fa-solid fa-ban"></i> Yes, Cancel
                                 </>
                             )}
                         </button>

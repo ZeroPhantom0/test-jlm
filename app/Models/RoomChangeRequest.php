@@ -149,6 +149,11 @@ class RoomChangeRequest extends Model
             'reason'         => $this->reason,
             'admin_notes'    => $this->admin_notes ?? '',
             'created_at'     => $this->created_at?->format('M d, Y'),
+            'payment_reference' => $this->reference_no, // Assuming the reference number is passed here
+            'payment_amount'    => $this->total_amount ?? 0,
+            'payment_proof_url' => $this->proof_of_payment 
+                ? asset('storage/' . $this->proof_of_payment) 
+                : null,
         ];
     }
 }

@@ -3,32 +3,47 @@
     $user = auth()->user();
     $profilePic = $user?->personalInformation?->profile_picture ?? $user?->profile_picture;
     $avatarUrl = $profilePic
-        ? (str_starts_with($profilePic, 'http')
-            ? $profilePic
-            : asset('storage/' . $profilePic))
+        ? (str_starts_with($profilePic, 'http') ? $profilePic : asset('storage/' . $profilePic))
         : null;
     $isTenant = \App\Models\Tenant::isApproved();
 
+    $hasPendingReservation = false;
+    $hasUnpaidInvoice = false;
+    if ($user) {
+        $hasPendingReservation = \App\Models\Reservation::where('user_id', $user->id)
+            ->whereIn('status', ['Pending'])
+            ->exists();
+
+        $tenantId = $user->tenant?->id;
+        if ($tenantId) {
+            $hasUnpaidInvoice = \App\Models\Invoice::where('tenant_id', $tenantId)
+                ->whereIn('status', ['Unpaid', 'Partial', 'Overdue'])
+                ->exists();
+        }
+    }
+
     $headerProps = json_encode([
-        'title' => $pageTitle ?? 'Dashboard',
-        'userName' => $user?->personalInformation?->full_name ?? ($user?->name ?? 'Tenant'),
-        'userRole' => $isTenant ? 'Tenant' : 'New Tenant',
+        'title'     => $pageTitle ?? 'Dashboard',
+        'userName'  => $user?->personalInformation?->full_name ?? ($user?->name ?? 'Tenant'),
+        'userRole'  => $isTenant ? 'Tenant' : 'New Tenant',
         'userEmail' => $user?->email ?? '',
-        'avatar' => $avatarUrl,
-        'isTenant' => $isTenant,
+        'avatar'    => $avatarUrl,
+        'isTenant'  => $isTenant,
     ]);
 
     $broadcastConfig = [
-        'key' => env('PUSHER_APP_KEY', ''),
+        'key'     => env('PUSHER_APP_KEY', ''),
         'cluster' => env('PUSHER_APP_CLUSTER', 'ap1'),
     ];
 
     $sidebarProps = json_encode([
-        'active'   => $active ?? 'dashboard',
-        'userName' => $user?->personalInformation?->full_name ?? ($user?->name ?? 'Tenant'),
-        'userRole' => $isTenant ? 'Tenant' : 'New Tenant',
-        'avatar'   => $avatarUrl,
-        'isTenant' => $isTenant,
+        'active'               => $active ?? 'dashboard',
+        'userName'             => $user?->personalInformation?->full_name ?? ($user?->name ?? 'Tenant'),
+        'userRole'             => $isTenant ? 'Tenant' : 'New Tenant',
+        'avatar'               => $avatarUrl,
+        'isTenant'             => $isTenant,
+        'hasActiveReservation' => ($hasPendingReservation || $hasUnpaidInvoice),
+        'hasPastReservations'  => $isTenant ? true : false,
     ]);
 @endphp
 
@@ -66,8 +81,8 @@
     <div id="mobile-sidebar-overlay" class="fixed inset-0 bg-slate-900/50 z-[999] hidden md:hidden"></div>
 
     {{-- SIDEBAR (React) --}}
-    <div 
-        id="tenant-sidebar-root" 
+    <div
+        id="tenant-sidebar-root"
         data-props="{!! htmlspecialchars($sidebarProps, ENT_QUOTES, 'UTF-8') !!}"
     ></div>
 
@@ -82,7 +97,6 @@
         </main>
     </div>
 
-    @stack('scripts')
 </body>
 
 </html>

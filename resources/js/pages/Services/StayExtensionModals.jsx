@@ -41,6 +41,12 @@ export default function StayExtensionModals() {
     const [minRequestedDate, setMinRequestedDate] = useState("");
     const [dailyRent, setDailyRent] = useState(0);
 
+    // OCR & Upload State
+    const [ocrLoading, setOcrLoading] = useState(false);
+    const [ocrError, setOcrError] = useState("");
+    const [receipt, setReceipt] = useState(null);
+    const [referenceNo, setReferenceNo] = useState("");
+
     // Form state
     const [form, setForm] = useState({
         current_lease_end: "",
@@ -114,13 +120,14 @@ export default function StayExtensionModals() {
                     requested_lease_end: "",
                     reason: "",
                 });
+                setReceipt(null);
+                setReferenceNo('');
+                setOcrError('');
                 setShowSubmit(true);
                 return;
             }
 
-            const viewBtn = e.target.closest(
-                ".view-stay-extension-details-btn",
-            );
+            const viewBtn = e.target.closest(".view-stay-extension-details-btn");
             if (viewBtn) {
                 const id = String(viewBtn.dataset.requestId);
                 const data = requestsData[id];
@@ -151,6 +158,51 @@ export default function StayExtensionModals() {
         setForm((f) => ({ ...f, [key]: value }));
 
     // ============================================================
+    // OCR Receipt Upload
+    // ============================================================
+    const handleReceiptUpload = async (file) => {
+        if (!file) return;
+
+        setReceipt(file);
+        setOcrError("");
+        setOcrLoading(true);
+
+        const fd = new FormData();
+        fd.append("receipt", file);
+
+        try {
+            const res = await fetch("/tenants/billing/parse-receipt", {
+                method: "POST",
+                headers: {
+                    Accept: "application/json",
+                    "X-CSRF-TOKEN": csrf(),
+                },
+                body: fd,
+            });
+
+            const data = await res.json().catch(() => ({}));
+
+            if (res.ok && data.success && data.reference_no) {
+                setReferenceNo(data.reference_no);
+            } else if (res.ok && data.success && !data.reference_no) {
+                setOcrError("Reference number not detected. Please type it manually.");
+            } else {
+                setOcrError("Could not scan receipt. Please type reference manually.");
+            }
+        } catch (err) {
+            console.error("OCR failed", err);
+            setOcrError("OCR service unavailable. Please type manually.");
+        } finally {
+            setOcrLoading(false);
+        }
+    };
+
+    const handleCopyGCash = () => {
+        navigator.clipboard?.writeText("0917-123-4567");
+        alert("GCash number copied!");
+    };
+
+    // ============================================================
     // Submit
     // ============================================================
     const handleSubmit = async (e) => {
@@ -162,26 +214,35 @@ export default function StayExtensionModals() {
         }
 
         if (minRequestedDate && form.requested_lease_end < minRequestedDate) {
-            alert(
-                "The requested lease end must be after your current check-out date.",
-            );
+            alert("The requested lease end must be after your current check-out date.");
+            return;
+        }
+
+        if (!referenceNo.trim()) {
+            alert('Please enter the GCash reference number.');
+            return;
+        }
+        if (!receipt) {
+            alert('Please upload your payment proof.');
             return;
         }
 
         setSaving(true);
         try {
+            const formData = new FormData();
+            formData.append('current_lease_end', form.current_lease_end);
+            formData.append('requested_lease_end', form.requested_lease_end);
+            formData.append('reason', form.reason);
+            formData.append('reference_no', referenceNo);
+            if (receipt) formData.append('receipt', receipt);
+
             const res = await fetch("/tenants/services/stay-extension", {
                 method: "POST",
                 headers: {
-                    "Content-Type": "application/json",
-                    Accept: "application/json",
+                    "Accept": "application/json",
                     "X-CSRF-TOKEN": csrf(),
                 },
-                body: JSON.stringify({
-                    current_lease_end: form.current_lease_end,
-                    requested_lease_end: form.requested_lease_end,
-                    reason: form.reason,
-                }),
+                body: formData,
             });
             const data = await res.json();
             if (!res.ok)
@@ -264,6 +325,12 @@ export default function StayExtensionModals() {
     };
 
     const estimate = computeEstimate();
+
+    const receiptUrl = request?.payment_proof_url
+        ? (request.payment_proof_url.startsWith('http') 
+            ? request.payment_proof_url 
+            : `/storage/${request.payment_proof_url}`)
+        : null;
 
     return (
         <>
@@ -355,39 +422,126 @@ export default function StayExtensionModals() {
                                     </div>
                                 </div>
 
-                                {/* ── BILLING ESTIMATE (below Date, above Reason) ── */}
+                                {/* ── SUMMARY OF CHARGES ── */}
                                 {estimate && (
-                                    <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
-                                        <div className="flex items-center gap-2 text-[13px] font-bold text-amber-800 mb-2.5">
-                                            <i className="fa-solid fa-receipt"></i>
-                                            Estimated Extension Bill
+                                    <div className="bg-[#f4f7fc] border border-blue-100 rounded-xl p-4 mt-2">
+                                        <div className="flex items-center gap-2 text-[14px] font-bold text-slate-800 mb-3">
+                                            <i className="fa-solid fa-peso-sign"></i>
+                                            Summary of Charges
                                         </div>
 
-                                        <div className="flex flex-col gap-1.5 text-[12.5px] text-slate-700">
-                                            <div className="flex justify-between">
-                                                <span className="text-slate-500">Daily rent</span>
-                                                <span className="font-semibold">{formatMoney(estimate.rate)} / day</span>
-                                            </div>
-                                            <div className="flex justify-between">
-                                                <span className="text-slate-500">
-                                                    Days (today → {new Date(estimate.requestedDateStr).toLocaleDateString('en-PH', {
-                                                        month: 'short', day: 'numeric', year: 'numeric',
-                                                    })})
-                                                </span>
-                                                <span className="font-semibold">
-                                                    {estimate.days} day{estimate.days === 1 ? '' : 's'}
-                                                </span>
-                                            </div>
-                                            <div className="flex justify-between border-t border-amber-200 pt-1.5 mt-1">
-                                                <span className="font-bold text-slate-900">Total estimate</span>
-                                                <span className="font-bold text-amber-800">{formatMoney(estimate.total)}</span>
-                                            </div>
+                                        <div className="flex justify-between text-[12px] text-slate-700 mb-2">
+                                            <span>Room Rate</span>
+                                            <strong>{formatMoney(estimate.rate)} / day</strong>
+                                        </div>
+                                        
+                                        <div className="flex justify-between text-[12px] text-slate-700 mb-2">
+                                            <span>
+                                                {formatMoney(estimate.rate)} × {estimate.days} day{estimate.days === 1 ? '' : 's'}
+                                            </span>
+                                            <strong>{formatMoney(estimate.total)}</strong>
                                         </div>
 
-                                        <p className="text-[11px] text-amber-700 mt-2 leading-snug">
-                                            <i className="fa-solid fa-circle-info mr-1"></i>
-                                            This is an estimate based on today's date until your requested end date. Final billing is confirmed by the admin upon approval.
+                                        <div className="flex justify-between text-[14px] font-extrabold text-slate-900 border-t border-slate-300 pt-2.5 mt-2.5">
+                                            <span>Total Charges:</span>
+                                            <strong>{formatMoney(estimate.total)}</strong>
+                                        </div>
+                                        
+                                        <div className="flex justify-between text-[12px] text-slate-700 mt-2">
+                                            <span>Full Payment:</span>
+                                            <strong>{formatMoney(estimate.total)}</strong>
+                                        </div>
+                                        
+                                        <div className="flex justify-between text-[14px] font-extrabold text-slate-900 mt-1.5">
+                                            <span>Remaining Balance:</span>
+                                            <strong>₱0.00</strong>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* ── PAYMENT VERIFICATION REQUIRED ── */}
+                                {estimate && (
+                                    <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mt-2">
+                                        <div className="flex items-center gap-2 text-[14px] font-bold text-amber-800 mb-2.5">
+                                            <i className="fa-solid fa-mobile-screen-button"></i>
+                                            Payment Verification Required
+                                        </div>
+                                        <p className="text-[12px] text-amber-700 mb-3">
+                                            Pay via GCash to secure your stay extension
                                         </p>
+
+                                        <div className="flex justify-between text-[12px] mb-1.5">
+                                            <span className="text-amber-700">Account Name:</span>
+                                            <strong className="text-amber-900">Leah Agujar</strong>
+                                        </div>
+                                        <div className="flex justify-between text-[12px] mb-3">
+                                            <span className="text-amber-700">GCash Number:</span>
+                                            <strong className="text-amber-900">0917-123-4567</strong>
+                                        </div>
+
+                                        <button
+                                            type="button"
+                                            onClick={handleCopyGCash}
+                                            className="w-full bg-orange-500 hover:bg-orange-600 text-white rounded-lg py-2.5 text-[13px] font-bold flex items-center justify-center gap-2 mb-3 transition"
+                                        >
+                                            <i className="fa-regular fa-copy"></i>
+                                            Copy GCash Number
+                                        </button>
+
+                                        <label className="border border-dashed border-amber-300 rounded-lg p-3 flex items-center gap-3 bg-white cursor-pointer mb-2">
+                                            <span className="bg-white border border-amber-300 px-3 py-1.5 rounded-md text-[12px] font-bold text-amber-700">
+                                                Choose File
+                                            </span>
+                                            <span className="text-[12px] text-slate-400">
+                                                {receipt ? receipt.name : "No file chosen"}
+                                            </span>
+                                            <input
+                                                type="file"
+                                                accept="image/*"
+                                                onChange={(e) => {
+                                                    const file = e.target.files[0] || null;
+                                                    if (file) handleReceiptUpload(file);
+                                                    else setReceipt(null);
+                                                }}
+                                                className="hidden"
+                                            />
+                                        </label>
+
+                                        <div className="flex items-center gap-1.5 text-[11px] text-amber-700 mb-3">
+                                            <i className="fa-solid fa-arrow-up-from-bracket"></i>
+                                            Upload a screenshot of your GCash payment receipt
+                                        </div>
+
+                                        <div className="mb-3">
+                                            <label className="block text-[12px] font-semibold text-amber-800 mb-1.5">
+                                                GCash Reference Number <span className="text-rose-500">*</span>
+                                            </label>
+                                            <input
+                                                type="text"
+                                                value={referenceNo}
+                                                onChange={(e) => setReferenceNo(e.target.value)}
+                                                placeholder="e.g. GC-20260401-12345"
+                                                className="w-full bg-white border border-amber-200 rounded-lg px-3 py-2.5 text-[13px] outline-none focus:border-amber-400"
+                                            />
+                                            {ocrLoading && (
+                                                <div className="flex items-center gap-1.5 text-[11px] text-blue-600 mt-1">
+                                                    <i className="fa-solid fa-spinner fa-spin"></i>
+                                                    Scanning receipt for reference number...
+                                                </div>
+                                            )}
+                                            {ocrError && (
+                                                <div className="flex items-center gap-1.5 text-[11px] text-amber-600 mt-1">
+                                                    <i className="fa-solid fa-circle-exclamation"></i>
+                                                    {ocrError}
+                                                </div>
+                                            )}
+                                        </div>
+                                        <div className="bg-amber-100 rounded-lg p-3 flex gap-2 text-[12px] text-amber-900 leading-relaxed">
+                                            <i className="fa-solid fa-circle-info mt-0.5"></i>
+                                            <span>
+                                                <strong>Important:</strong> You must upload your payment proof before submitting your stay extension request. Your payment and request will be reviewed by the admin.
+                                            </span>
+                                        </div>
                                     </div>
                                 )}
 
@@ -523,6 +677,70 @@ export default function StayExtensionModals() {
                                     {request.reason}
                                 </div>
                             </div>
+
+                            {/* PAYMENT DETAILS SECTION */}
+                            <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+                                <div className="flex items-center justify-between mb-3 border-b border-slate-100 pb-2">
+                                    <h4 className="text-[12px] font-bold text-slate-800 flex items-center gap-1.5">
+                                        <i className="fa-solid fa-receipt text-slate-400"></i>
+                                        Payment Details
+                                    </h4>
+                                    <span className="text-[11px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md">
+                                        ₱{Number(request.payment_amount || 0).toLocaleString()}
+                                    </span>
+                                </div>
+                                <div className="grid grid-cols-2 gap-3 mb-3">
+                                    <div>
+                                        <div className="text-[10px] text-slate-400 uppercase font-semibold mb-0.5">GCash Ref No.</div>
+                                        <div className="text-[13px] font-bold text-slate-800">{request.payment_reference || "—"}</div>
+                                    </div>
+                                    <div>
+                                        <div className="text-[10px] text-slate-400 uppercase font-semibold mb-0.5">Status</div>
+                                        <div className="text-[13px] font-bold text-slate-800">{request.status}</div>
+                                    </div>
+                                </div>
+                                
+                                {/* Receipt Image Viewer */}
+                                {receiptUrl ? (
+                                    <div>
+                                        <div className="text-[10px] text-slate-400 uppercase font-semibold mb-1.5">Attached Receipt</div>
+                                        <a 
+                                            href={receiptUrl} 
+                                            target="_blank" 
+                                            rel="noopener noreferrer"
+                                            className="block relative rounded-lg overflow-hidden border border-slate-200 group"
+                                        >
+                                            <img 
+                                                src={receiptUrl} 
+                                                alt="Payment Receipt" 
+                                                className="w-full h-32 object-cover group-hover:opacity-90 transition"
+                                            />
+                                            <div className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 group-hover:opacity-100 transition">
+                                                <span className="bg-white text-slate-800 text-[11px] font-bold px-3 py-1.5 rounded-lg shadow-lg">
+                                                    <i className="fa-solid fa-expand mr-1"></i> View Full Image
+                                                </span>
+                                            </div>
+                                        </a>
+                                    </div>
+                                ) : (
+                                    <div className="text-[12px] text-slate-400 italic text-center py-2 bg-slate-50 rounded-lg">
+                                        No receipt image uploaded.
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Rejection Reason */}
+                            {request.status === "Rejected" && request.admin_notes && (
+                                <div className="bg-rose-50 border border-rose-200 rounded-xl p-4">
+                                    <div className="flex items-center gap-2 text-[13px] font-bold text-rose-800 mb-2">
+                                        <i className="fa-regular fa-circle-xmark"></i>
+                                        Rejection Reason
+                                    </div>
+                                    <p className="text-[12px] text-rose-700 leading-relaxed whitespace-pre-wrap">
+                                        {request.admin_notes}
+                                    </p>
+                                </div>
+                            )}
                         </div>
 
                         <div className="p-4 sm:p-5 border-t border-slate-100 flex justify-end items-center gap-2 shrink-0 flex-wrap">

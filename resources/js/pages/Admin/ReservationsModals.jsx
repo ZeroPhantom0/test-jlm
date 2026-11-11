@@ -35,7 +35,6 @@ export default function ReservationsModals() {
 
         const handleOpenApprove = (e) => {
             const id = e.detail.id;
-            // Read from the state updater to ensure we have the latest data
             setReservationsData((prev) => {
                 const found = Object.values(prev).find((r) => r.id == id);
                 if (found) {
@@ -90,7 +89,6 @@ export default function ReservationsModals() {
         };
     }, []);
 
-    // sendAction and remaining code stays the same...
     const sendAction = useCallback(async (id, action, body = {}) => {
         if (id == null || id === "" || id === "undefined") {
             throw new Error("Missing reservation id.");
@@ -216,7 +214,6 @@ export default function ReservationsModals() {
             setShowApprove(false);
             setActionTarget(null);
             closeModal();
-            // Dispatch instantly
             window.dispatchEvent(new Event("reservation:refresh"));
         } catch (err) {
             alert(err.message);
@@ -238,7 +235,6 @@ export default function ReservationsModals() {
             setShowReject(false);
             setActionTarget(null);
             closeModal();
-            // Dispatch instantly
             window.dispatchEvent(new Event("reservation:refresh"));
         } catch (err) {
             alert(err.message);
@@ -292,6 +288,26 @@ export default function ReservationsModals() {
     }
 
     const isPending = data.statusText === "Pending";
+    const isBarkada = data.desiredRoom?.includes("Barkada") || data.requestDetails?.includes("Barkada Occupants");
+
+    // Parse the request details if it's a Barkada room to display nicely
+    let displayNotes = data.requestDetails || "";
+    let barkadaOccupants = null;
+    let barkadaCompanions = null;
+
+    if (isBarkada && displayNotes.includes("[Barkada Occupants]:")) {
+        const parts = displayNotes.split("[Barkada Occupants]:");
+        displayNotes = parts[0].trim();
+        const detailsStr = parts[1];
+        
+        const totalMatch = detailsStr.match(/Total Occupants:\s*(\d+)/);
+        const compMatch = detailsStr.match(/Companions:\s*(.*)/);
+        
+        if (totalMatch) barkadaOccupants = totalMatch[1];
+        if (compMatch && compMatch[1].trim()) {
+            barkadaCompanions = compMatch[1].trim().split(',').map(s => s.trim());
+        }
+    }
 
     return (
         <>
@@ -394,18 +410,54 @@ export default function ReservationsModals() {
 
                     {/* Request Details */}
                     <div className="bg-slate-50 rounded-xl p-4">
-                        <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
+                        <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">
                             Request Details
                         </div>
-                        <p className="text-[13px] text-slate-700 leading-snug">
-                            {data.requestDetails || "—"}
-                        </p>
-                        {data.hasCompanion && (
-                            <p className="text-[11px] text-slate-500 mt-1.5">
+                        
+                        {displayNotes && (
+                            <p className="text-[13px] text-slate-700 leading-snug mb-3">
+                                {displayNotes}
+                            </p>
+                        )}
+
+                        {/* Professional Barkada Breakdown */}
+                        {isBarkada && barkadaOccupants ? (
+                            <div className="bg-white border border-slate-200 rounded-lg p-3.5 shadow-sm">
+                                <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-100">
+                                    <div className="flex items-center gap-2 text-[12px] font-bold text-slate-800">
+                                        <i className="fa-solid fa-users text-blue-600"></i>
+                                        Barkada Occupants
+                                    </div>
+                                    <span className="bg-blue-50 text-blue-700 text-[11px] font-bold px-2 py-0.5 rounded-full">
+                                        Total: {barkadaOccupants} pax
+                                    </span>
+                                </div>
+                                
+                                <div className="mb-2">
+                                    <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Lead Guest</span>
+                                    <div className="text-[13px] text-slate-800 font-medium">{data.name}</div>
+                                </div>
+
+                                {barkadaCompanions && barkadaCompanions.length > 0 && (
+                                    <div>
+                                        <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Companions</span>
+                                        <ul className="mt-1 space-y-1.5">
+                                            {barkadaCompanions.map((comp, idx) => (
+                                                <li key={idx} className="flex items-center gap-2 text-[13px] text-slate-700">
+                                                    <i className="fa-solid fa-circle text-[4px] text-slate-300"></i>
+                                                    {comp}
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                )}
+                            </div>
+                        ) : data.hasCompanion ? (
+                            <p className="text-[11px] text-slate-500 mt-1.5 bg-white border border-slate-100 p-2 rounded inline-block">
                                 <i className="fa-solid fa-user-group mr-1"></i>{" "}
                                 With companion (+₱150)
                             </p>
-                        )}
+                        ) : null}
                     </div>
 
                     {/* Charges */}

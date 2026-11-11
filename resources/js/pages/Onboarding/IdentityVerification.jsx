@@ -222,7 +222,9 @@ export default function IdentityVerification({ identity }) {
 
                         {/* ID TYPE */}
                         <div className="identity-form-group">
-                            <label htmlFor="idType">Valid ID Type *</label>
+                            <label htmlFor="idType" placeholder="Choose ID Type">
+                                Valid ID Type *
+                            </label>
                             <div className="identity-select-wrapper">
                                 <select
                                     id="idType"
@@ -230,7 +232,6 @@ export default function IdentityVerification({ identity }) {
                                     value={data.id_type}
                                     onChange={(e) => setData('id_type', e.target.value)}
                                 >
-                                    <option value="">Choose ID Type</option>
                                     <option value="passport">Passport</option>
                                     <option value="drivers-license">Driver's License</option>
                                     <option value="national-id">National ID</option>
@@ -248,7 +249,7 @@ export default function IdentityVerification({ identity }) {
 
                         {/* ID FRONT */}
                         <div className="identity-form-group">
-                            <label>Upload Valid ID (Front) *</label>
+                            <label>Upload Valid ID (Front Only or Front & Back) *</label>
                             <button
                                 type="button"
                                 className="upload-box"
@@ -291,7 +292,7 @@ export default function IdentityVerification({ identity }) {
 
                         {/* ID BACK */}
                         <div className="identity-form-group">
-                            <label>Upload Valid ID (Back) or Selfie with ID</label>
+                            <label>Upload a Selfie with the ID *</label>
                             <button
                                 type="button"
                                 className="upload-box"

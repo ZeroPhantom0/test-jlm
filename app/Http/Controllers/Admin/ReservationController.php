@@ -239,14 +239,24 @@ class ReservationController extends Controller
         $settledInvoice = null;
 
         DB::transaction(function () use ($request, $reservation, $validated, &$settledInvoice) {
+
+            // 1. Ensure we have a valid bed ID format for the Room model to read
+            $bedId = $reservation->room_bed_id;
+            if (in_array($reservation->room?->room_type, ['Bedspace', 'Barkada Room']) && !$bedId) {
+                // If the admin didn't select a bed, assign the first available one
+                $availableBed = collect($reservation->room->bed_slots)->where('status', 'Available')->first();
+                $bedId = $availableBed ? $availableBed['id'] : 'B1-U'; // fallback
+            }
+
             $reservation->update([
                 'status'       => 'Approved',
+                'room_bed_id'  => $bedId,
                 'admin_notes'  => $validated['admin_notes'] ?? $reservation->admin_notes,
                 'processed_by' => $request->user()->id,
                 'processed_at' => now(),
             ]);
 
-            // Since we guaranteed user_id exists above, Tenant::updateOrCreate will always have an ID
+            // Create/Update the Tenant
             $tenant = Tenant::updateOrCreate(
                 ['user_id' => $reservation->user_id],
                 [

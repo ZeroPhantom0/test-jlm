@@ -8,8 +8,11 @@ use App\Http\Controllers\Controller;
 use App\Models\StayExtensionRequest;
 use App\Models\Tenant;
 use App\Models\Reservation;
+use App\Models\Invoice;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Auth;
 
 class TenantStayExtensionController extends Controller
@@ -53,6 +56,9 @@ class TenantStayExtensionController extends Controller
         $roomNumber = $tenant?->room?->room_number ?? '—';
 
         $requestsForReact = $requests->mapWithKeys(function ($r) {
+            // Fetch the associated invoice to get payment info
+            $invoice = Invoice::where('description', 'like', '%' . $r->reference_no . '%')->first();
+
             return [
                 $r->id => [
                     'id'                  => $r->id,
@@ -66,6 +72,13 @@ class TenantStayExtensionController extends Controller
                     'submitted'           => $r->created_at?->format('M j, Y') ?? '—',
                     'reason'              => $r->reason,
                     'status'              => $r->status,
+                    'admin_notes'         => $r->admin_notes ?? '',
+                    // Payment details
+                    'payment_reference'   => $invoice?->receipt_no,
+                    'payment_amount'      => $invoice?->total_amount ?? 0,
+                    'payment_proof_url'   => $invoice?->receipt_path 
+                        ? asset('storage/' . $invoice->receipt_path) 
+                        : null,
                 ],
             ];
         })->toArray();
@@ -79,7 +92,7 @@ class TenantStayExtensionController extends Controller
             'requestsForReact',
             'hasApprovedReservation',
             'canRequestExtension',
-            'dailyRent' // ← passed to frontend
+            'dailyRent'
         ));
     }
 
@@ -128,6 +141,8 @@ class TenantStayExtensionController extends Controller
                 'after:' . $currentCheckOut->toDateString(),
             ],
             'reason'              => ['required', 'string'],
+            'reference_no'        => ['required', 'string', 'max:100'],
+            'receipt'             => ['required', 'file', 'mimes:png,jpg,jpeg,webp', 'max:10240'],
         ], [
             'requested_lease_end.after' =>
             'The requested lease end must be after your current check-out date ('
@@ -145,25 +160,70 @@ class TenantStayExtensionController extends Controller
             ], 422);
         }
 
-        $stayExtension = StayExtensionRequest::create([
-            'reference_no'        => StayExtensionRequest::generateReferenceNo(),
-            'tenant_id'           => $tenant->id,
-            'room_id'             => $tenant->room_id,
-            'current_lease_end'   => $currentCheckOut->toDateString(),
-            'requested_lease_end' => $validated['requested_lease_end'],
-            'extension_days'      => $extensionDays,
-            'reason'              => $validated['reason'],
-            'status'              => 'Pending',
-        ]);
+        // 1. Save the uploaded receipt
+        $receiptPath = $request->file('receipt')->store('reservations/' . $user->id, 'public');
 
-        // Notify admin bell — new request
-        event(new ServiceRequestUpdated('stay_extension', 'created', $stayExtension->id));
+        // 2. Calculate the Bill (Nights x Rate)
+        $ratePerDay = (float) ($tenant->rent_rate ?: ($tenant->room?->daily_rent ?? 0));
+        $totalAmount = $extensionDays * $ratePerDay;
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Stay extension request submitted successfully.',
-            'data'    => $stayExtension,
-        ]);
+        DB::beginTransaction();
+        try {
+            $stayExtension = StayExtensionRequest::create([
+                'reference_no'        => StayExtensionRequest::generateReferenceNo(),
+                'tenant_id'           => $tenant->id,
+                'room_id'             => $tenant->room_id,
+                'current_lease_end'   => $currentCheckOut->toDateString(),
+                'requested_lease_end' => $validated['requested_lease_end'],
+                'extension_days'      => $extensionDays,
+                'reason'              => $validated['reason'],
+                'status'              => 'Pending',
+            ]);
+
+            // 3. Create the Pending Invoice
+            Invoice::create([
+                'transaction_no' => Invoice::generateTransactionNo(),
+                'tenant_id'      => $tenant->id,
+                'room_id'        => $tenant->room_id,
+                'tenant_name'    => $user->name,
+                'room_number'    => $tenant->room?->room_number ?? 'N/A',
+                // Ensure #SE- is in the description
+                'description'    => 'Stay Extension Fee — +' . $extensionDays . ' day' . ($extensionDays === 1 ? '' : 's') . ' (Ref: #SE-' . $stayExtension->id . ')',
+                'check_in'       => $currentCheckOut,
+                'check_out'      => $validated['requested_lease_end'],
+                'rate_per_day'   => $ratePerDay,
+                'days'           => $extensionDays,
+                'total_amount'   => $totalAmount,
+                'amount_paid'    => $totalAmount, // Mark as paid so it shows in the table
+                'balance'        => 0,
+                'due_date'       => now()->toDateString(),
+                'payment_method' => 'GCash',
+                'status'         => 'Pending', // Pending Admin Verification
+                'receipt_no'     => $validated['reference_no'],
+                'receipt_path'   => $receiptPath,
+                'date_paid'      => now()->toDateString(),
+            ]);
+
+            DB::commit();
+
+            // Notify admin bell — new request
+            event(new ServiceRequestUpdated('stay_extension', 'created', $stayExtension->id));
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Stay extension request submitted successfully.',
+                'data'    => $stayExtension,
+            ]);
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            if (Storage::disk('public')->exists($receiptPath)) {
+                Storage::disk('public')->delete($receiptPath);
+            }
+            report($e);
+            return response()->json([
+                'message' => 'Failed to submit request: ' . $e->getMessage(),
+            ], 500);
+        }
     }
 
     public function data()
@@ -174,6 +234,8 @@ class TenantStayExtensionController extends Controller
         $requests = StayExtensionRequest::with('room')->where('tenant_id', $tenant?->id)->latest()->get();
 
         $requestsForReact = $requests->mapWithKeys(function ($r) {
+            $invoice = Invoice::where('description', 'like', '%' . $r->reference_no . '%')->first();
+
             return [
                 $r->id => [
                     'id' => $r->id,
@@ -185,6 +247,12 @@ class TenantStayExtensionController extends Controller
                     'submitted' => $r->created_at?->format('M j, Y') ?? '—',
                     'reason' => $r->reason,
                     'status' => $r->status,
+                    'admin_notes' => $r->admin_notes ?? '',
+                    'payment_reference' => $invoice?->receipt_no,
+                    'payment_amount'    => $invoice?->total_amount ?? 0,
+                    'payment_proof_url' => $invoice?->receipt_path 
+                        ? asset('storage/' . $invoice->receipt_path) 
+                        : null,
                 ],
             ];
         })->toArray();
@@ -215,9 +283,6 @@ class TenantStayExtensionController extends Controller
         ]);
     }
 
-    /**
-     * Cancel a pending stay extension request.
-     */
     public function cancel(StayExtensionRequest $stayExtensionRequest)
     {
         /** @var \App\Models\User $user */

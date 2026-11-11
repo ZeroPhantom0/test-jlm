@@ -83,7 +83,6 @@ export default function BillingModals() {
                 if (type === "edit") setShowEdit(true);
                 if (type === "view") setShowSummary(true);
                 if (type === "view-payment") setShowReceipt(true);
-                if (type === "remind") handleSendReminder(data);
                 if (type === "verify") setShowVerify(true);
                 if (type === "reject") {
                     setRejectNotes("");
@@ -96,7 +95,6 @@ export default function BillingModals() {
         const handleEdit = (e) => handleAction(e, "edit");
         const handleView = (e) => handleAction(e, "view");
         const handlePay = (e) => handleAction(e, "view-payment");
-        const handleRemind = (e) => handleAction(e, "remind");
         const handleVerify = (e) => handleAction(e, "verify");
         const handleReject = (e) => handleAction(e, "reject");
 
@@ -104,19 +102,14 @@ export default function BillingModals() {
         window.addEventListener("billing:edit", handleEdit);
         window.addEventListener("billing:view", handleView);
         window.addEventListener("billing:payment", handlePay);
-        window.addEventListener("billing:remind", handleRemind);
         window.addEventListener("billing:verify", handleVerify);
         window.addEventListener("billing:reject", handleReject);
 
         return () => {
-            window.removeEventListener(
-                "billing:data-updated",
-                handleLiveUpdate,
-            );
+            window.removeEventListener("billing:data-updated", handleLiveUpdate);
             window.removeEventListener("billing:edit", handleEdit);
             window.removeEventListener("billing:view", handleView);
             window.removeEventListener("billing:payment", handlePay);
-            window.removeEventListener("billing:remind", handleRemind);
             window.removeEventListener("billing:verify", handleVerify);
             window.removeEventListener("billing:reject", handleReject);
         };
@@ -130,23 +123,6 @@ export default function BillingModals() {
         setShowReject(false);
         setRejectNotes("");
         setInvoice(null);
-    };
-
-    const handleSendReminder = async (data) => {
-        if (!data.tn) return;
-        if (!confirm(`Send payment reminder to ${data.tenant}?`)) return;
-        try {
-            const res = await fetch(`/admin/billing/${data.tn}/remind`, {
-                method: "POST",
-                headers: { Accept: "application/json", "X-CSRF-TOKEN": csrf() },
-            });
-            const result = await res.json();
-            if (!res.ok)
-                throw new Error(result.message || "Failed to send reminder.");
-            alert(result.message || "Reminder sent.");
-        } catch (err) {
-            alert(err.message);
-        }
     };
 
     const handleSaveEdit = async (formData) => {
@@ -180,7 +156,7 @@ export default function BillingModals() {
         }
     };
 
-        const confirmVerify = async () => {
+    const confirmVerify = async () => {
         if (!invoice || !invoice.tn) return;
         setSaving(true);
         const modalRoot = document.getElementById("admin-billing-modals");
@@ -212,7 +188,7 @@ export default function BillingModals() {
             setSaving(false);
             setTimeout(() => {
                 if (modalRoot) delete modalRoot.dataset.saving;
-            }, 1000); // Reduced from 2000ms to 1000ms
+            }, 1000);
         }
     };
 
@@ -257,7 +233,7 @@ export default function BillingModals() {
             setSaving(false);
             setTimeout(() => {
                 if (modalRoot) delete modalRoot.dataset.saving;
-            }, 1000); // Reduced from 2000ms to 1000ms
+            }, 1000);
         }
     };
 
@@ -268,7 +244,6 @@ export default function BillingModals() {
     const statusBadgeClass =
         {
             Unpaid: "bg-amber-100 text-amber-700",
-            Overdue: "bg-rose-100 text-rose-600",
             Partial: "bg-yellow-100 text-yellow-700",
             Pending: "bg-blue-100 text-blue-600",
             Paid: "bg-green-100 text-green-600",
@@ -982,7 +957,6 @@ function EditInvoiceModal({ data, onClose, onSave, saving }) {
                             }`}
                         >
                             <option>Unpaid</option>
-                            <option>Overdue</option>
                             <option>Partial</option>
                             <option>Pending</option>
                             <option>Paid</option>

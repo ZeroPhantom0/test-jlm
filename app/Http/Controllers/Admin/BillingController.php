@@ -25,13 +25,13 @@ use Illuminate\Support\Facades\Storage;
 
 class BillingController extends Controller
 {
-    private const ACTIONABLE_STATUSES = ['Pending', 'Partial', 'Overdue', 'Unpaid'];
+    private const ACTIONABLE_STATUSES = ['Pending', 'Partial', 'Unpaid'];
 
     public function index(Request $request)
     {
-        $filters = [
-            'status' => $request->query('status'),
-        ];
+        $filters = ['status' => $request->query('status')];
+
+        $rejectedRefs = \App\Models\Reservation::where('status', 'Rejected')->pluck('reference_no')->toArray();
 
         $query = Invoice::query()->latest();
 
@@ -39,6 +39,10 @@ class BillingController extends Controller
             $query->where('status', $filters['status']);
         } else {
             $query->whereIn('status', static::ACTIONABLE_STATUSES);
+        }
+
+        foreach ($rejectedRefs as $ref) {
+            $query->where('description', 'NOT LIKE', "%{$ref}%");
         }
 
         $invoices = $query->paginate(50);
@@ -53,20 +57,22 @@ class BillingController extends Controller
                 'Paid'    => 'bg-green-100 text-green-600',
                 'Pending' => 'bg-blue-100 text-blue-600',
                 'Partial' => 'bg-yellow-100 text-yellow-700',
-                'Overdue' => 'bg-rose-100 text-rose-600',
                 default   => 'bg-amber-100 text-amber-700',
             };
             return $inv;
         });
 
+        $metricsQuery = Invoice::query();
+        foreach ($rejectedRefs as $ref) {
+            $metricsQuery->where('description', 'NOT LIKE', "%{$ref}%");
+        }
+
         $metrics = [
-            'collected' => Invoice::where('status', 'Paid')
+            'collected' => (clone $metricsQuery)->where('status', 'Paid')
                 ->whereMonth('date_paid', now()->month)
                 ->whereYear('date_paid', now()->year)
                 ->sum('amount_paid'),
-            'pending'   => Invoice::whereIn('status', ['Pending', 'Partial'])
-                ->sum('balance'),
-            'overdue'   => Invoice::where('status', 'Overdue')
+            'pending'   => (clone $metricsQuery)->whereIn('status', ['Pending', 'Partial', 'Unpaid'])
                 ->sum('balance'),
         ];
 
@@ -85,14 +91,9 @@ class BillingController extends Controller
         ));
     }
 
-    /**
-     * Live data endpoint for polling / Echo refresh.
-     * GET /admin/billing/data
-     */
     public function data(Request $request)
     {
         $status = $request->query('status');
-
         $query = Invoice::query()->latest();
 
         if (! empty($status)) {
@@ -101,15 +102,24 @@ class BillingController extends Controller
             $query->whereIn('status', static::ACTIONABLE_STATUSES);
         }
 
+        $rejectedRefs = \App\Models\Reservation::where('status', 'Rejected')->pluck('reference_no')->toArray();
+        foreach ($rejectedRefs as $ref) {
+            $query->where('description', 'NOT LIKE', "%{$ref}%");
+        }
+
         $invoices = $query->paginate(50);
 
+        $metricsQuery = Invoice::query();
+        foreach ($rejectedRefs as $ref) {
+            $metricsQuery->where('description', 'NOT LIKE', "%{$ref}%");
+        }
+
         $metrics = [
-            'collected' => Invoice::where('status', 'Paid')
+            'collected' => (clone $metricsQuery)->where('status', 'Paid')
                 ->whereMonth('date_paid', now()->month)
                 ->whereYear('date_paid', now()->year)
                 ->sum('amount_paid'),
-            'pending'   => Invoice::whereIn('status', ['Pending', 'Partial'])->sum('balance'),
-            'overdue'   => Invoice::where('status', 'Overdue')->sum('balance'),
+            'pending'   => (clone $metricsQuery)->whereIn('status', ['Pending', 'Partial', 'Unpaid'])->sum('balance'),
         ];
 
         $rows = $invoices->getCollection()->map(function (Invoice $inv) {
@@ -130,7 +140,6 @@ class BillingController extends Controller
                     'Paid'    => 'bg-green-100 text-green-600',
                     'Pending' => 'bg-blue-100 text-blue-600',
                     'Partial' => 'bg-yellow-100 text-yellow-700',
-                    'Overdue' => 'bg-rose-100 text-rose-600',
                     default   => 'bg-amber-100 text-amber-700',
                 },
             ];
@@ -141,198 +150,11 @@ class BillingController extends Controller
             ->map(fn($inv) => $this->reactPayload($inv))
             ->toArray();
 
-        return response()->json([
-            'rows'    => $rows,
-            'metrics' => $metrics,
-            'react'   => $reactMap,
-        ]);
+        return response()->json(['rows' => $rows, 'metrics' => $metrics, 'react' => $reactMap]);
     }
 
-    public function store(Request $request)
+    public function verifyPayment(Request $request, Invoice $invoice)
     {
-        return response()->json(['message' => 'Not implemented yet.'], 501);
-    }
-
-    public function show(Invoice $invoice)
-    {
-        return response()->json([
-            'success' => true,
-            'data'    => $invoice->load(['tenant', 'room']),
-            'react'   => $this->reactPayload($invoice),
-        ]);
-    }
-
-    public function destroy(Invoice $invoice)
-    {
-        // Optional: guard on paid invoices
-        if ($invoice->status === 'Paid') {
-            return response()->json(['message' => 'Cannot delete a paid invoice.'], 422);
-        }
-
-        // Archive proof-of-payment instead of deleting it.
-        if ($invoice->receipt_path) {
-            BillingService::archiveReceipt($invoice->receipt_path);
-        }
-
-        // Soft delete (SoftDeletes trait on Invoice model)
-        $invoice->delete();
-
-        event(new \App\Events\InvoiceUpdated('deleted', $invoice->id));
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Invoice archived (soft-deleted).',
-        ]);
-    }
-
-    public function markPaid(Request $request, Invoice $invoice)
-    {
-        if ($invoice->status === 'Paid') {
-            return response()->json(['message' => 'Invoice is already paid.'], 422);
-        }
-
-        $invoice->update([
-            'status'      => 'Paid',
-            'balance'     => 0,
-            'amount_paid' => $invoice->total_amount,
-            'date_paid'   => now()->toDateString(),
-            'verified_by' => $request->user()->id,
-            'verified_at' => now(),
-        ]);
-
-        event(new \App\Events\InvoiceUpdated('paid', $invoice->id));
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Invoice marked as paid.',
-            'invoice' => $invoice->fresh(),
-        ]);
-    }
-
-    public function update(Request $request, Invoice $invoice)
-    {
-        $validated = $request->validate([
-            'tenant_name'    => ['required', 'string', 'max:120'],
-            'room_number'    => ['required', 'string', 'max:50'],
-            'description'    => ['required', 'string', 'max:255'],
-            'check_in'       => ['nullable', 'string'],
-            'check_out'      => ['nullable', 'string'],
-            'rate_per_day'   => ['required', 'numeric', 'min:0'],
-            'days'           => ['required', 'integer', 'min:1'],
-            'amount_paid'    => ['required', 'numeric', 'min:0'],
-            'due_date'       => ['nullable', 'string'],
-            'payment_method' => ['required', 'in:Not Set,GCash,Over The Counter,Bank Transfer'],
-            'status'         => ['required', 'in:Unpaid,Overdue,Partial,Pending,Paid'],
-        ]);
-
-        $total   = round($validated['rate_per_day'] * $validated['days'], 2);
-        $paid    = (float) $validated['amount_paid'];
-        $balance = max(0, round($total - $paid, 2));
-
-        $status = $validated['status'];
-
-        if ($status === 'Paid' && $paid + 0.005 < $total) {
-            $status = $paid > 0 ? 'Partial' : 'Unpaid';
-        } elseif ($status !== 'Paid' && $total > 0 && $paid + 0.005 >= $total) {
-            $status = 'Paid';
-        }
-
-        $parseDate = function ($value) {
-            if (! $value || $value === '-') return null;
-            foreach (['M j, Y', 'Y-m-d', 'Y-m-d H:i:s'] as $fmt) {
-                try {
-                    $d = \Carbon\Carbon::createFromFormat($fmt, trim($value));
-                    if ($d !== false) return $d;
-                } catch (\Throwable $e) {
-                }
-            }
-            try {
-                return \Carbon\Carbon::parse($value);
-            } catch (\Throwable $e) {
-                return null;
-            }
-        };
-
-        $parsedCheckIn  = $parseDate($validated['check_in'])  ?? $invoice->check_in;
-        $parsedCheckOut = $parseDate($validated['check_out']) ?? $invoice->check_out;
-
-        $computedDueDate = $parseDate($validated['due_date'])
-            ?? $this->computeDueDate($parsedCheckIn, $parsedCheckOut);
-
-        DB::beginTransaction();
-        try {
-            $wasPaid    = $invoice->status === 'Paid';
-            $wasPending = $invoice->status === 'Pending';
-
-            $invoice->update([
-                'tenant_name'    => $validated['tenant_name'],
-                'room_number'    => $validated['room_number'],
-                'description'    => $validated['description'],
-                'check_in'       => $parsedCheckIn,
-                'check_out'      => $parsedCheckOut,
-                'rate_per_day'   => $validated['rate_per_day'],
-                'days'           => $validated['days'],
-                'total_amount'   => $total,
-                'amount_paid'    => $paid,
-                'balance'        => $status === 'Paid' ? 0.0 : $balance,
-                'due_date'       => $computedDueDate,
-                'payment_method' => $validated['payment_method'],
-                'status'         => $status,
-
-                'date_paid'   => $status === 'Paid'
-                    ? ($invoice->date_paid ?? now()->toDateString())
-                    : null,
-                'verified_by' => $status === 'Paid'
-                    ? ($invoice->verified_by ?? Auth::id())
-                    : null,
-                'verified_at' => $status === 'Paid'
-                    ? ($invoice->verified_at ?? now())
-                    : null,
-            ]);
-
-            $updatedInvoice = $invoice->fresh();
-            $reservation = $this->reservationForInvoice($updatedInvoice);
-
-            if (!$wasPaid && $status === 'Paid') {
-                $this->deductFromReservation($updatedInvoice, $reservation);
-            }
-
-            $this->syncLinkedReservation($updatedInvoice, $reservation);
-
-            AuditLogger::log([
-                'action'       => 'UPDATE',
-                'module'       => 'BILLING',
-                'description'  => 'Manually edited invoice ' . $invoice->transaction_no
-                    . ' (' . $invoice->tenant_name . ')'
-                    . ($wasPaid !== ($status === 'Paid') ? ' — status ' . $status : ''),
-                'subject_type' => Invoice::class,
-                'subject_id'   => $invoice->id,
-            ]);
-
-            DB::commit();
-
-            if (!$wasPaid && $status === 'Paid') {
-                $this->sendPaymentApprovedEmail($invoice->fresh());
-            }
-
-            event(new InvoiceUpdated('updated', $invoice->id));
-
-            return response()->json([
-                'message' => 'Invoice updated.',
-                'invoice' => $invoice->fresh(),
-            ]);
-        } catch (\Throwable $e) {
-            DB::rollBack();
-            report($e);
-            return response()->json([
-                'message' => 'Failed to update invoice: ' . $e->getMessage(),
-            ], 500);
-        }
-    }
-
-     public function verifyPayment(Request $request, Invoice $invoice)
-    {
-        // Removed session()->save() to prevent session blocking
         if ($invoice->status !== 'Pending') {
             return response()->json(['message' => 'Invoice is not pending verification.'], 422);
         }
@@ -340,8 +162,6 @@ class BillingController extends Controller
         DB::beginTransaction();
         try {
             [$status, $balance, $datePaid, $verified] = $this->deriveInvoiceStatus($invoice);
-            
-            // Eager load the reservation ONCE
             $reservation = $this->reservationForInvoice($invoice);
 
             $invoice->update([
@@ -355,13 +175,15 @@ class BillingController extends Controller
             if ($reservation) {
                 $this->deductFromReservation($invoice, $reservation);
                 $this->syncLinkedReservation($invoice, $reservation);
+            } else {
+                // Try syncing Room Change or Stay Extension
+                $this->syncServiceRequests($invoice);
             }
 
             DB::commit();
 
             $this->notifyTenant($invoice, 'verified');
 
-            // Use queue() instead of send()
             if ($status === 'Paid' || $status === 'Partial') {
                 $email = $this->getTenantEmail($invoice);
                 if ($email) {
@@ -378,11 +200,7 @@ class BillingController extends Controller
                 default   => 'Payment verified.',
             };
 
-            return response()->json([
-                'message' => $message,
-                'status'  => $status,
-                'invoice' => $invoice->fresh(),
-            ]);
+            return response()->json(['message' => $message, 'status' => $status, 'invoice' => $invoice->fresh()]);
         } catch (\Throwable $e) {
             DB::rollBack();
             report($e);
@@ -390,11 +208,9 @@ class BillingController extends Controller
         }
     }
 
-      public function rejectPayment(Request $request, Invoice $invoice)
+    public function rejectPayment(Request $request, Invoice $invoice)
     {
-        $validated = $request->validate([
-            'admin_notes' => ['required', 'string', 'max:1000'],
-        ]);
+        $validated = $request->validate(['admin_notes' => ['required', 'string', 'max:1000']]);
 
         if ($invoice->status !== 'Pending') {
             return response()->json(['message' => 'Invoice is not pending verification.'], 422);
@@ -407,107 +223,55 @@ class BillingController extends Controller
             $reservation = $this->reservationForInvoice($invoice);
 
             if ($reservation && $reservation->status === 'Pending') {
-                if ($reservation->proof_of_payment) {
-                    BillingService::archiveProofOfPayment($reservation->proof_of_payment);
-                }
-
+                if ($reservation->proof_of_payment) BillingService::archiveProofOfPayment($reservation->proof_of_payment);
                 $reservation->update([
-                    'status'           => 'Rejected',
-                    'admin_notes'      => $validated['admin_notes'] ?: $reservation->admin_notes,
-                    'processed_by'     => Auth::id(),
-                    'processed_at'     => now(),
+                    'status' => 'Rejected',
+                    'admin_notes' => $validated['admin_notes'] ?: $reservation->admin_notes,
+                    'processed_by' => Auth::id(),
+                    'processed_at' => now(),
                     'proof_of_payment' => null,
                 ]);
-
                 $reservation->room?->syncStatus();
-
-                $invoices = Invoice::query()
-                    ->where('description', 'like', '%' . $reservation->reference_no . '%')
-                    ->whereIn('status', ['Unpaid', 'Partial', 'Pending'])
-                    ->get();
-
+                $invoices = Invoice::query()->where('description', 'like', '%' . $reservation->reference_no . '%')->whereIn('status', ['Unpaid', 'Partial', 'Pending'])->get();
                 foreach ($invoices as $inv) {
-                    if ($inv->receipt_path) {
-                        BillingService::archiveReceipt($inv->receipt_path);
-                    }
-                    $inv->delete(); 
+                    if ($inv->receipt_path) BillingService::archiveReceipt($inv->receipt_path);
+                    $inv->delete();
                 }
+            } else {
+                // Handle Room Change / Stay Extension Rejection
+                $this->syncServiceRequestsReject($invoice, $validated['admin_notes']);
 
-                AuditLogger::log([
-                    'action'       => 'REJECT',
-                    'module'       => 'BILLING',
-                    'description'  => 'Payment rejected for ' . $tenantEmail
-                        . ' — ' . $invoice->transaction_no
-                        . ' (₱' . number_format((float) $invoice->balance, 2) . ')'
-                        . ' — ' . $validated['admin_notes'],
-                    'status'       => 'warning',
-                    'subject_type' => Invoice::class,
-                    'subject_id'   => $invoice->id,
-                ]);
-
-                DB::commit();
-
-                $this->notifyTenant($invoice, 'rejected', $validated['admin_notes']);
-                
-                $email = $this->getTenantEmail($invoice);
-                if ($email) {
-                    Mail::to($email)->queue(new PaymentRejectedMail($invoice, $validated['admin_notes']));
-                }
-
-                event(new InvoiceUpdated('rejected', $invoice->id));
-                event(new ReservationUpdated('rejected', $reservation->id));
-
-                return response()->json([
-                    'message' => 'Payment rejected. Reservation cancelled. Tenant has been notified.',
-                    'status'  => 'Rejected',
-                    'invoice' => null,
+                if ($invoice->receipt_path) BillingService::archiveReceipt($invoice->receipt_path);
+                $revertedAmount = max(0, (float) $invoice->amount_paid - (float) $invoice->balance);
+                $revertStatus   = $revertedAmount > 0 ? 'Partial' : 'Unpaid';
+                $invoice->update([
+                    'status' => $revertStatus,
+                    'receipt_path' => null,
+                    'receipt_no' => null,
+                    'verified_by' => null,
+                    'verified_at' => null,
+                    'amount_paid' => $revertedAmount,
                 ]);
             }
-
-            if ($invoice->receipt_path) {
-                BillingService::archiveReceipt($invoice->receipt_path);
-            }
-
-            $revertedAmount = max(0, (float) $invoice->amount_paid - (float) $invoice->balance);
-            $revertStatus   = $revertedAmount > 0 ? 'Partial' : 'Unpaid';
-
-            $invoice->update([
-                'status'       => $revertStatus,
-                'receipt_path' => null,
-                'receipt_no'   => null,
-                'verified_by'  => null,
-                'verified_at'  => null,
-                'amount_paid'  => $revertedAmount,
-            ]);
 
             AuditLogger::log([
                 'action'       => 'REJECT',
-                'module'       => 'BILLING',
-                'description'  => 'Payment rejected for ' . $tenantEmail
-                    . ' — ' . $invoice->transaction_no
-                    . ' (₱' . number_format((float) $invoice->balance, 2) . ')'
-                    . ' — ' . $validated['admin_notes'],
+                'module' => 'BILLING',
+                'description'  => 'Payment rejected for ' . $tenantEmail . ' — ' . $invoice->transaction_no . ' — ' . $validated['admin_notes'],
                 'status'       => 'warning',
                 'subject_type' => Invoice::class,
-                'subject_id'   => $invoice->id,
+                'subject_id' => $invoice->id,
             ]);
 
             DB::commit();
-
             $this->notifyTenant($invoice, 'rejected', $validated['admin_notes']);
-            
+
             $email = $this->getTenantEmail($invoice);
-            if ($email) {
-                Mail::to($email)->queue(new PaymentRejectedMail($invoice->fresh(), $validated['admin_notes']));
-            }
+            if ($email) Mail::to($email)->queue(new PaymentRejectedMail($invoice->fresh(), $validated['admin_notes']));
 
             event(new InvoiceUpdated('rejected', $invoice->id));
 
-            return response()->json([
-                'message' => 'Payment rejected. Tenant has been notified.',
-                'status'  => $revertStatus,
-                'invoice' => $invoice->fresh(),
-            ]);
+            return response()->json(['message' => 'Payment rejected. Request cancelled. Tenant has been notified.', 'status' => 'Rejected', 'invoice' => null]);
         } catch (\Throwable $e) {
             DB::rollBack();
             report($e);
@@ -577,7 +341,7 @@ class BillingController extends Controller
         ];
     }
 
-     private function deductFromReservation(Invoice $invoice, ?Reservation $reservation): void
+    private function deductFromReservation(Invoice $invoice, ?Reservation $reservation): void
     {
         if ($reservation) {
             $paidAmount   = (float) $invoice->amount_paid;
@@ -605,7 +369,7 @@ class BillingController extends Controller
             return $checkIn->copy()->addDays(7);
         }
         if ($days <= 100) {
-            return $checkIn->copy()->addMonths(1);
+            return $checkIn->copy()->addMonth();
         }
         if ($days <= 364) {
             return $checkIn->copy()->addMonths(2);
@@ -632,69 +396,191 @@ class BillingController extends Controller
     private function syncLinkedReservation(Invoice $invoice, ?Reservation $reservation): void
     {
         $reservation = $this->reservationForInvoice($invoice);
+        if (! $reservation) return;
 
-        if (! $reservation) {
+        if ($reservation->status === 'Rejected') {
+            if ($invoice->receipt_path) BillingService::archiveReceipt($invoice->receipt_path);
+            $invoice->forceDelete();
             return;
         }
 
-        if ($reservation->status !== 'Pending') {
-            $reservation->room?->syncStatus();
-            return;
-        }
-
-        if (
-            in_array($reservation->room?->room_type, ['Bedspace', 'Barkada Room'], true)
-            && $reservation->room_bed_id
-        ) {
+        if (in_array($reservation->room?->room_type, ['Bedspace', 'Barkada Room'], true) && $reservation->room_bed_id) {
             $in  = $reservation->check_in;
             $out = $reservation->check_out;
-
             $conflict = Reservation::where('room_id', $reservation->room_id)
-                ->where('room_bed_id', $reservation->room_bed_id)
-                ->where('id', '!=', $reservation->id)
-                ->where('status', 'Approved')
-                ->when($in && $out, function ($q) use ($in, $out) {
+                ->where('room_bed_id', $reservation->room_bed_id)->where('id', '!=', $reservation->id)
+                ->where('status', 'Approved')->when($in && $out, function ($q) use ($in, $out) {
                     $q->whereDate('check_in', '<', $out->toDateString())
                         ->where(function ($q2) use ($in) {
-                            $q2->whereDate('check_out', '>', $in->toDateString())
-                                ->orWhereNull('check_out');
+                            $q2->whereDate('check_out', '>', $in->toDateString())->orWhereNull('check_out');
                         });
-                })
-                ->exists();
+                })->exists();
+            if ($conflict) return;
+        }
 
-            if ($conflict) {
-                return;
+        $reservation->update(['status' => 'Approved', 'processed_by' => Auth::id(), 'processed_at' => now()]);
+        if ($reservation->user_id) {
+            Tenant::updateOrCreate(['user_id' => $reservation->user_id], [
+                'room_id' => $reservation->room_id, 'approved_reservation_id' => $reservation->id,
+                'rent_rate' => $reservation->total_charges, 'status' => 'active',
+            ]);
+        }
+        $reservation->room?->syncStatus();
+        AuditLogger::log(['action' => 'APPROVE', 'module' => 'RESERVATIONS', 'description' => 'Reservation auto-approved', 'subject_type' => Reservation::class, 'subject_id' => $reservation->id]);
+    }
+
+    /**
+     * Sync Room Change and Stay Extension Requests upon payment verification.
+     *
+     * IMPORTANT: When a Room Change is approved via payment verification, we must:
+     *   1. Expire old approved reservations on the OLD room
+     *   2. Move the tenant to the new room
+     *   3. Create a NEW approved reservation for the new room
+     *   4. Repoint tenant->approved_reservation_id to that new reservation
+     *   5. Resync both rooms so status badges reflect reality
+     */
+    private function syncServiceRequests(Invoice $invoice): void
+    {
+        $description = (string) $invoice->description;
+
+        // ── 1. ROOM CHANGE ──
+        if (preg_match('/#RC-\d+/', $description, $m)) {
+            $roomChange = \App\Models\RoomChangeRequest::where('reference_no', $m[0])->first();
+
+            if ($roomChange && $roomChange->status === 'Pending') {
+                $tenant  = $roomChange->tenant;
+                $newRoom = \App\Models\Room::find($roomChange->requested_room_id);
+
+                if ($newRoom && $tenant) {
+                    $oldRoom = $tenant->room;
+
+                    // 1. Expire old approved reservations on the previous room
+                    \App\Models\Reservation::where('user_id', $tenant->user_id)
+                        ->where('status', 'Approved')
+                        ->where('room_id', '!=', $newRoom->id)
+                        ->update([
+                            'status'       => 'Expired',
+                            'processed_by' => Auth::id(),
+                            'processed_at' => now(),
+                        ]);
+
+                    // 2. Move tenant
+                    $tenant->update(['room_id' => $newRoom->id]);
+
+                    // 3. Create a new approved reservation on the new room
+                    $oldReservation = \App\Models\Reservation::where('user_id', $tenant->user_id)
+                        ->where('status', 'Expired')
+                        ->latest()
+                        ->first();
+
+                    if ($oldReservation) {
+                        $newReservation = \App\Models\Reservation::create([
+                            'reference_no'       => \App\Models\Reservation::generateReferenceNo(),
+                            'reservation_number' => \App\Models\Reservation::generateReservationNumber(),
+                            'user_id'            => $tenant->user_id,
+                            'room_id'            => $newRoom->id,
+                            'tenant_name'        => $oldReservation->tenant_name,
+                            'tenant_initial'     => $oldReservation->tenant_initial,
+                            'avatar_bg'          => $oldReservation->avatar_bg,
+                            'avatar_color'       => $oldReservation->avatar_color,
+                            'email'              => $oldReservation->email,
+                            'phone'              => $oldReservation->phone,
+                            'desired_room'       => $newRoom->room_number,
+                            'room_bed_id'        => $oldReservation->room_bed_id,
+                            'check_in'           => $oldReservation->check_in,
+                            'check_in_time'      => $oldReservation->check_in_time,
+                            'check_out'          => $oldReservation->check_out,
+                            'check_out_time'     => $oldReservation->check_out_time,
+                            'has_companion'      => $oldReservation->has_companion,
+                            'total_charges'      => $oldReservation->total_charges,
+                            'reservation_fee'    => $oldReservation->reservation_fee,
+                            'payment_option'     => $oldReservation->payment_option,
+                            'payment_method'     => $oldReservation->payment_method,
+                            'remaining'          => $oldReservation->remaining,
+                            'request_details'    => 'Room change via payment verification',
+                            'status'             => 'Approved',
+                            'processed_by'       => Auth::id(),
+                            'processed_at'       => now(),
+                        ]);
+
+                        // 4. Repoint tenant to the new reservation
+                        $tenant->update(['approved_reservation_id' => $newReservation->id]);
+                    }
+
+                    // 5. Resync both rooms
+                    if ($oldRoom) $oldRoom->syncStatus();
+                    $newRoom->syncStatus();
+
+                    $roomChange->update([
+                        'status'       => 'Approved',
+                        'processed_by' => Auth::id(),
+                        'processed_at' => now(),
+                    ]);
+
+                    event(new \App\Events\ReservationUpdated('updated', null));
+                }
             }
         }
 
-        $reservation->update([
-            'status'       => 'Approved',
-            'processed_by' => Auth::id(),
-            'processed_at' => now(),
-        ]);
+        // ── 2. STAY EXTENSION ──
+        if (preg_match('/#SE-\d+/', $description, $m)) {
+            $stayExtension = \App\Models\StayExtensionRequest::where('reference_no', $m[0])->first();
 
-        if ($reservation->user_id) {
-            Tenant::updateOrCreate(
-                ['user_id' => $reservation->user_id],
-                [
-                    'room_id'                 => $reservation->room_id,
-                    'approved_reservation_id' => $reservation->id,
-                    'rent_rate'               => $reservation->total_charges,
-                    'status'                  => 'active',
-                ]
-            );
+            if ($stayExtension && $stayExtension->status === 'Pending') {
+                $tenant      = $stayExtension->tenant;
+                $reservation = $tenant?->approvedReservation;
+
+                if ($reservation) {
+                    $reservation->update([
+                        'check_out' => $stayExtension->requested_lease_end,
+                    ]);
+                }
+
+                $stayExtension->update([
+                    'status'       => 'Approved',
+                    'processed_by' => Auth::id(),
+                    'processed_at' => now(),
+                ]);
+
+                event(new \App\Events\ReservationUpdated('updated', $reservation?->id));
+            }
+        }
+    }
+
+    /**
+     * Reject Room Change or Stay Extension Requests upon payment rejection.
+     */
+    private function syncServiceRequestsReject(Invoice $invoice, string $reason): void
+    {
+        $description = (string) $invoice->description;
+
+        // 1. Room Change
+        if (preg_match('/#RC-\d+/', $description, $m)) {
+            $roomChange = \App\Models\RoomChangeRequest::where('reference_no', $m[0])->first();
+            if ($roomChange && $roomChange->status === 'Pending') {
+                $roomChange->update([
+                    'status'       => 'Rejected',
+                    'admin_notes'  => $reason,
+                    'processed_by' => Auth::id(),
+                    'processed_at' => now(),
+                ]);
+                event(new \App\Events\ServiceRequestUpdated('room_change', 'rejected', $roomChange->id));
+            }
         }
 
-        $reservation->room?->syncStatus();
-
-        AuditLogger::log([
-            'action'       => 'APPROVE',
-            'module'       => 'RESERVATIONS',
-            'description'  => 'Reservation ' . $reservation->reference_no
-                . ' auto-approved via payment verification',
-            'subject_type' => Reservation::class,
-            'subject_id'   => $reservation->id,
-        ]);
+        // 2. Stay Extension
+        if (preg_match('/#SE-\d+/', $description, $m)) {
+            $stayExtension = \App\Models\StayExtensionRequest::where('reference_no', $m[0])->first();
+            if ($stayExtension && $stayExtension->status === 'Pending') {
+                $stayExtension->update([
+                    'status'       => 'Rejected',
+                    'admin_notes'  => $reason,
+                    'processed_by' => Auth::id(),
+                    'processed_at' => now(),
+                ]);
+                event(new \App\Events\ServiceRequestUpdated('stay_extension', 'rejected', $stayExtension->id));
+            }
+        }
     }
 
     private function reservationForInvoice(Invoice $invoice): ?Reservation
@@ -729,7 +615,7 @@ class BillingController extends Controller
     private function getTenantEmail(Invoice $invoice): ?string
     {
         if (! $invoice->tenant_id) return null;
-        
+
         return Tenant::join('users', 'tenants.user_id', '=', 'users.id')
             ->where('tenants.id', $invoice->tenant_id)
             ->value('users.email');

@@ -30,7 +30,6 @@ use App\Http\Controllers\Admin\VirtualTourController;
 
 // Tenant Controllers
 use App\Http\Controllers\Tenant\TenantAnnouncementController;
-use App\Http\Controllers\Tenant\TenantBillingController;
 use App\Http\Controllers\Tenant\TenantDashboardController;
 use App\Http\Controllers\Tenant\TenantHistoryController;
 use App\Http\Controllers\Tenant\TenantMaintenanceController;
@@ -142,21 +141,20 @@ Route::middleware(['auth', 'onboarding.complete', 'prevent.back.cache'])
     ->name('tenants.')
     ->group(function () {
 
-        Route::get('/', [TenantDashboardController::class, 'index'])->name('dashboard');
+        // ---------- Dashboard ----------
+        Route::get('/',               [TenantDashboardController::class, 'index'])->name('dashboard');
+        Route::get('/dashboard/data', [TenantDashboardController::class, 'data'])->name('dashboard.data');
+        
+        // Payment processing (moved from Billing)
+        Route::post('/dashboard/pay',            [TenantDashboardController::class, 'pay'])->name('dashboard.pay');
+        Route::post('/dashboard/cancel-payment', [TenantDashboardController::class, 'cancelPayment'])->name('dashboard.cancel-payment');
+        Route::post('/dashboard/parse-receipt',  [TenantDashboardController::class, 'parseReceipt'])->name('dashboard.parse-receipt');
 
         Route::get('/notifications/feed', [TenantNotificationController::class, 'index'])
             ->name('notifications.feed');
 
         Route::post('/reservations/parse-receipt', [TenantReservationController::class, 'parseReceipt'])
             ->name('reservations.parse-receipt');
-
-        Route::post('/billing/parse-receipt', [TenantBillingController::class, 'parseReceipt'])->name('billing.parse-receipt');
-
-        // ---------- Billing ----------
-        Route::get('/billing/data',    [TenantBillingController::class, 'data'])->name('billing.data');
-        Route::get('/billing',         [TenantBillingController::class, 'index'])->name('billing');
-        Route::post('/billing/pay',    [TenantBillingController::class, 'pay'])->name('billing.pay');
-        Route::post('/billing/cancel', [TenantBillingController::class, 'cancelPayment'])->name('billing.cancel');
 
         // ---------- Reservations ----------
         Route::get('/reservations/data',                  [TenantReservationController::class, 'data'])->name('reservations.data');
@@ -362,7 +360,7 @@ Route::middleware(['auth', 'admin', 'prevent.back.cache'])->prefix('admin')->nam
         Route::prefix('{virtualTour}/builder')->name('builder.')->group(function () {
             Route::get('/data',                [TourHotspotController::class, 'getTourData'])->name('data');
             Route::post('/hotspots',           [TourHotspotController::class, 'store'])->name('save-hotspot');
-            Route::post('/hotspots/{hotspot}', [TourHotspotController::class, 'update'])->name('update-hotspot');
+            Route::match(['POST', 'PUT'], '/hotspots/{hotspot}', [TourHotspotController::class, 'update'])->name('update-hotspot');
             Route::match(['POST', 'DELETE'], '/hotspots/{hotspot}', [TourHotspotController::class, 'destroy'])->name('delete-hotspot');
         });
 

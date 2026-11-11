@@ -3,7 +3,7 @@
 
 namespace App\Http\Controllers\Admin;
 
-use App\Events\ReservationUpdated; // <-- Added
+use App\Events\ReservationUpdated;
 use App\Http\Controllers\Controller;
 use App\Models\Room;
 use App\Services\AuditLogger;

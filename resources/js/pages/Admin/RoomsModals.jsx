@@ -283,6 +283,11 @@ export default function RoomsModals() {
         setDeleteTarget(null);
     };
 
+    // Safe accessors for room data (in case backend misses fields)
+    const currentBeds = room?.bed_configurations || [];
+    const barkadaOccupants = room?.barkada_occupants || [];
+    const occupiedCount = room?.total_beds ? (room.total_beds - (room.available_slots || 0)) : 0;
+
     return (
         <>
             {/* ADD MODAL */}
@@ -464,7 +469,8 @@ export default function RoomsModals() {
                                 { label: 'Beds / Position', value: room.total_beds },
                                 { label: 'Room / Bed ID', value: room.room_bed_id || '-' },
                                 { label: 'Floor', value: room.floor },
-                                { label: 'Available Slots', value: `${room.available_slots ?? 0}/${room.total_beds}` },
+                                // FIX: Compute Available Slots based on actual tenants
+                                { label: 'Available Slots', value: `${room.total_beds - (currentBeds.length || barkadaOccupants.length)}/${room.total_beds}` },
                                 { label: 'Daily Rate', value: `₱${Number(room.daily_rent).toLocaleString()}` },
                             ].map((spec, i) => (
                                 <div key={i} className="bg-slate-50 rounded-lg p-3 text-center">
@@ -474,15 +480,15 @@ export default function RoomsModals() {
                             ))}
                         </div>
 
-                        {/* Bed Occupants list */}
-                        {room.bed_configurations && room.bed_configurations.length > 0 && (
+                        {/* Bed Occupants list (For Bedspace/Solo) */}
+                        {currentBeds.length > 0 && (
                             <div className="mb-4">
                                 <h4 className="text-sm font-bold text-slate-900 mb-3">Current Bed Occupants</h4>
                                 <div className="grid grid-cols-2 gap-2.5">
-                                    {room.bed_configurations.map((bed, i) => (
+                                    {currentBeds.map((bed, i) => (
                                         <div key={i} className="bg-emerald-50 border border-emerald-100 rounded-lg p-3 flex items-center gap-3">
                                             <div className="w-8 h-8 rounded-full bg-emerald-500 text-white flex items-center justify-center font-bold text-xs shrink-0">
-                                                {bed.initial}
+                                                {bed.initial || '?'}
                                             </div>
                                             <div className="min-w-0">
                                                 <div className="text-[13px] font-bold text-emerald-900 truncate">{bed.name}</div>
@@ -494,8 +500,28 @@ export default function RoomsModals() {
                             </div>
                         )}
 
+                        {/* Barkada Room Occupants List */}
+                        {room.room_type === 'Barkada Room' && barkadaOccupants.length > 0 && (
+                            <div className="mb-4">
+                                <h4 className="text-sm font-bold text-slate-900 mb-3">Barkada Room Occupants</h4>
+                                <div className="grid grid-cols-2 gap-2.5">
+                                    {barkadaOccupants.map((occupant, i) => (
+                                        <div key={i} className="bg-emerald-50 border border-emerald-100 rounded-lg p-3 flex items-center gap-3">
+                                            <div className="w-8 h-8 rounded-full bg-emerald-500 text-white flex items-center justify-center font-bold text-xs shrink-0">
+                                                {occupant.initial || '?'}
+                                            </div>
+                                            <div className="min-w-0">
+                                                <div className="text-[13px] font-bold text-emerald-900 truncate">{occupant.name}</div>
+                                                <div className="text-[11px] text-emerald-700 font-medium mt-0.5">{occupant.label}</div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
                         {/* Fallback legacy tenant display */}
-                        {(!room.bed_configurations || room.bed_configurations.length === 0) && room.tenant_name && (
+                        {currentBeds.length === 0 && barkadaOccupants.length === 0 && room.tenant_name && (
                             <div className="bg-emerald-50 rounded-lg p-3.5 flex items-center gap-3 mb-4">
                                 <div className="w-9 h-9 rounded-full bg-emerald-500 text-white flex items-center justify-center font-bold">
                                     {room.tenant_name.charAt(0).toUpperCase()}
@@ -631,8 +657,6 @@ export default function RoomsModals() {
                                     <option>Barkada Room</option>
                                 </select>
                             </div>
-                            
-                            {/* Removed the manual Tenant Name input because it is auto-calculated based on reservations */}
                         </div>
 
                         <div>

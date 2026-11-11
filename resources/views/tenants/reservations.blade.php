@@ -110,7 +110,10 @@
                             'status' => $room['status'],
                             'is_bookable' => $room['is_bookable'],
                             'has_reserved' => $room['has_reserved'],
+                            'is_current_room' => $room['is_current_room'],
                             'empty_beds' => $room['empty_beds'],
+                            'occupied_beds' => $room['occupied_beds'], 
+                            'tenants' => $room['tenants'], 
                             'price' => $room['price'],
                             'img' => $room['img'],
                             'pax' => $room['pax'],
@@ -140,20 +143,14 @@
                             <img src="{{ $room['img'] }}" alt="Room {{ $room['num'] }}"
                                 class="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105">
 
-                            @if ($room['has_reserved'])
-                                <span
-                                    class="absolute top-3 left-3 text-[11px] font-bold px-3 py-1 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200">
-                                    <i class="fa-solid fa-check mr-1"></i> Reserved by You
-                                </span>
-                            @else
-                                <span
-                                    class="absolute top-3 left-3 text-[11px] font-bold px-3 py-1 rounded-full
-                                {{ $displayStatus === 'Occupied' ? 'bg-rose-200 text-rose-700' : '' }}
-                                {{ $displayStatus === 'Available' ? 'bg-green-100 text-green-700' : '' }}
-                                {{ $displayStatus === 'Reserved' ? 'bg-amber-100 text-amber-700' : '' }}">
-                                    {{ $displayStatus }}
-                                </span>
-                            @endif
+                            {{-- Show actual status only (removed "Reserved by You") --}}
+                            <span
+                                class="absolute top-3 left-3 text-[11px] font-bold px-3 py-1 rounded-full
+                            {{ $displayStatus === 'Occupied' ? 'bg-rose-200 text-rose-700' : '' }}
+                            {{ $displayStatus === 'Available' ? 'bg-green-100 text-green-700' : '' }}
+                            {{ $displayStatus === 'Reserved' ? 'bg-amber-100 text-amber-700' : '' }}">
+                                {{ $displayStatus }}
+                            </span>
 
                             <span
                                 class="absolute top-3 right-3 bg-black/60 text-white text-[10px] font-semibold px-2.5 py-1 rounded-full backdrop-blur opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
@@ -189,7 +186,12 @@
                                     <i class="fa-regular fa-eye"></i> Details
                                 </button>
 
-                                @if ($room['has_reserved'])
+                                @if ($room['is_current_room'])
+                                    <button disabled
+                                        class="bg-blue-100 text-blue-700 border border-blue-200 rounded-lg py-2 text-xs font-semibold cursor-not-allowed text-center inline-flex items-center justify-center gap-1.5">
+                                        <i class="fa-solid fa-house-user"></i> Current Room
+                                    </button>
+                                @elseif ($room['has_reserved'])
                                     <button disabled
                                         class="bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg py-2 text-xs font-semibold cursor-not-allowed text-center inline-flex items-center justify-center gap-1.5">
                                         <i class="fa-solid fa-check"></i> Reserved
@@ -314,9 +316,9 @@
                     <div class="text-base font-extrabold text-emerald-500">₱${r.deposit}</div>
                     <div class="text-[11px] text-slate-500">deposit</div>
                     ${r.status === 'Pending' ? `
-                            <button type="button"
-                                class="cancel-reservation-btn text-[11px] font-semibold text-rose-500 hover:text-rose-700 mt-1"
-                                data-res-key="${r.key}">Cancel</button>` : ''}
+                                <button type="button"
+                                    class="cancel-reservation-btn text-[11px] font-semibold text-rose-500 hover:text-rose-700 mt-1"
+                                    data-res-key="${r.key}">Cancel</button>` : ''}
                 </div>
             </div>
         `).join('');
@@ -357,7 +359,10 @@
                         status: room.status,
                         is_bookable: room.is_bookable,
                         has_reserved: room.has_reserved,
+                        is_current_room: room.is_current_room,
                         empty_beds: room.empty_beds,
+                        occupied_beds: room.occupied_beds,
+                        tenants: room.tenants,
                         price: room.price,
                         img: room.img,
                         pax: room.pax,
@@ -377,23 +382,23 @@
 
                     let displayStatus = room.status;
 
-                    // Status badges styling
+                    // Status badges styling — show actual status only
                     let statusBadge = '';
-                    if (room.has_reserved) {
-                        statusBadge =
-                            `<span class="absolute top-3 left-3 text-[11px] font-bold px-3 py-1 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200"><i class="fa-solid fa-check mr-1"></i> Reserved by You</span>`;
-                    } else {
-                        let badgeClass = '';
-                        if (displayStatus === 'Occupied') badgeClass = 'bg-rose-200 text-rose-700';
-                        if (displayStatus === 'Available') badgeClass = 'bg-green-100 text-green-700';
-                        if (displayStatus === 'Reserved') badgeClass = 'bg-amber-100 text-amber-700';
-                        statusBadge =
-                            `<span class="absolute top-3 left-3 text-[11px] font-bold px-3 py-1 rounded-full ${badgeClass}">${displayStatus}</span>`;
-                    }
+                    let badgeClass = '';
+                    if (displayStatus === 'Occupied') badgeClass = 'bg-rose-200 text-rose-700';
+                    if (displayStatus === 'Available') badgeClass = 'bg-green-100 text-green-700';
+                    if (displayStatus === 'Reserved') badgeClass = 'bg-amber-100 text-amber-700';
+                    statusBadge =
+                        `<span class="absolute top-3 left-3 text-[11px] font-bold px-3 py-1 rounded-full ${badgeClass}">${displayStatus}</span>`;
 
                     // Action button logic
                     let actionBtn = '';
-                    if (room.has_reserved) {
+                    if (room.is_current_room) {
+                        actionBtn = `
+                    <button disabled class="bg-blue-100 text-blue-700 border border-blue-200 rounded-lg py-2 text-xs font-semibold cursor-not-allowed text-center inline-flex items-center justify-center gap-1.5">
+                        <i class="fa-solid fa-house-user"></i> Current Room
+                    </button>`;
+                    } else if (room.has_reserved) {
                         actionBtn = `
                     <button disabled class="bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg py-2 text-xs font-semibold cursor-not-allowed text-center inline-flex items-center justify-center gap-1.5">
                         <i class="fa-solid fa-check"></i> Reserved

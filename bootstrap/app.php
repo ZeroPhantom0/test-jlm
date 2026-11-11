@@ -31,7 +31,7 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withSchedule(function (Schedule $schedule) {
-        $schedule->command('billing:flag-overdue')->daily();
+        // Removed billing:flag-overdue
         $schedule->command('reservations:expire-past')->daily();
     })
     ->withExceptions(function (Exceptions $exceptions) {

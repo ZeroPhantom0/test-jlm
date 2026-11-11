@@ -8,6 +8,7 @@ use App\Events\ReservationUpdated;
 use App\Events\ServiceRequestUpdated;
 use App\Http\Controllers\Controller;
 use App\Models\Invoice;
+use App\Models\Reservation;
 use App\Models\Room;
 use App\Models\RoomChangeRequest;
 use App\Models\Tenant;
@@ -116,6 +117,7 @@ class RoomChangeController extends Controller
         ]);
 
         if ($roomChangeRequest->tenant && $roomChangeRequest->requested_room_id) {
+            $tenant  = $roomChangeRequest->tenant;
             $oldRoom = $roomChangeRequest->currentRoom;
             $newRoom = Room::find($roomChangeRequest->requested_room_id);
 
@@ -124,8 +126,81 @@ class RoomChangeController extends Controller
                 $invoiceCreated = false;
 
                 if ($newRoom) {
-                    $roomChangeRequest->tenant->update(['room_id' => $newRoom->id]);
+                    // ── 1. Find the tenant's current APPROVED reservation ──
+                    $currentReservation = Reservation::where('user_id', $tenant->user_id)
+                        ->where('status', 'Approved')
+                        ->latest()
+                        ->first();
 
+                    // ── 2. Expire ALL old approved reservations on the old room ──
+                    Reservation::where('user_id', $tenant->user_id)
+                        ->where('status', 'Approved')
+                        ->where('room_id', '!=', $newRoom->id)
+                        ->update([
+                            'status'       => 'Expired',
+                            'processed_by' => $request->user()->id,
+                            'processed_at' => now(),
+                        ]);
+
+                    // ── 3. Move the tenant ──
+                    $tenant->update(['room_id' => $newRoom->id]);
+
+                    // ── 4. Determine the new Bed ID ──
+                    // If the new room requires a bed slot (Bedspace/Barkada) and the old bed ID 
+                    // is either empty or doesn't match the new room's format, pick a valid one.
+                    $newBedId = $currentReservation?->room_bed_id;
+                    
+                    if (in_array($newRoom->room_type, ['Bedspace', 'Barkada Room'])) {
+                        $isValidFormat = $newBedId && preg_match('/^B\d+-[UL]$/', $newBedId);
+                        
+                        // If invalid or empty, grab the first available slot in the new room
+                        if (!$isValidFormat) {
+                            $availableBed = collect($newRoom->bed_slots)->where('status', 'Available')->first();
+                            $newBedId = $availableBed ? $availableBed['id'] : 'B1-U';
+                        }
+                    } else {
+                        // Solo Room doesn't use standard bed IDs
+                        $newBedId = null; 
+                    }
+
+                    // ── 5. Create a NEW approved reservation for the new room ──
+                    if ($currentReservation) {
+                        $newReservation = Reservation::create([
+                            'reference_no'       => Reservation::generateReferenceNo(),
+                            'reservation_number' => Reservation::generateReservationNumber(),
+                            'user_id'            => $tenant->user_id,
+                            'room_id'            => $newRoom->id,
+                            'tenant_name'        => $currentReservation->tenant_name,
+                            'tenant_initial'     => $currentReservation->tenant_initial,
+                            'avatar_bg'          => $currentReservation->avatar_bg,
+                            'avatar_color'       => $currentReservation->avatar_color,
+                            'email'              => $currentReservation->email,
+                            'phone'              => $currentReservation->phone,
+                            'desired_room'       => $newRoom->room_number,
+                            'room_bed_id'        => $newBedId, // <-- Use the corrected bed ID
+                            'check_in'           => $currentReservation->check_in,
+                            'check_in_time'      => $currentReservation->check_in_time,
+                            'check_out'          => $currentReservation->check_out,
+                            'check_out_time'     => $currentReservation->check_out_time,
+                            'has_companion'      => $currentReservation->has_companion,
+                            'total_charges'      => $currentReservation->total_charges,
+                            'reservation_fee'    => $currentReservation->reservation_fee,
+                            'payment_option'     => $currentReservation->payment_option,
+                            'payment_method'     => $currentReservation->payment_method,
+                            'remaining'          => $currentReservation->remaining,
+                            'request_details'    => 'Room change from ' . ($oldRoom?->room_number ?? 'N/A') . ' to ' . $newRoom->room_number,
+                            'status'             => 'Approved',
+                            'processed_by'       => $request->user()->id,
+                            'processed_at'       => now(),
+                        ]);
+
+                        // ── 6. Point the tenant to the new reservation ──
+                        $tenant->update([
+                            'approved_reservation_id' => $newReservation->id,
+                        ]);
+                    }
+
+                    // ── 7. Sync both rooms ──
                     if ($oldRoom) {
                         $oldRoom->syncStatus();
                     }

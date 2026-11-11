@@ -46,12 +46,12 @@ import TenantAnnouncementsModals from "./pages/Announcements/AnnouncementsModals
 // Tenant history modal
 import TenantHistoryModals from "./pages/History/HistoryModals";
 
-// Admin settings modals 
+// Admin settings modals
 import AdminSettingsModals from "./pages/Admin/AdminSettingsModals";
 
 // Tenant settings modals (NEW)
 import TenantSettingsAccordions from "./pages/Settings/SettingsAccordions";
-import SettingsModals from "./pages/Settings/SettingsModals"; 
+import SettingsModals from "./pages/Settings/SettingsModals";
 
 import AdminSidebar from "./components/AdminSidebar";
 import Sidebar from "./components/Sidebar";
@@ -257,16 +257,18 @@ function mountReact() {
     mountIfExists("services-room-change-root", TenantRoomChangeModals);
     mountIfExists("services-stay-extension-root", TenantStayExtensionModals);
 
+    // Billing modal — mounts on both /tenants/billing and /tenants (dashboard)
     mountIfExists("payment-modal-root", PaymentModal);
+
     mountIfExists("tenant-reservations-modals", TenantReservationsModal);
     mountIfExists("tenant-announcements-modals", TenantAnnouncementsModals);
     mountIfExists("tenant-history-modals", TenantHistoryModals);
 
     mountIfExists("admin-settings-modals", AdminSettingsModals);
-    
+
     // Mounts into the div at the top of settings.blade.php
     mountIfExists("tenant-settings-accordions", TenantSettingsAccordions);
-    
+
     // NEW: Mount the SettingsModals
     mountIfExists("settings-modal-root", SettingsModals);
 

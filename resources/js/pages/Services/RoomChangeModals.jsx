@@ -46,6 +46,12 @@ export default function RoomChangeModals() {
     // State for tracking the selected room's bed slots
     const [selectedRoomData, setSelectedRoomData] = useState(null);
 
+    // OCR & Upload State
+    const [ocrLoading, setOcrLoading] = useState(false);
+    const [ocrError, setOcrError] = useState("");
+    const [receipt, setReceipt] = useState(null);
+    const [referenceNo, setReferenceNo] = useState("");
+
     // Tracks whether the admin is actively typing in the form
     const savingRef = useRef(false);
     useEffect(() => { savingRef.current = saving; }, [saving]);
@@ -126,6 +132,9 @@ export default function RoomChangeModals() {
             if (e.target.closest('#open-new-room-change')) {
                 setForm({ requested_room: '', room_bed_id: '', reason: '' });
                 setSelectedRoomData(null);
+                setReceipt(null);
+                setReferenceNo('');
+                setOcrError('');
                 setShowSubmit(true);
                 return;
             }
@@ -175,6 +184,51 @@ export default function RoomChangeModals() {
     };
 
     // ============================================================
+    // OCR Receipt Upload
+    // ============================================================
+    const handleReceiptUpload = async (file) => {
+        if (!file) return;
+
+        setReceipt(file);
+        setOcrError("");
+        setOcrLoading(true);
+
+        const fd = new FormData();
+        fd.append("receipt", file);
+
+        try {
+            const res = await fetch("/tenants/billing/parse-receipt", {
+                method: "POST",
+                headers: {
+                    Accept: "application/json",
+                    "X-CSRF-TOKEN": csrf(),
+                },
+                body: fd,
+            });
+
+            const data = await res.json().catch(() => ({}));
+
+            if (res.ok && data.success && data.reference_no) {
+                setReferenceNo(data.reference_no);
+            } else if (res.ok && data.success && !data.reference_no) {
+                setOcrError("Reference number not detected. Please type it manually.");
+            } else {
+                setOcrError("Could not scan receipt. Please type reference manually.");
+            }
+        } catch (err) {
+            console.error("OCR failed", err);
+            setOcrError("OCR service unavailable. Please type manually.");
+        } finally {
+            setOcrLoading(false);
+        }
+    };
+
+    const handleCopyGCash = () => {
+        navigator.clipboard?.writeText("0917-123-4567");
+        alert("GCash number copied!");
+    };
+
+    // ============================================================
     // Submit new room change request
     // ============================================================
     const handleSubmit = async (e) => {
@@ -196,23 +250,35 @@ export default function RoomChangeModals() {
             return;
         }
 
+        if (!referenceNo.trim()) {
+            alert('Please enter the GCash reference number.');
+            return;
+        }
+        if (!receipt) {
+            alert('Please upload your payment proof.');
+            return;
+        }
+
         setSaving(true);
         try {
+            const formData = new FormData();
+            formData.append('requested_room', form.requested_room);
+            if (form.room_bed_id) formData.append('room_bed_id', form.room_bed_id);
+            formData.append('reason', form.reason);
+            formData.append('reference_no', referenceNo);
+            if (receipt) formData.append('receipt', receipt);
+
             const res = await fetch('/tenants/services/room-change', {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json',
                     'Accept': 'application/json',
                     'X-CSRF-TOKEN': csrf(),
                 },
-                body: JSON.stringify({
-                    requested_room: form.requested_room,
-                    room_bed_id:    form.room_bed_id,
-                    reason:         form.reason,
-                }),
+                body: formData,
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.message || 'Failed to submit request.');
+            
             setShowSubmit(false);
             document.dispatchEvent(new CustomEvent('room-change:refresh'));
         } catch (err) {
@@ -325,43 +391,6 @@ export default function RoomChangeModals() {
                                 )}
                             </div>
 
-                            {/* ── BILLING ESTIMATE (below Requested Room) ── */}
-                            {estimate && (
-                                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
-                                    <div className="flex items-center gap-2 text-[13px] font-bold text-amber-800 mb-2.5">
-                                        <i className="fa-solid fa-receipt"></i>
-                                        Estimated Bill for This Room
-                                    </div>
-
-                                    <div className="flex flex-col gap-1.5 text-[12.5px] text-slate-700">
-                                        <div className="flex justify-between">
-                                            <span className="text-slate-500">Daily rent</span>
-                                            <span className="font-semibold">{formatMoney(estimate.rate)} / day</span>
-                                        </div>
-                                        <div className="flex justify-between">
-                                            <span className="text-slate-500">
-                                                Days (today → check-out{' '}
-                                                {new Date(estimate.checkOut).toLocaleDateString('en-PH', {
-                                                    month: 'short', day: 'numeric', year: 'numeric',
-                                                })})
-                                            </span>
-                                            <span className="font-semibold">
-                                                {estimate.days} day{estimate.days === 1 ? '' : 's'}
-                                            </span>
-                                        </div>
-                                        <div className="flex justify-between border-t border-amber-200 pt-1.5 mt-1">
-                                            <span className="font-bold text-slate-900">Total estimate</span>
-                                            <span className="font-bold text-amber-800">{formatMoney(estimate.total)}</span>
-                                        </div>
-                                    </div>
-
-                                    <p className="text-[11px] text-amber-700 mt-2 leading-snug">
-                                        <i className="fa-solid fa-circle-info mr-1"></i>
-                                        This is an estimate based on today's date until your check-out. Final billing is confirmed by the admin upon approval.
-                                    </p>
-                                </div>
-                            )}
-
                             {/* BED SLOT SELECTION */}
                             {selectedRoomData?.bed_slots?.length > 0 && (
                                 <div className="bg-teal-50 border border-teal-100 rounded-xl p-4 mt-1">
@@ -416,6 +445,130 @@ export default function RoomChangeModals() {
                                     className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5 text-[13px] outline-none resize-none h-[90px] focus:border-slate-400"
                                 ></textarea>
                             </div>
+
+                            {/* ── SUMMARY OF CHARGES ── */}
+                            {estimate && (
+                                <div className="bg-[#f4f7fc] border border-blue-100 rounded-xl p-4 mt-2">
+                                    <div className="flex items-center gap-2 text-[14px] font-bold text-slate-800 mb-3">
+                                        <i className="fa-solid fa-peso-sign"></i>
+                                        Summary of Charges
+                                    </div>
+
+                                    <div className="flex justify-between text-[12px] text-slate-700 mb-2">
+                                        <span>Room Rate</span>
+                                        <strong>{formatMoney(estimate.rate)} / day</strong>
+                                    </div>
+                                    
+                                    <div className="flex justify-between text-[12px] text-slate-700 mb-2">
+                                        <span>
+                                            {formatMoney(estimate.rate)} × {estimate.days} day{estimate.days === 1 ? '' : 's'}
+                                        </span>
+                                        <strong>{formatMoney(estimate.total)}</strong>
+                                    </div>
+
+                                    <div className="flex justify-between text-[14px] font-extrabold text-slate-900 border-t border-slate-300 pt-2.5 mt-2.5">
+                                        <span>Total Charges:</span>
+                                        <strong>{formatMoney(estimate.total)}</strong>
+                                    </div>
+                                    
+                                    <div className="flex justify-between text-[12px] text-slate-700 mt-2">
+                                        <span>Full Payment:</span>
+                                        <strong>{formatMoney(estimate.total)}</strong>
+                                    </div>
+                                    
+                                    <div className="flex justify-between text-[14px] font-extrabold text-slate-900 mt-1.5">
+                                        <span>Remaining Balance:</span>
+                                        <strong>₱0.00</strong>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* ── PAYMENT VERIFICATION REQUIRED ── */}
+                            {estimate && (
+                                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mt-2">
+                                    <div className="flex items-center gap-2 text-[14px] font-bold text-amber-800 mb-2.5">
+                                        <i className="fa-solid fa-mobile-screen-button"></i>
+                                        Payment Verification Required
+                                    </div>
+                                    <p className="text-[12px] text-amber-700 mb-3">
+                                        Pay via GCash to secure your room change
+                                    </p>
+
+                                    <div className="flex justify-between text-[12px] mb-1.5">
+                                        <span className="text-amber-700">Account Name:</span>
+                                        <strong className="text-amber-900">Leah Agujar</strong>
+                                    </div>
+                                    <div className="flex justify-between text-[12px] mb-3">
+                                        <span className="text-amber-700">GCash Number:</span>
+                                        <strong className="text-amber-900">0917-123-4567</strong>
+                                    </div>
+
+                                    <button
+                                        type="button"
+                                        onClick={handleCopyGCash}
+                                        className="w-full bg-orange-500 hover:bg-orange-600 text-white rounded-lg py-2.5 text-[13px] font-bold flex items-center justify-center gap-2 mb-3 transition"
+                                    >
+                                        <i className="fa-regular fa-copy"></i>
+                                        Copy GCash Number
+                                    </button>
+
+                                    <label className="border border-dashed border-amber-300 rounded-lg p-3 flex items-center gap-3 bg-white cursor-pointer mb-2">
+                                        <span className="bg-white border border-amber-300 px-3 py-1.5 rounded-md text-[12px] font-bold text-amber-700">
+                                            Choose File
+                                        </span>
+                                        <span className="text-[12px] text-slate-400">
+                                            {receipt ? receipt.name : "No file chosen"}
+                                        </span>
+                                        <input
+                                            type="file"
+                                            accept="image/*"
+                                            onChange={(e) => {
+                                                const file = e.target.files[0] || null;
+                                                if (file) handleReceiptUpload(file);
+                                                else setReceipt(null);
+                                            }}
+                                            className="hidden"
+                                        />
+                                    </label>
+
+                                    <div className="flex items-center gap-1.5 text-[11px] text-amber-700 mb-3">
+                                        <i className="fa-solid fa-arrow-up-from-bracket"></i>
+                                        Upload a screenshot of your GCash payment receipt
+                                    </div>
+
+                                    <div className="mb-3">
+                                        <label className="block text-[12px] font-semibold text-amber-800 mb-1.5">
+                                            GCash Reference Number <span className="text-rose-500">*</span>
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={referenceNo}
+                                            onChange={(e) => setReferenceNo(e.target.value)}
+                                            placeholder="e.g. GC-20260401-12345"
+                                            className="w-full bg-white border border-amber-200 rounded-lg px-3 py-2.5 text-[13px] outline-none focus:border-amber-400"
+                                        />
+                                        {ocrLoading && (
+                                            <div className="flex items-center gap-1.5 text-[11px] text-blue-600 mt-1">
+                                                <i className="fa-solid fa-spinner fa-spin"></i>
+                                                Scanning receipt for reference number...
+                                            </div>
+                                        )}
+                                        {ocrError && (
+                                            <div className="flex items-center gap-1.5 text-[11px] text-amber-600 mt-1">
+                                                <i className="fa-solid fa-circle-exclamation"></i>
+                                                {ocrError}
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="bg-amber-100 rounded-lg p-3 flex gap-2 text-[12px] text-amber-900 leading-relaxed">
+                                        <i className="fa-solid fa-circle-info mt-0.5"></i>
+                                        <span>
+                                            <strong>Important:</strong> You must upload your payment proof before submitting your room change request. Your payment and request will be reviewed by the admin.
+                                        </span>
+                                    </div>
+                                </div>
+                            )}
+
                         </div>
 
                         {/* FIXED FOOTER */}
@@ -446,70 +599,106 @@ export default function RoomChangeModals() {
                 <Modal onClose={() => setShowDetails(false)} maxWidth="max-w-[480px]">
                     {/* FIXED HEADER */}
                     <div className="p-5 pb-4 flex items-center justify-between border-b border-slate-100 shrink-0">
-                        <div className="flex items-center gap-3">
-                            <h3 className="text-lg font-bold text-slate-900">Room Change Request</h3>
-                            <span className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-full inline-flex items-center gap-1 ${
-                                request.status === 'Pending'
-                                    ? 'bg-amber-100 text-amber-700'
-                                    : request.status === 'Approved'
-                                    ? 'bg-emerald-100 text-emerald-600'
-                                    : 'bg-rose-100 text-rose-600'
-                            }`}>
-                                <i className="fa-regular fa-clock"></i> {request.status}
-                            </span>
+                        <div>
+                            <h3 className="text-lg font-bold text-slate-900">Request Details</h3>
+                            <div className="text-[11px] text-slate-400 mt-0.5">{request.ref}</div>
                         </div>
-                        <button
-                            onClick={() => setShowDetails(false)}
-                            className="text-slate-400 hover:text-slate-700 text-lg"
-                        >
-                            <i className="fa-solid fa-xmark"></i>
-                        </button>
+                        <span className={`text-[11px] font-bold px-3 py-1.5 rounded-full inline-flex items-center gap-1.5 ${
+                            request.status === 'Pending'
+                                ? 'bg-amber-100 text-amber-700'
+                                : request.status === 'Approved'
+                                ? 'bg-emerald-100 text-emerald-700'
+                                : 'bg-rose-100 text-rose-700'
+                        }`}>
+                            <i className={request.status === 'Pending' ? 'fa-regular fa-clock' : request.status === 'Approved' ? 'fa-regular fa-circle-check' : 'fa-regular fa-circle-xmark'}></i> 
+                            {request.status}
+                        </span>
                     </div>
 
                     {/* SCROLLABLE BODY */}
-                    <div className="p-6 overflow-y-auto max-h-[65vh] flex flex-col gap-4">
-                        <div className="text-xs text-slate-400 -mt-1">{request.ref}</div>
+                    <div className="p-6 overflow-y-auto max-h-[65vh] flex flex-col gap-5">
+                        
+                        {/* Room Transfer Visual */}
+                        <div className="flex items-center justify-between gap-3">
+                            <div className="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-3 text-center">
+                                <div className="text-[10px] text-slate-400 font-bold uppercase mb-1">From</div>
+                                <div className="text-[14px] font-bold text-slate-800 truncate">{request.current_room}</div>
+                            </div>
+                            <div className="w-8 h-8 rounded-full bg-white border border-slate-200 flex items-center justify-center shrink-0 shadow-sm z-10 -mx-2">
+                                <i className="fa-solid fa-arrow-right text-slate-400 text-xs"></i>
+                            </div>
+                            <div className="flex-1 bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-center">
+                                <div className="text-[10px] text-emerald-600 font-bold uppercase mb-1">To</div>
+                                <div className="text-[14px] font-bold text-emerald-700 truncate">{request.requested_room}</div>
+                            </div>
+                        </div>
 
                         <div className="grid grid-cols-2 gap-3">
-                            <div className="bg-slate-50 rounded-lg p-3">
-                                <div className="text-[11px] text-slate-400 mb-1">Current Room / Bed ID</div>
-                                <div className="text-[13px] font-semibold text-slate-900">{request.current_room}</div>
+                            <div className="bg-slate-50 rounded-xl p-3.5 border border-slate-100">
+                                <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Date Submitted</div>
+                                <div className="text-[13px] font-semibold text-slate-800">{request.submitted}</div>
                             </div>
-                            <div className="bg-slate-50 rounded-lg p-3">
-                                <div className="text-[11px] text-slate-400 mb-1">Requested Room</div>
-                                <div className="text-[13px] font-semibold text-slate-900">{request.requested_room}</div>
-                            </div>
-                            <div className="bg-slate-50 rounded-lg p-3">
-                                <div className="text-[11px] text-slate-400 mb-1">Submitted</div>
-                                <div className="text-[13px] font-semibold text-slate-900">{request.submitted}</div>
-                            </div>
-                            <div className="bg-slate-50 rounded-lg p-3">
-                                <div className="text-[11px] text-slate-400 mb-1">Availability</div>
-                                <div className="text-[13px] font-semibold text-slate-900">{request.availability}</div>
+                            <div className="bg-slate-50 rounded-xl p-3.5 border border-slate-100">
+                                <div className="text-[10px] font-bold text-slate-400 uppercase mb-1">Target Status</div>
+                                <div className="text-[13px] font-semibold text-slate-800">{request.availability}</div>
                             </div>
                         </div>
 
-                        <div className="bg-slate-50 rounded-lg p-3">
-                            <div className="text-[11px] text-slate-400 mb-1">Reason:</div>
-                            <div className="text-[13px] text-slate-700">{request.reason}</div>
+                        {/* Your Reason */}
+                        <div>
+                            <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">
+                                Your Reason
+                            </div>
+                            <div className="bg-slate-50 border border-slate-100 rounded-xl p-4 text-[13px] text-slate-700 leading-relaxed whitespace-pre-wrap">
+                                {request.reason}
+                            </div>
                         </div>
+
+                        {/* Payment info if pending/approved */}
+                        {request.status !== 'Rejected' && (
+                            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                                <div className="flex items-center gap-2 text-[13px] font-bold text-amber-800 mb-2">
+                                    <i className="fa-solid fa-receipt"></i>
+                                    Payment Status
+                                </div>
+                                <p className="text-[12px] text-amber-700 leading-relaxed">
+                                    {request.status === 'Pending' 
+                                        ? "Your payment proof is currently being verified by the admin."
+                                        : "Your room change request and payment have been approved."}
+                                </p>
+                            </div>
+                        )}
+
+                        {/* Rejection Reason */}
+                        {request.status === 'Rejected' && request.admin_notes && (
+                            <div className="bg-rose-50 border border-rose-200 rounded-xl p-4">
+                                <div className="flex items-center gap-2 text-[13px] font-bold text-rose-800 mb-2">
+                                    <i className="fa-regular fa-circle-xmark"></i>
+                                    Rejection Reason
+                                </div>
+                                <p className="text-[12px] text-rose-700 leading-relaxed whitespace-pre-wrap">
+                                    {request.admin_notes}
+                                </p>
+                            </div>
+                        )}
                     </div>
 
                     {/* FIXED FOOTER */}
-                    <div className="p-5 border-t border-slate-100 flex justify-between items-center shrink-0">
-                        {request.status === 'Pending' && (
+                    <div className="p-5 border-t border-slate-100 flex justify-between items-center shrink-0 bg-slate-50/50 rounded-b-2xl">
+                        {request.status === 'Pending' ? (
                             <button
                                 onClick={openDeleteModal}
                                 disabled={saving}
-                                className="border border-red-300 text-red-500 hover:bg-red-50 disabled:opacity-50 rounded-lg px-3.5 py-2 text-[12.5px] font-medium inline-flex items-center gap-1.5"
+                                className="text-rose-600 hover:text-rose-700 disabled:opacity-50 text-[13px] font-semibold px-2 py-2"
                             >
-                                <i className="fa-regular fa-circle-xmark"></i>
                                 Cancel Request
                             </button>
+                        ) : (
+                            <div /> // Spacer
                         )}
                         <button
                             onClick={() => setShowDetails(false)}
-                            className="bg-[#001838] hover:bg-[#0d2347] text-white px-4 py-2 rounded-lg text-[12.5px] font-medium ml-auto"
+                            className="bg-[#001838] hover:bg-[#0d2347] text-white px-5 py-2.5 rounded-xl text-[13px] font-bold transition ml-auto"
                         >
                             Close
                         </button>

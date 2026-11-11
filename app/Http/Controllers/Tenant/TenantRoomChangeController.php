@@ -9,7 +9,10 @@ use App\Models\Room;
 use App\Models\RoomChangeRequest;
 use App\Models\Tenant;
 use App\Models\Reservation;
+use App\Models\Invoice;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rule;
 
@@ -20,17 +23,15 @@ class TenantRoomChangeController extends Controller
         /** @var \App\Models\User $user */
         $user = Auth::user();
 
-        $tenant = Tenant::with('room')->where('user_id', $user->id)->first();
+        $tenant = Tenant::with(['room', 'approvedReservation'])->where('user_id', $user->id)->first();
 
         // ── APPROVED RESERVATION CHECK ──
-        // A tenant may only request a room change if they hold an
-        // APPROVED reservation for their currently assigned room.
         $approvedReservation = $tenant
             ? Reservation::where('user_id', $user->id)
-                ->where('status', 'Approved')
-                ->when($tenant->room_id, fn ($q) => $q->where('room_id', $tenant->room_id))
-                ->latest()
-                ->first()
+            ->where('status', 'Approved')
+            ->when($tenant->room_id, fn($q) => $q->where('room_id', $tenant->room_id))
+            ->latest()
+            ->first()
             : null;
 
         $hasApprovedReservation = (bool) $approvedReservation;
@@ -45,10 +46,9 @@ class TenantRoomChangeController extends Controller
             ->latest()
             ->get();
 
-        // Tenant's check-out date — used for prorating the room-change bill.
-        // Falls back to +30 days if the tenant has no check-out set.
-        $tenantCheckOut = $tenant?->check_out
-            ? \Carbon\Carbon::parse($tenant->check_out)->toDateString()
+        // FIX: Pull the check-out date from the reservation, not the tenant table
+        $tenantCheckOut = $tenant?->approvedReservation?->check_out
+            ? \Carbon\Carbon::parse($tenant->approvedReservation->check_out)->toDateString()
             : now()->addDays(30)->toDateString();
 
         // ── FETCH AVAILABLE ROOMS WITH BED SLOTS ──
@@ -120,6 +120,9 @@ class TenantRoomChangeController extends Controller
         })->values();
 
         $requestsForReact = $requests->mapWithKeys(function ($r) {
+            // Fetch the associated invoice to get payment info
+            $invoice = Invoice::where('description', 'like', '%' . $r->reference_no . '%')->first();
+
             return [
                 $r->id => [
                     'id'             => $r->id,
@@ -130,6 +133,12 @@ class TenantRoomChangeController extends Controller
                     'availability'   => ucfirst(strtolower($r->availability ?? 'Available')),
                     'reason'         => $r->reason,
                     'status'         => $r->status,
+                    // NEW FIELDS for viewing receipt:
+                    'payment_reference' => $invoice?->receipt_no,
+                    'payment_amount'    => $invoice?->total_amount ?? 0,
+                    'payment_proof_url' => $invoice?->receipt_path 
+                        ? asset('storage/' . $invoice->receipt_path) 
+                        : null,
                 ],
             ];
         })->toArray();
@@ -150,9 +159,7 @@ class TenantRoomChangeController extends Controller
         /** @var \App\Models\User $user */
         $user = Auth::user();
 
-        $tenant = Tenant::with('room')
-            ->where('user_id', $user->id)
-            ->first();
+        $tenant = Tenant::with('room')->where('user_id', $user->id)->first();
 
         if (!$tenant || !$tenant->room) {
             return response()->json([
@@ -160,7 +167,6 @@ class TenantRoomChangeController extends Controller
             ], 422);
         }
 
-        // ── APPROVED RESERVATION REQUIRED ──
         $hasApprovedReservation = Reservation::where('user_id', $user->id)
             ->where('status', 'Approved')
             ->where('room_id', $tenant->room_id)
@@ -168,26 +174,26 @@ class TenantRoomChangeController extends Controller
 
         if (!$hasApprovedReservation) {
             return response()->json([
-                'message' => 'A room change can only be requested for an approved reservation. '
-                           . 'Your current booking is not yet approved — please wait for admin confirmation '
-                           . 'or contact support if you believe this is a mistake.',
+                'message' => 'A room change can only be requested for an approved reservation.',
             ], 422);
         }
 
+        // 1. Validate the incoming request (now including receipt and reference_no)
         $validated = $request->validate([
             'requested_room' => ['required', 'string', 'max:50'],
             'room_bed_id'    => ['nullable', 'string', 'max:50'],
             'reason'         => ['required', 'string'],
+            'reference_no'   => ['required', 'string', 'max:100'],
+            'receipt'        => ['required', 'file', 'mimes:png,jpg,jpeg,webp', 'max:10240'],
         ]);
 
         $requestedRoomId = null;
         $availability    = 'AVAILABLE';
+        $newRoom         = Room::find($validated['requested_room']);
 
-        $matched = Room::find($validated['requested_room']);
-
-        if ($matched) {
-            $requestedRoomId = $matched->id;
-            $availability = match ($matched->status) {
+        if ($newRoom) {
+            $requestedRoomId = $newRoom->id;
+            $availability = match ($newRoom->status) {
                 'Occupied' => 'OCCUPIED',
                 'Reserved' => 'RESERVED',
                 default    => 'AVAILABLE',
@@ -195,37 +201,88 @@ class TenantRoomChangeController extends Controller
         }
 
         $currentRoomLabel = $tenant->room->room_bed_id ?? $tenant->room->room_number ?? '—';
+        $requestedRoomLabel = $newRoom ? 'Room ' . $newRoom->room_number : $validated['requested_room'];
 
-        $requestedRoomLabel = $matched ? 'Room ' . $matched->room_number : $validated['requested_room'];
         if (!empty($validated['room_bed_id'])) {
             $requestedRoomLabel .= ' (' . $validated['room_bed_id'] . ')';
         }
 
-        $roomChange = RoomChangeRequest::create([
-            'reference_no'      => RoomChangeRequest::generateReferenceNo(),
-            'tenant_id'         => $tenant->id,
-            'current_room_id'   => $tenant->room->id,
-            'requested_room_id' => $requestedRoomId,
-            'current_room'      => $currentRoomLabel,
-            'requested_room'    => $requestedRoomLabel,
-            'availability'      => $availability,
-            'reason'            => $validated['reason'],
-            'status'            => 'Pending',
-        ]);
+        // 2. Save the uploaded receipt
+        $receiptPath = $request->file('receipt')->store('reservations/' . $user->id, 'public');
 
-        // Notify admin bell — new request
-        event(new ServiceRequestUpdated('room_change', 'created', $roomChange->id));
+        // 3. Calculate the Bill (Nights x Rate)
+        $ratePerDay = (float) ($newRoom?->daily_rent ?? 0);
+        $startDate = now()->startOfDay();
+        $endDate   = $tenant->approvedReservation?->check_out
+            ? \Carbon\Carbon::parse($tenant->approvedReservation->check_out)->startOfDay()
+            : now()->addDays(30)->startOfDay();
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Room change request submitted successfully.',
-            'data'    => $roomChange,
-        ]);
+        $nights = max(1, (int) $startDate->diffInDays($endDate));
+        $totalAmount = $ratePerDay * $nights;
+
+        DB::beginTransaction();
+        try {
+            // 4. Create the Room Change Request
+            $roomChange = RoomChangeRequest::create([
+                'reference_no'      => RoomChangeRequest::generateReferenceNo(),
+                'tenant_id'         => $tenant->id,
+                'current_room_id'   => $tenant->room->id,
+                'requested_room_id' => $requestedRoomId,
+                'current_room'      => $currentRoomLabel,
+                'requested_room'    => $requestedRoomLabel,
+                'availability'      => $availability,
+                'reason'            => $validated['reason'],
+                'status'            => 'Pending',
+            ]);
+
+                        // 5. Create the Pending Invoice for Admin Verification
+            Invoice::create([
+                'transaction_no' => Invoice::generateTransactionNo(),
+                'tenant_id'      => $tenant->id,
+                'room_id'        => $requestedRoomId,
+                'tenant_name'    => $user->name,
+                'room_number'    => $newRoom?->room_number ?? 'N/A',
+                // Ensure #RC- is in the description
+                'description'    => 'Room Change Fee — Moved to Room ' . ($newRoom?->room_number ?? 'N/A')
+                    . ' (' . $nights . ' night' . ($nights === 1 ? '' : 's') . ', Ref: #RC-' . $roomChange->id . ')',
+                'check_in'       => $startDate,
+                'check_out'      => $endDate,
+                'rate_per_day'   => $ratePerDay,
+                'days'           => $nights,
+                'total_amount'   => $totalAmount,
+                
+                'amount_paid'    => $totalAmount, // <-- RECORD WHAT THEY PAID
+                'balance'        => 0,            // <-- SET BALANCE TO 0
+                
+                'due_date'       => now()->toDateString(),
+                'payment_method' => 'GCash',
+                'status'         => 'Pending',    // <-- STILL PENDING FOR ADMIN VERIFICATION
+                'receipt_no'     => $validated['reference_no'],
+                'receipt_path'   => $receiptPath,
+                'date_paid'      => now()->toDateString(),
+            ]);
+
+            DB::commit();
+
+            event(new ServiceRequestUpdated('room_change', 'created', $roomChange->id));
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Room change request submitted successfully.',
+                'data'    => $roomChange,
+            ]);
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            if (Storage::disk('public')->exists($receiptPath)) {
+                Storage::disk('public')->delete($receiptPath);
+            }
+            report($e);
+            return response()->json([
+                'message' => 'Failed to submit request: ' . $e->getMessage(),
+            ], 500);
+        }
     }
 
-    /**
-     * Cancel a pending room change request.
-     */
     public function cancel(RoomChangeRequest $roomChangeRequest)
     {
         /** @var \App\Models\User $user */
@@ -244,11 +301,8 @@ class TenantRoomChangeController extends Controller
 
         $roomChangeRequest->update([
             'status' => 'Rejected',
-            // NOTE: processed_by is NOT set — that's how the admin bell
-            // distinguishes "tenant cancelled" from "admin rejected".
         ]);
 
-        // Notify admin bell — tenant cancelled room change
         event(new ServiceRequestUpdated('room_change', 'cancelled', $roomChangeRequest->id));
 
         return response()->json([
@@ -266,6 +320,8 @@ class TenantRoomChangeController extends Controller
             ->where('tenant_id', $tenant?->id)->latest()->get();
 
         $requestsForReact = $requests->mapWithKeys(function ($r) {
+            $invoice = Invoice::where('description', 'like', '%' . $r->reference_no . '%')->first();
+
             return [
                 $r->id => [
                     'id' => $r->id,
@@ -276,6 +332,11 @@ class TenantRoomChangeController extends Controller
                     'availability' => ucfirst(strtolower($r->availability ?? 'Available')),
                     'reason' => $r->reason,
                     'status' => $r->status,
+                    'payment_reference' => $invoice?->receipt_no,
+                    'payment_amount'    => $invoice?->total_amount ?? 0,
+                    'payment_proof_url' => $invoice?->receipt_path 
+                        ? asset('storage/' . $invoice->receipt_path) 
+                        : null,
                 ],
             ];
         })->toArray();
@@ -294,9 +355,9 @@ class TenantRoomChangeController extends Controller
 
         $hasApprovedReservation = $tenant
             ? Reservation::where('user_id', $user->id)
-                ->where('status', 'Approved')
-                ->when($tenant->room_id, fn ($q) => $q->where('room_id', $tenant->room_id))
-                ->exists()
+            ->where('status', 'Approved')
+            ->when($tenant->room_id, fn($q) => $q->where('room_id', $tenant->room_id))
+            ->exists()
             : false;
 
         return response()->json([

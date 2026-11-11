@@ -132,6 +132,8 @@ export default function ReservationsModal() {
     const [showCancel, setShowCancel] = useState(false);
     const [cancelTarget, setCancelTarget] = useState(null);
     const [showPolicyModal, setShowPolicyModal] = useState(false);
+    // NEW STATE: For the half payment warning
+    const [showDownPaymentWarning, setShowDownPaymentWarning] = useState(false);
 
     const [room, setRoom] = useState(FALLBACK_ROOM);
     const [saving, setSaving] = useState(false);
@@ -144,7 +146,6 @@ export default function ReservationsModal() {
 
     const [reservationsData, setReservationsData] = useState({});
 
-    // New form state to include Barkada room details
     const [form, setForm] = useState({
         check_in_date: "",
         check_in_time: "",
@@ -157,7 +158,6 @@ export default function ReservationsModal() {
         receipt: null,
         room_bed_id: "",
         agreed_to_terms: false,
-        // Barkada specific fields
         num_occupants: 4,
         num_fixed_beds: 4,
         num_extra_mattresses: 0,
@@ -272,11 +272,10 @@ export default function ReservationsModal() {
 
                 const data = JSON.parse(reserveBtn.dataset.room || "{}");
                 setRoom({ ...FALLBACK_ROOM, ...data });
-                
-                // Determine default occupants based on room type
+
                 const isBarkada = data.name?.includes("Barkada");
-                const defaultOccupants = isBarkada ? (data.total_beds || 4) : 1;
-                
+                const defaultOccupants = isBarkada ? data.total_beds || 4 : 1;
+
                 setForm({
                     check_in_date: "",
                     check_in_time: "",
@@ -343,16 +342,19 @@ export default function ReservationsModal() {
     const updateField = (key, value) =>
         setForm((f) => ({ ...f, [key]: value }));
 
-    const isBarkadaRoom = room.name?.includes("Barkada") || room.total_beds >= 4;
+    const isBedspace = room.name?.includes("Bedspace");
+    const isBarkadaRoom =
+        !isBedspace && (room.name?.includes("Barkada") || room.total_beds >= 4);
     const roomRate = Number(room.price) || 0;
 
-    // Dynamic calculations for Barkada Rooms
     const fixedBeds = form.num_fixed_beds || 0;
     const extraMattresses = form.num_extra_mattresses || 0;
-    
-    const companionFee = isBarkadaRoom 
-        ? (extraMattresses * 150) 
-        : (form.has_companion ? 150 : 0);
+
+    const companionFee = isBarkadaRoom
+        ? extraMattresses * 150
+        : form.has_companion
+          ? 150
+          : 0;
 
     const computeDays = () => {
         const inD = new Date(form.check_in_date);
@@ -363,36 +365,33 @@ export default function ReservationsModal() {
     };
 
     const days = computeDays();
-    
-    // Per night calculation
-    const nightlyRate = isBarkadaRoom 
-        ? (fixedBeds * roomRate) + companionFee 
+
+    const nightlyRate = isBarkadaRoom
+        ? fixedBeds * roomRate + companionFee
         : roomRate + companionFee;
-        
+
     const roomSubtotal = nightlyRate * days;
     const totalCharges = roomSubtotal;
     const halfPayment = totalCharges / 2;
     const payNow = form.payment_option === "half" ? halfPayment : totalCharges;
     const remaining = totalCharges - payNow;
 
-    // Handle changes to number of occupants in Barkada room
     const handleOccupantsChange = (e) => {
         const val = parseInt(e.target.value) || 0;
         let fixed = Math.min(val, room.total_beds);
         let extra = Math.max(0, val - room.total_beds);
 
-        // Update companion names array
         const companionCount = Math.max(0, val - 1);
         const newNames = [...form.companion_names];
         while (newNames.length < companionCount) newNames.push("");
         while (newNames.length > companionCount) newNames.pop();
 
-        setForm(f => ({
+        setForm((f) => ({
             ...f,
             num_occupants: val,
             num_fixed_beds: fixed,
             num_extra_mattresses: extra,
-            companion_names: newNames
+            companion_names: newNames,
         }));
     };
 
@@ -534,69 +533,83 @@ export default function ReservationsModal() {
         }
     };
 
-    const handleSubmit = async () => {
+    // NEW: Intercept the submit to show the warning if 50% down payment
+    const handleSubmitClick = () => {
         if (inFlightRef.current || saving) return;
-        inFlightRef.current = true;
 
+        // Run all the standard validations first
         if (!form.check_in_date || !form.check_out_date) {
-            inFlightRef.current = false;
             alert("Please select both check-in and check-out dates.");
             return;
         }
 
         if (!meets24hMinimum) {
-            inFlightRef.current = false;
             alert(
                 "The minimum stay is 24 hours (1 full day). Please extend your check-out date or time.",
             );
             return;
         }
 
-        if (room.bed_slots && room.bed_slots.length > 0 && !form.room_bed_id) {
-            inFlightRef.current = false;
-            alert("Please select a bed slot.");
-            return;
-        }
-
-        if (room.bed_slots && room.bed_slots.length > 0) {
-            const availableSlots = room.bed_slots.filter(
-                (s) => s.status !== "Occupied",
-            );
-            if (availableSlots.length === 0) {
-                inFlightRef.current = false;
-                alert(
-                    "All beds in this room are currently occupied. Please pick another room.",
-                );
+        if (!isBarkadaRoom) {
+            if (
+                room.bed_slots &&
+                room.bed_slots.length > 0 &&
+                !form.room_bed_id
+            ) {
+                alert("Please select a bed slot.");
                 return;
+            }
+
+            if (room.bed_slots && room.bed_slots.length > 0) {
+                const availableSlots = room.bed_slots.filter(
+                    (s) => s.status !== "Occupied",
+                );
+                if (availableSlots.length === 0) {
+                    alert(
+                        "All beds in this room are currently occupied. Please pick another room.",
+                    );
+                    return;
+                }
             }
         }
 
-        // Validate Barkada companions
         if (isBarkadaRoom && form.num_occupants > 1) {
-            const missingNames = form.companion_names.some(n => !n.trim());
+            const missingNames = form.companion_names.some((n) => !n.trim());
             if (missingNames) {
-                inFlightRef.current = false;
                 alert("Please fill in all companion names.");
                 return;
             }
         }
 
         if (!form.reference_no.trim()) {
-            inFlightRef.current = false;
             alert("Please enter your GCash reference number.");
             return;
         }
         if (!form.receipt) {
-            inFlightRef.current = false;
             alert("Please upload your payment proof.");
             return;
         }
         if (!form.agreed_to_terms) {
-            inFlightRef.current = false;
             alert("Please agree to the Reservation Policy.");
             return;
         }
 
+        // If they chose 50% down payment, show the warning modal
+        if (form.payment_option === "half") {
+            setShowDownPaymentWarning(true);
+            return;
+        }
+
+        // Otherwise, proceed directly
+        executeSubmit();
+    };
+
+    // Extracted actual submission logic
+    const executeSubmit = async () => {
+        if (inFlightRef.current || saving) return;
+        inFlightRef.current = true;
+
+        setShowDownPaymentWarning(false); // Ensure warning closes if it was open
         setSaving(true);
         const modalEl = document.getElementById("tenant-reservations-modals");
         if (modalEl) modalEl.dataset.saving = "true";
@@ -608,18 +621,27 @@ export default function ReservationsModal() {
             fd.append("check_in_time", form.check_in_time);
             fd.append("check_out_date", form.check_out_date);
             fd.append("check_out_time", form.check_out_time);
-            fd.append("has_companion", isBarkadaRoom ? "1" : (form.has_companion ? "1" : "0")); // Send generic true if barkada
+            fd.append(
+                "has_companion",
+                isBarkadaRoom ? "1" : form.has_companion ? "1" : "0",
+            );
             fd.append("notes", form.notes);
             fd.append("payment_option", form.payment_option);
             fd.append("reference_no", form.reference_no);
             fd.append("receipt", form.receipt);
-            fd.append("room_bed_id", form.room_bed_id || "");
+
+            if (!isBarkadaRoom) {
+                fd.append("room_bed_id", form.room_bed_id || "");
+            }
+
             fd.append("agreed_to_terms", form.agreed_to_terms ? "1" : "0");
-            
-            // Add Barkada specific data
+
             if (isBarkadaRoom) {
                 fd.append("num_occupants", form.num_occupants);
-                fd.append("companion_names", JSON.stringify(form.companion_names));
+                fd.append(
+                    "companion_names",
+                    JSON.stringify(form.companion_names),
+                );
             }
 
             const res = await fetch("/tenants/reservations", {
@@ -998,15 +1020,9 @@ export default function ReservationsModal() {
                                 <div className="bg-indigo-50 border border-indigo-100 rounded-lg p-2.5 mt-2 flex items-start gap-2">
                                     <i className="fa-regular fa-calendar-check text-indigo-500 mt-0.5"></i>
                                     <p className="text-[12px] text-indigo-800 leading-snug">
-                                        <strong>Payment due date:</strong>{" "}
-                                        <span className="font-bold">
-                                            {formatDateLong(dueDatePreview)}
-                                        </span>
-                                        <br />
-                                        <span className="text-indigo-600">
-                                            For a {days}-day stay, the balance
-                                            is due {describeDueRule(days)}.
-                                        </span>
+                                        For down payment option, settle the
+                                        remaining balance upon arrival to avoid
+                                        reservation cancellation.
                                     </p>
                                 </div>
                             )}
@@ -1024,10 +1040,13 @@ export default function ReservationsModal() {
                                         <i className="fa-solid fa-user-group"></i>
                                         Barkada Room Breakdown of Beds
                                     </div>
-                                    
+
                                     <div className="mb-4">
                                         <label className="block text-[12px] font-semibold text-slate-700 mb-1.5">
-                                            No. of Occupants <span className="text-rose-500">*</span>
+                                            No. of Occupants{" "}
+                                            <span className="text-rose-500">
+                                                *
+                                            </span>
                                         </label>
                                         <input
                                             type="number"
@@ -1045,7 +1064,8 @@ export default function ReservationsModal() {
                                                 Fixed Beds:
                                             </label>
                                             <div className="text-[11px] text-slate-500 mb-1.5">
-                                                Per head Fee: ₱{roomRate.toFixed(2)}
+                                                Per head Fee: ₱
+                                                {roomRate.toFixed(2)}
                                             </div>
                                             <input
                                                 type="text"
@@ -1064,7 +1084,9 @@ export default function ReservationsModal() {
                                             <input
                                                 type="text"
                                                 readOnly
-                                                value={form.num_extra_mattresses}
+                                                value={
+                                                    form.num_extra_mattresses
+                                                }
                                                 className="w-full bg-slate-100 border border-slate-200 rounded-lg px-3 py-2 text-[13px] text-slate-600 cursor-not-allowed"
                                             />
                                         </div>
@@ -1074,9 +1096,11 @@ export default function ReservationsModal() {
                                 <div className="text-[13px] font-bold text-slate-800 mb-2">
                                     List of Occupant Names:
                                 </div>
-                                
+
                                 <div className="mb-3">
-                                    <label className="block text-[12px] font-semibold text-slate-600 mb-1">Lead Guest:</label>
+                                    <label className="block text-[12px] font-semibold text-slate-600 mb-1">
+                                        Lead Guest:
+                                    </label>
                                     <input
                                         type="text"
                                         readOnly
@@ -1094,7 +1118,12 @@ export default function ReservationsModal() {
                                             type="text"
                                             placeholder="Enter companion full name"
                                             value={name}
-                                            onChange={(e) => handleCompanionNameChange(idx, e.target.value)}
+                                            onChange={(e) =>
+                                                handleCompanionNameChange(
+                                                    idx,
+                                                    e.target.value,
+                                                )
+                                            }
                                             className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-[13px] outline-none focus:border-blue-400"
                                         />
                                     </div>
@@ -1102,53 +1131,57 @@ export default function ReservationsModal() {
                             </div>
                         )}
 
-                        {!isBarkadaRoom && room.bed_slots && room.bed_slots.length > 0 && (
-                            <div className="bg-teal-50 border border-teal-100 rounded-xl p-4">
-                                <div className="flex items-center gap-2 text-[14px] font-bold text-teal-800 mb-2">
-                                    <i className="fa-solid fa-bed"></i>
-                                    Bedspace Slot Selection
-                                </div>
-
-                                {room.is_female_only && (
-                                    <div className="bg-teal-100/50 text-teal-800 text-[12px] p-2.5 rounded-lg mb-3">
-                                        <strong>Female-Only Dormitory</strong>
-                                        <br />
-                                        This unit is restricted to female
-                                        tenants only.
+                        {!isBarkadaRoom &&
+                            room.bed_slots &&
+                            room.bed_slots.length > 0 && (
+                                <div className="bg-teal-50 border border-teal-100 rounded-xl p-4">
+                                    <div className="flex items-center gap-2 text-[14px] font-bold text-teal-800 mb-2">
+                                        <i className="fa-solid fa-bed"></i>
+                                        Bedspace Slot Selection
                                     </div>
-                                )}
-                                {room.is_male_only && (
-                                    <div className="bg-teal-100/50 text-teal-800 text-[12px] p-2.5 rounded-lg mb-3">
-                                        <strong>Male-Only Dormitory</strong>
-                                        <br />
-                                        This unit is restricted to male tenants
-                                        only.
-                                    </div>
-                                )}
 
-                                <label className="block text-[12px] font-semibold text-teal-800 mb-2">
-                                    Select Your Bed Slot{" "}
-                                    <span className="text-rose-500">*</span>
-                                </label>
-                                <div className="grid grid-cols-2 gap-2">
-                                    {room.bed_slots.map((slot) => {
-                                        const isSelected =
-                                            form.room_bed_id === slot.id;
-                                        const isOccupied =
-                                            slot.status === "Occupied";
+                                    {room.is_female_only && (
+                                        <div className="bg-teal-100/50 text-teal-800 text-[12px] p-2.5 rounded-lg mb-3">
+                                            <strong>
+                                                Female-Only Dormitory
+                                            </strong>
+                                            <br />
+                                            This unit is restricted to female
+                                            tenants only.
+                                        </div>
+                                    )}
+                                    {room.is_male_only && (
+                                        <div className="bg-teal-100/50 text-teal-800 text-[12px] p-2.5 rounded-lg mb-3">
+                                            <strong>Male-Only Dormitory</strong>
+                                            <br />
+                                            This unit is restricted to male
+                                            tenants only.
+                                        </div>
+                                    )}
 
-                                        return (
-                                            <button
-                                                key={slot.id}
-                                                type="button"
-                                                disabled={isOccupied}
-                                                onClick={() =>
-                                                    updateField(
-                                                        "room_bed_id",
-                                                        slot.id,
-                                                    )
-                                                }
-                                                className={`
+                                    <label className="block text-[12px] font-semibold text-teal-800 mb-2">
+                                        Select Your Bed Slot{" "}
+                                        <span className="text-rose-500">*</span>
+                                    </label>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        {room.bed_slots.map((slot) => {
+                                            const isSelected =
+                                                form.room_bed_id === slot.id;
+                                            const isOccupied =
+                                                slot.status === "Occupied";
+
+                                            return (
+                                                <button
+                                                    key={slot.id}
+                                                    type="button"
+                                                    disabled={isOccupied}
+                                                    onClick={() =>
+                                                        updateField(
+                                                            "room_bed_id",
+                                                            slot.id,
+                                                        )
+                                                    }
+                                                    className={`
                                                     flex flex-col items-start p-3 rounded-lg border text-left transition
                                                     ${
                                                         isOccupied
@@ -1158,23 +1191,23 @@ export default function ReservationsModal() {
                                                               : "bg-white border-slate-200 hover:border-teal-400"
                                                     }
                                                 `}
-                                            >
-                                                <span
-                                                    className={`text-[13px] font-bold ${isSelected ? "text-white" : "text-slate-800"}`}
                                                 >
-                                                    {slot.label}
-                                                </span>
-                                                <span
-                                                    className={`text-[11px] font-semibold mt-0.5 ${isSelected ? "text-teal-100" : isOccupied ? "text-rose-500" : "text-emerald-500"}`}
-                                                >
-                                                    {slot.status}
-                                                </span>
-                                            </button>
-                                        );
-                                    })}
+                                                    <span
+                                                        className={`text-[13px] font-bold ${isSelected ? "text-white" : "text-slate-800"}`}
+                                                    >
+                                                        {slot.label}
+                                                    </span>
+                                                    <span
+                                                        className={`text-[11px] font-semibold mt-0.5 ${isSelected ? "text-teal-100" : isOccupied ? "text-rose-500" : "text-emerald-500"}`}
+                                                    >
+                                                        {slot.status}
+                                                    </span>
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
                                 </div>
-                            </div>
-                        )}
+                            )}
 
                         {!isBarkadaRoom && room.total_beds === 1 && (
                             <div className="bg-blue-50 rounded-xl p-4">
@@ -1323,61 +1356,105 @@ export default function ReservationsModal() {
                                 <i className="fa-solid fa-peso-sign"></i>
                                 Summary of Charges
                             </div>
-                            
+
                             {isBarkadaRoom ? (
                                 <>
                                     <div className="flex justify-between text-[12px] text-slate-700 mb-1.5">
                                         <span>Room Rate</span>
-                                        <strong>₱{roomRate.toLocaleString()}.00 / person / night</strong>
+                                        <strong>
+                                            ₱{roomRate.toLocaleString()}.00 /
+                                            person / night
+                                        </strong>
                                     </div>
                                     <div className="flex justify-between text-[12px] text-slate-700 mb-1.5">
-                                        <span>Regular Occupants: {fixedBeds} pax × ₱{roomRate.toLocaleString()}</span>
-                                        <strong>₱{(fixedBeds * roomRate).toLocaleString()}.00</strong>
+                                        <span>
+                                            Regular Occupants: {fixedBeds} pax ×
+                                            ₱{roomRate.toLocaleString()}
+                                        </span>
+                                        <strong>
+                                            ₱
+                                            {(
+                                                fixedBeds * roomRate
+                                            ).toLocaleString()}
+                                            .00
+                                        </strong>
                                     </div>
                                     {extraMattresses > 0 && (
                                         <div className="flex justify-between text-[12px] text-slate-700 mb-1.5">
-                                            <span>Extra Pax Fee: {extraMattresses} pax × ₱150.00</span>
-                                            <strong>₱{(extraMattresses * 150).toLocaleString()}.00</strong>
+                                            <span>
+                                                Extra Pax Fee: {extraMattresses}{" "}
+                                                pax × ₱150.00
+                                            </span>
+                                            <strong>
+                                                ₱
+                                                {(
+                                                    extraMattresses * 150
+                                                ).toLocaleString()}
+                                                .00
+                                            </strong>
                                         </div>
                                     )}
                                     <div className="flex justify-between text-[13px] font-bold text-slate-800 border-t border-slate-300 pt-2 mt-2 mb-1.5">
                                         <span>Subtotal per Night:</span>
-                                        <strong>₱{nightlyRate.toLocaleString()}.00</strong>
+                                        <strong>
+                                            ₱{nightlyRate.toLocaleString()}.00
+                                        </strong>
                                     </div>
                                     <div className="flex justify-between text-[13px] font-bold text-slate-800 mb-2">
-                                        <span>Total Stay: {days} nights × ₱{nightlyRate.toLocaleString()}</span>
-                                        <strong>₱{roomSubtotal.toLocaleString()}.00</strong>
+                                        <span>
+                                            Total Stay: {days} nights × ₱
+                                            {nightlyRate.toLocaleString()}
+                                        </span>
+                                        <strong>
+                                            ₱{roomSubtotal.toLocaleString()}.00
+                                        </strong>
                                     </div>
                                     <div className="flex justify-between text-[14px] font-extrabold text-slate-900 border-t border-slate-300 pt-2 mb-3">
                                         <span>Total Charges</span>
-                                        <strong>₱{totalCharges.toLocaleString()}.00</strong>
+                                        <strong>
+                                            ₱{totalCharges.toLocaleString()}.00
+                                        </strong>
                                     </div>
                                     <div className="flex justify-between text-[13px] text-slate-700 mb-1">
-                                        <span>{form.payment_option === "half" ? "50% Down Payment:" : "Full Payment:"}</span>
-                                        <strong>₱{payNow.toLocaleString()}.00</strong>
+                                        <span>
+                                            {form.payment_option === "half"
+                                                ? "50% Down Payment:"
+                                                : "Full Payment:"}
+                                        </span>
+                                        <strong>
+                                            ₱{payNow.toLocaleString()}.00
+                                        </strong>
                                     </div>
                                     <div className="flex justify-between text-[13px] font-bold text-slate-800 mt-2">
                                         <span>Amount to Settle:</span>
-                                        <strong className="text-blue-600">₱{payNow.toLocaleString()}.00</strong>
+                                        <strong className="text-blue-600">
+                                            ₱{payNow.toLocaleString()}.00
+                                        </strong>
                                     </div>
                                     <div className="flex justify-between text-[13px] font-bold text-slate-800 mt-1">
                                         <span>Remaining Balance:</span>
-                                        <strong>₱{remaining.toLocaleString()}.00</strong>
+                                        <strong>
+                                            ₱{remaining.toLocaleString()}.00
+                                        </strong>
                                     </div>
                                 </>
                             ) : (
                                 <>
                                     <div className="flex justify-between text-[12px] text-slate-700 mb-2">
                                         <span>Room Rate</span>
-                                        <strong>₱{roomRate.toLocaleString()}.00</strong>
+                                        <strong>
+                                            ₱{roomRate.toLocaleString()}.00
+                                        </strong>
                                     </div>
                                     <div className="flex justify-between text-[12px] text-slate-700 mb-2">
                                         <span>
-                                            ₱{roomRate.toLocaleString()}/day x ({days})
-                                            day(s)
+                                            ₱{roomRate.toLocaleString()}/day x (
+                                            {days}) day(s)
                                         </span>
                                         <strong>
-                                            ₱{(roomRate * days).toLocaleString()}.00
+                                            ₱
+                                            {(roomRate * days).toLocaleString()}
+                                            .00
                                         </strong>
                                     </div>
                                     {form.has_companion && (
@@ -1398,7 +1475,9 @@ export default function ReservationsModal() {
                                                 ? "50% (Down Payment):"
                                                 : "Full Payment:"}
                                         </span>
-                                        <strong>₱{payNow.toLocaleString()}.00</strong>
+                                        <strong>
+                                            ₱{payNow.toLocaleString()}.00
+                                        </strong>
                                     </div>
                                     <div className="flex justify-between text-[14px] font-extrabold text-slate-900 mt-1.5">
                                         <span>Remaining Balance:</span>
@@ -1468,7 +1547,7 @@ export default function ReservationsModal() {
                                     className="hidden"
                                 />
                             </label>
-                            
+
                             <div className="flex items-center gap-1.5 text-[11px] text-amber-700 mb-3">
                                 <i className="fa-solid fa-arrow-up-from-bracket"></i>
                                 Upload a screenshot of your GCash payment
@@ -1556,7 +1635,7 @@ export default function ReservationsModal() {
                                 Cancel
                             </button>
                             <button
-                                onClick={handleSubmit}
+                                onClick={handleSubmitClick}
                                 disabled={saving || !meets24hMinimum}
                                 className="bg-[#02122c] hover:bg-[#0d2347] disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-2.5 rounded-lg text-[13px] font-bold"
                             >
@@ -1722,6 +1801,82 @@ export default function ReservationsModal() {
                             className="bg-[#02122c] hover:bg-[#0d2347] text-white px-6 py-2.5 rounded-lg text-[13px] font-bold transition"
                         >
                             Close
+                        </button>
+                    </div>
+                </Modal>
+            )}
+
+            {/* NEW: DOWN PAYMENT WARNING MODAL */}
+            {showDownPaymentWarning && (
+                <Modal
+                    onClose={() => setShowDownPaymentWarning(false)}
+                    maxWidth="max-w-[460px]"
+                >
+                    <div className="p-5 pb-4 flex items-center justify-between border-b border-slate-100 shrink-0">
+                        <h3 className="text-lg font-bold text-slate-900">
+                            Payment Policy Reminder
+                        </h3>
+                        <button
+                            onClick={() => setShowDownPaymentWarning(false)}
+                            disabled={saving}
+                            className="text-slate-400 hover:text-slate-700 text-lg disabled:opacity-50"
+                        >
+                            <i className="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+
+                    <div className="p-6 text-center overflow-y-auto max-h-[60vh]">
+                        <div className="w-16 h-16 mx-auto rounded-full bg-amber-50 flex items-center justify-center mb-4">
+                            <i className="fa-solid fa-circle-exclamation text-amber-500 text-2xl"></i>
+                        </div>
+                        <h4 className="text-[16px] font-bold text-slate-900 mb-3">
+                            50% Down Payment Selected
+                        </h4>
+                        <p className="text-slate-600 text-[13.5px] leading-relaxed mb-4">
+                            Please be reminded that you must settle the
+                            remaining 50% balance{" "}
+                            <strong>
+                                before your scheduled check-in date and time
+                            </strong>{" "}
+                            to avoid reservation cancellation.
+                        </p>
+                        <div className="bg-rose-50 border border-rose-100 rounded-xl p-3.5 text-left mb-2">
+                            <p className="text-[12px] text-rose-700 leading-snug flex items-start gap-2">
+                                <i className="fa-solid fa-triangle-exclamation mt-0.5"></i>
+                                <span>
+                                    Failure to settle the balance on time will
+                                    result in the cancellation of your
+                                    reservation, and the down payment will be{" "}
+                                    <strong>strictly non-refundable</strong>.
+                                </span>
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="p-5 border-t border-slate-100 flex justify-end gap-3 shrink-0">
+                        <button
+                            onClick={() => setShowDownPaymentWarning(false)}
+                            disabled={saving}
+                            className="text-slate-600 text-[13.5px] font-semibold px-4 py-2 disabled:opacity-50"
+                        >
+                            Go Back
+                        </button>
+                        <button
+                            onClick={executeSubmit}
+                            disabled={saving}
+                            className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-5 py-2.5 rounded-lg text-[13.5px] font-semibold inline-flex items-center gap-2 transition"
+                        >
+                            {saving ? (
+                                <>
+                                    <i className="fa-solid fa-spinner fa-spin"></i>
+                                    Submitting…
+                                </>
+                            ) : (
+                                <>
+                                    <i className="fa-solid fa-check"></i>I
+                                    Understand, Proceed
+                                </>
+                            )}
                         </button>
                     </div>
                 </Modal>

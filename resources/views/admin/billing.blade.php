@@ -1,3 +1,4 @@
+{{-- resources/views/admin/billing.blade.php --}}
 @extends('layouts.admin', ['active' => 'billing', 'pageTitle' => 'Billing & Payments'])
 @section('title', 'Billing & Payments')
 
@@ -18,7 +19,7 @@
         </div>
 
         {{-- Summary Cards --}}
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div class="bg-white rounded-2xl px-6 py-5 border border-slate-100 shadow-sm flex items-center gap-5">
                 <div
                     class="w-13 h-13 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-[22px] shrink-0">
@@ -39,17 +40,6 @@
                     <p class="text-[13px] font-medium text-slate-500">Pending Payments</p>
                     <h2 id="metric-pending" class="text-[26px] font-extrabold text-slate-900 mt-0.5">
                         ₱{{ number_format($metrics['pending'], 0) }}</h2>
-                </div>
-            </div>
-            <div class="bg-white rounded-2xl px-6 py-5 border border-slate-100 shadow-sm flex items-center gap-5">
-                <div
-                    class="w-13 h-13 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center text-[22px] shrink-0">
-                    <i class="fa-solid fa-circle-exclamation"></i>
-                </div>
-                <div>
-                    <p class="text-[13px] font-medium text-slate-500">Overdue</p>
-                    <h2 id="metric-overdue" class="text-[26px] font-extrabold text-slate-900 mt-0.5">
-                        ₱{{ number_format($metrics['overdue'], 0) }}</h2>
                 </div>
             </div>
         </div>
@@ -115,11 +105,10 @@
                                                 title="Verify Payment" data-tn="{{ $inv->transaction_no }}"></i>
                                             <i class="fa-solid fa-circle-xmark text-rose-500 text-[15px] cursor-pointer hover:text-rose-700 transition icon-reject"
                                                 title="Reject Payment" data-tn="{{ $inv->transaction_no }}"></i>
-                                        @else
-                                            <i class="fa-solid fa-bell text-slate-700 text-[15px] cursor-pointer hover:text-orange-500 transition icon-remind"
-                                                title="Send Reminder" data-tn="{{ $inv->transaction_no }}"></i>
                                         @endif
                                         
+                                        {{-- Removed Bell Icon --}}
+
                                         <i class="fa-solid fa-pen text-slate-700 text-[15px] cursor-pointer hover:text-orange-500 transition icon-edit"
                                             title="Edit Invoice" data-tn="{{ $inv->transaction_no }}"></i>
                                         <i class="fa-solid fa-eye text-slate-700 text-[15px] cursor-pointer hover:text-orange-500 transition icon-view"
@@ -178,10 +167,6 @@
                     if (elPending && data.metrics) {
                         elPending.textContent = '₱' + Number(data.metrics.pending).toLocaleString();
                     }
-                    const elOverdue = document.getElementById('metric-overdue');
-                    if (elOverdue && data.metrics) {
-                        elOverdue.textContent = '₱' + Number(data.metrics.overdue).toLocaleString();
-                    }
 
                     // Update Table Rows
                     const tbody = document.getElementById('billing-tbody');
@@ -224,9 +209,7 @@
                                             ${inv.status === 'Pending' ? `
                                                 <i class="fa-solid fa-circle-check text-emerald-600 text-[15px] cursor-pointer hover:text-emerald-800 transition icon-verify" title="Verify Payment" data-tn="${inv.transaction_no}"></i>
                                                 <i class="fa-solid fa-circle-xmark text-rose-500 text-[15px] cursor-pointer hover:text-rose-700 transition icon-reject" title="Reject Payment" data-tn="${inv.transaction_no}"></i>
-                                            ` : `
-                                                <i class="fa-solid fa-bell text-slate-700 text-[15px] cursor-pointer hover:text-orange-500 transition icon-remind" title="Send Reminder" data-tn="${inv.transaction_no}"></i>
-                                            `}
+                                            ` : ''}
                                             
                                             <i class="fa-solid fa-pen text-slate-700 text-[15px] cursor-pointer hover:text-orange-500 transition icon-edit" title="Edit Invoice" data-tn="${inv.transaction_no}"></i>
                                             <i class="fa-solid fa-eye text-slate-700 text-[15px] cursor-pointer hover:text-orange-500 transition icon-view" title="View Summary" data-tn="${inv.transaction_no}"></i>
@@ -258,7 +241,6 @@
 
                     let type = null;
                     if (icon.classList.contains('icon-edit')) type = 'edit';
-                    if (icon.classList.contains('icon-remind')) type = 'remind';
                     if (icon.classList.contains('icon-view')) type = 'view';
                     if (icon.classList.contains('icon-verify')) type = 'verify';
                     if (icon.classList.contains('icon-reject')) type = 'reject';

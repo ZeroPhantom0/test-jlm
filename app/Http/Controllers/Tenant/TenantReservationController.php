@@ -29,7 +29,6 @@ class TenantReservationController extends Controller
         $user   = Auth::user();
         $tenant = Tenant::where('user_id', $user->id)->first();
 
-        // Unfiltered — used for room card bookability + React modal map
         $allMyReservations = Reservation::where(function ($q) use ($user, $tenant) {
             $q->where('user_id', $user->id)
                 ->orWhere('tenant_name', $user->name);
@@ -37,11 +36,12 @@ class TenantReservationController extends Controller
             ->latest()
             ->get();
 
-        // "My Reservations" list — only Pending
         $pendingReservations = $allMyReservations->where('status', 'Pending')->values();
 
         $reservationCards = $this->buildReservationCards($pendingReservations);
-        $rooms            = $this->buildRoomCards($allMyReservations);
+
+        // PASS CURRENT ROOM ID TO PREVENT RESERVING IT AGAIN
+        $rooms = $this->buildRoomCards($allMyReservations, $tenant?->room_id);
 
         $myReservationsForReact = $allMyReservations->mapWithKeys(function ($r) {
             return [
@@ -63,10 +63,6 @@ class TenantReservationController extends Controller
         ]);
     }
 
-    /**
-     * Live data endpoint for polling / Echo refresh on the tenant reservations page.
-     * GET /tenants/reservations/data
-     */
     public function data()
     {
         $user   = Auth::user();
@@ -82,7 +78,9 @@ class TenantReservationController extends Controller
         $pendingReservations = $allMyReservations->where('status', 'Pending')->values();
 
         $reservationCards = $this->buildReservationCards($pendingReservations);
-        $rooms            = $this->buildRoomCards($allMyReservations);
+
+        // PASS CURRENT ROOM ID
+        $rooms = $this->buildRoomCards($allMyReservations, $tenant?->room_id);
 
         $myReservationsForReact = $allMyReservations->mapWithKeys(function ($r) {
             return [
@@ -100,7 +98,7 @@ class TenantReservationController extends Controller
             'myReservations' => $reservationCards,
             'rooms'          => $rooms,
             'reservations'   => $myReservationsForReact,
-        ])->header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0'); // <-- PREVENT CACHING
+        ])->header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
     }
 
     private function buildReservationCards($myReservations)
@@ -135,7 +133,7 @@ class TenantReservationController extends Controller
         })->values();
     }
 
-    private function buildRoomCards($myReservations)
+    private function buildRoomCards($myReservations, ?int $currentRoomId = null)
     {
         return Room::with([
             'virtualTour' => fn($q) => $q->where('status', 'Published'),
@@ -144,19 +142,30 @@ class TenantReservationController extends Controller
             ->whereHas('virtualTour', fn($q) => $q->where('status', 'Published'))
             ->orderBy('room_number')
             ->get()
-            ->map(function (Room $room) use ($myReservations) {
+            ->map(function (Room $room) use ($myReservations, $currentRoomId) {
                 $bedSlots = $this->buildBedSlots($room);
 
                 $occupiedSlots = collect($bedSlots)->where('status', 'Occupied')->count();
                 $totalBeds     = (int) $room->total_beds;
                 $emptyBeds     = max(0, $totalBeds - $occupiedSlots);
 
+                // Check if user has an ACTIVE reservation for this room
                 $existingReservation = $myReservations->first(function ($res) use ($room) {
                     return $res->room_id === $room->id && in_array($res->status, ['Pending', 'Approved']);
                 });
-                $hasReserved = (bool) $existingReservation;
 
-                $isBookable = ($emptyBeds > 0 && $room->status === 'Available') && !$hasReserved;
+                $hasReserved = (bool) $existingReservation;
+                $isCurrentRoom = ($currentRoomId === $room->id);
+                $isBookable = ($emptyBeds > 0 && $room->status === 'Available') && !$hasReserved && !$isCurrentRoom;
+
+                // FOR THE MODAL: Build the tenants list
+                $tenantsList = $room->tenants->map(function ($tenant) {
+                    return [
+                        'name' => $tenant->user?->name ?? 'Unknown',
+                        'bed_id' => $tenant->approvedReservation?->room_bed_id ?? 'N/A',
+                        'status' => $tenant->status,
+                    ];
+                })->values()->toArray();
 
                 return [
                     'id'          => $room->id,
@@ -166,7 +175,10 @@ class TenantReservationController extends Controller
                     'status'      => $room->status,
                     'is_bookable' => $isBookable,
                     'has_reserved' => $hasReserved,
+                    'is_current_room' => $isCurrentRoom,
                     'empty_beds'  => $emptyBeds,
+                    'occupied_beds' => $occupiedSlots, // ADDED for Modal
+                    'tenants'     => $tenantsList,     // ADDED for Modal
                     'img'         => $room->virtualTour?->thumbnail_url
                         ?? 'https://images.unsplash.com/photo-1598928506311-c55ded91a20c?auto=format&fit=crop&w=600&q=80',
                     'pax'         => match (true) {
@@ -192,7 +204,7 @@ class TenantReservationController extends Controller
 
     private function buildBedSlots(Room $room): array
     {
-        if ($room->room_type === 'Solo Room') {
+        if (in_array($room->room_type, ['Solo Room', 'Barkada Room'], true)) {
             return [];
         }
 
@@ -244,24 +256,8 @@ class TenantReservationController extends Controller
 
     private function computeDueDate(Carbon $checkIn, Carbon $checkOut): Carbon
     {
-        $days = max(1, $checkIn->diffInDays($checkOut));
-
-        if ($days <= 1) {
-            return $checkOut->copy();
-        }
-        if ($days <= 6) {
-            return $checkIn->copy()->addDays(3);
-        }
-        if ($days <= 31) {
-            return $checkIn->copy()->addDays(7);
-        }
-        if ($days <= 100) {
-            return $checkIn->copy()->addMonths(1);
-        }
-        if ($days <= 364) {
-            return $checkIn->copy()->addMonths(2);
-        }
-        return $checkIn->copy()->addMonths(3);
+        // The balance is now due upon arrival (check-in date)
+        return $checkIn->copy();
     }
 
     public function store(Request $request)
@@ -301,6 +297,8 @@ class TenantReservationController extends Controller
             'receipt'         => ['required', 'file', 'mimes:png,jpg,jpeg,webp', 'max:10240'],
             'room_bed_id'     => ['nullable', 'string', 'max:50'],
             'agreed_to_terms' => ['accepted'],
+            'num_occupants'   => ['nullable', 'integer', 'min:1'],
+            'companion_names' => ['nullable', 'string'],
         ]);
         $lap('validate', 'start');
 
@@ -351,6 +349,36 @@ class TenantReservationController extends Controller
         $lap('upload', 'upload_start');
 
         try {
+            // ── CLEANUP PREVIOUS PENDING RESERVATIONS & INVOICES ──
+            // This prevents the "ghost 2 pending payments" issue by removing
+            // any old abandoned reservations before creating the new one.
+            $oldPendingReservations = Reservation::where('user_id', $user->id)
+                ->where('status', 'Pending')
+                ->get();
+
+            foreach ($oldPendingReservations as $oldRes) {
+                // Delete associated invoices
+                $oldInvoices = Invoice::where('description', 'like', '%' . $oldRes->reference_no . '%')
+                    ->whereIn('status', ['Pending', 'Unpaid', 'Partial'])
+                    ->get();
+
+                foreach ($oldInvoices as $oldInv) {
+                    if ($oldInv->receipt_path && Storage::disk('public')->exists($oldInv->receipt_path)) {
+                        Storage::disk('public')->delete($oldInv->receipt_path);
+                    }
+                    $oldInv->forceDelete();
+                }
+
+                // Delete old proof of payment
+                if ($oldRes->proof_of_payment && Storage::disk('public')->exists($oldRes->proof_of_payment)) {
+                    Storage::disk('public')->delete($oldRes->proof_of_payment);
+                }
+
+                // Mark old reservation as rejected so it clears out of the way
+                $oldRes->update(['status' => 'Rejected']);
+            }
+            // ──────────────────────────────────────────────────────
+
             // ── DB transaction timing ──────────────────────────
             $mark('db_start');
 
@@ -367,15 +395,16 @@ class TenantReservationController extends Controller
                     throw new \RuntimeException('Check-out must be after check-in.');
                 }
 
-                $isBedspaceType = in_array($room->room_type, ['Bedspace', 'Barkada Room'], true);
+                // ── TYPE CHECK ──
+                $isBedspaceType = $room->room_type === 'Bedspace';
+                $isBarkadaType  = $room->room_type === 'Barkada Room';
 
-                if ($isBedspaceType && empty($validated['room_bed_id'])) {
-                    throw new \RuntimeException(
-                        'Please select a bed slot for this room type.'
-                    );
-                }
-
+                // ── BEDSPACE VALIDATION (Strict) ──
                 if ($isBedspaceType) {
+                    if (empty($validated['room_bed_id'])) {
+                        throw new \RuntimeException('Please select a bed slot for this room type.');
+                    }
+
                     $validIds = array_column($this->buildBedSlots($room), 'id');
                     if (! in_array($validated['room_bed_id'], $validIds, true)) {
                         throw new \RuntimeException('Invalid bed slot selected.');
@@ -398,7 +427,14 @@ class TenantReservationController extends Controller
                             'That bed slot is already booked for the selected dates. Please pick a different bed.'
                         );
                     }
-                } else {
+                }
+                // ── BARKADA VALIDATION ──
+                else if ($isBarkadaType) {
+                    // No bed slot required. Optionally validate occupant count.
+                    $validated['room_bed_id'] = null;
+                }
+                // ── STANDARD ROOM VALIDATION ──
+                else {
                     $overlap = Reservation::where('room_id', $room->id)
                         ->whereIn('status', ['Pending', 'Approved'])
                         ->where(function ($q) use ($in, $out) {
@@ -418,10 +454,20 @@ class TenantReservationController extends Controller
                 }
 
                 $days = max(1, $in->diffInDays($out));
+                $roomRate = (float) $room->daily_rent;
 
-                $roomRate     = (float) $room->daily_rent;
-                $companionFee = ($validated['has_companion'] ?? false) ? 150 : 0;
-                $totalCharges = ($roomRate * $days) + $companionFee;
+                // ── PRICING CALCULATION ──
+                if ($isBarkadaType) {
+                    $occupants = (int) ($validated['num_occupants'] ?? 1);
+                    $fixedBeds = min($occupants, $room->total_beds);
+                    $extraBeds = max(0, $occupants - $room->total_beds);
+
+                    $nightlyRate = ($fixedBeds * $roomRate) + ($extraBeds * 150);
+                    $totalCharges = $nightlyRate * $days;
+                } else {
+                    $companionFee = ($validated['has_companion'] ?? false) ? 150 : 0;
+                    $totalCharges = ($roomRate * $days) + $companionFee;
+                }
 
                 $payNow    = $validated['payment_option'] === 'half'
                     ? $totalCharges / 2
@@ -431,6 +477,17 @@ class TenantReservationController extends Controller
                 $dueDate = $this->computeDueDate($in, $out);
 
                 $avatar = Reservation::makeAvatar($user->name);
+
+                // ── REQUEST DETAILS BUILDER ──
+                $requestDetails = $validated['notes'] ?? '';
+                if ($isBarkadaType && !empty($validated['companion_names'])) {
+                    $names = json_decode($validated['companion_names'], true);
+                    if (is_array($names) && count($names) > 0) {
+                        $requestDetails .= "\n\n[Barkada Occupants]:\n";
+                        $requestDetails .= "Total Occupants: " . ($validated['num_occupants'] ?? 1) . "\n";
+                        $requestDetails .= "Companions: " . implode(', ', array_filter($names));
+                    }
+                }
 
                 $reservation = Reservation::create([
                     'reference_no'       => Reservation::generateReferenceNo(),
@@ -449,13 +506,13 @@ class TenantReservationController extends Controller
                     'check_in_time'      => $validated['check_in_time'] ?? null,
                     'check_out'          => $validated['check_out_date'],
                     'check_out_time'     => $validated['check_out_time'] ?? null,
-                    'has_companion'      => (bool) ($validated['has_companion'] ?? false),
+                    'has_companion'      => $isBarkadaType ? true : (bool) ($validated['has_companion'] ?? false),
                     'total_charges'      => $totalCharges,
                     'reservation_fee'    => $payNow,
                     'payment_option'     => $validated['payment_option'] === 'half' ? 'Down Payment' : 'Full Payment',
                     'payment_method'     => 'GCash',
                     'remaining'          => $remaining,
-                    'request_details'    => $validated['notes'] ?? null,
+                    'request_details'    => trim($requestDetails),
                     'proof_of_payment'   => $receiptPath,
                     'status'             => 'Pending',
                 ]);
@@ -471,7 +528,7 @@ class TenantReservationController extends Controller
                     'description'    => 'Reservation Down Payment — ' . $reservation->reference_no,
                     'check_in'       => $reservation->check_in,
                     'check_out'      => $reservation->check_out,
-                    'rate_per_day'   => $roomRate,
+                    'rate_per_day'   => $isBarkadaType ? ($totalCharges / max(1, $days)) : $roomRate,
                     'days'           => $days,
                     'total_amount'   => $totalCharges,
                     'amount_paid'    => $payNow,
