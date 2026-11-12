@@ -343,7 +343,7 @@ export default function HistoryModals() {
                                     ],
                                     [
                                         "Tenant",
-                                        receipt.tenant || "Elle Dela Cruz",
+                                        receipt.tenant || document.getElementById("tenant-history-modals")?.dataset?.userName || "-",
                                     ],
                                     ["Unit", receipt.unit || "-"],
                                     ["Description", receipt.description || "-"],

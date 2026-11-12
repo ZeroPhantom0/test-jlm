@@ -16,20 +16,24 @@ class Tenant extends Model
         'rent_rate',
         'status',
         'inactivity_notified_at',
+        'removed_at',
     ];
 
     protected $casts = [
         'rent_rate'              => 'decimal:2',
         'inactivity_notified_at' => 'datetime',
+        'removed_at'             => 'datetime',
     ];
 
     protected static function booted(): void
     {
         // Back to Active (e.g. a new reservation was approved) → the next
-        // 6-month inactive spell gets its own email again.
+        // 6-month inactive spell gets its own email again, and a tenant the
+        // admin had removed reappears on the Tenants list.
         static::saving(function (Tenant $tenant) {
             if ($tenant->isDirty('status') && $tenant->status === 'active') {
                 $tenant->inactivity_notified_at = null;
+                $tenant->removed_at = null;
             }
         });
     }

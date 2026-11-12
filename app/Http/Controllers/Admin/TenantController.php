@@ -19,16 +19,108 @@ class TenantController extends Controller
                 'room',
                 'approvedReservation',
             ])
+            ->whereNull('removed_at')
             ->orderByDesc('created_at')
             ->get();
 
         $metrics = [
-            'total'    => Tenant::count(),
-            'active'   => Tenant::where('status', 'active')->count(),
-            'inactive' => Tenant::where('status', 'inactive')->count(),
+            'total'    => Tenant::whereNull('removed_at')->count(),
+            'active'   => Tenant::whereNull('removed_at')->where('status', 'active')->count(),
+            'inactive' => Tenant::whereNull('removed_at')->where('status', 'inactive')->count(),
         ];
 
         return view('admin.tenants', compact('tenants', 'metrics'));
+    }
+
+    /**
+     * Remove a tenant from the Tenants list.
+     *
+     * The row itself is kept: room changes, stay extensions and message
+     * conversations reference it with ON DELETE CASCADE, so a hard delete
+     * would wipe that history (the confirmation dialog promises it's kept).
+     * The tenant is unassigned from their room, set Inactive and hidden.
+     * A newly approved reservation makes them Active and visible again.
+     */
+    public function destroy(Tenant $tenant)
+    {
+        $tenant->loadMissing('user', 'room');
+        $name = $tenant->user?->name ?? 'this tenant';
+
+        // ---- Guard: never remove someone with something still ongoing ----
+        $openReservation = \App\Models\Reservation::where('user_id', $tenant->user_id)
+            ->whereIn('status', ['Pending', 'Approved'])
+            ->get()
+            ->first(fn ($r) => $r->status === 'Pending' || ! $r->isStayOver());
+
+        if ($openReservation) {
+            $what = $openReservation->status === 'Pending'
+                ? 'a pending reservation'
+                : ($openReservation->hasStarted() ? 'an ongoing stay' : 'an upcoming stay');
+
+            return response()->json([
+                'message' => "{$name} can't be removed while they have {$what} ({$openReservation->reference_no}). "
+                    . 'Reject the reservation or wait until the stay ends.',
+            ], 422);
+        }
+
+        $closedRefs = \App\Models\Reservation::where('user_id', $tenant->user_id)
+            ->whereIn('status', ['Cancelled', 'Rejected'])
+            ->pluck('reference_no')->filter()->all();
+
+        $unpaid = \App\Models\Invoice::where('tenant_id', $tenant->id)
+            ->whereIn('status', ['Unpaid', 'Partial', 'Pending', 'Overdue'])
+            ->where('balance', '>', 0.005)
+            ->get()
+            ->reject(function ($inv) use ($closedRefs) {
+                foreach ($closedRefs as $ref) {
+                    if (preg_match('/' . preg_quote($ref, '/') . '(?!\d)/', (string) $inv->description)) return true;
+                }
+                return false;
+            });
+
+        if ($unpaid->isNotEmpty()) {
+            return response()->json([
+                'message' => "{$name} can't be removed while they have an unsettled balance of ₱"
+                    . number_format((float) $unpaid->sum('balance'), 2) . '. Settle or void the invoice first.',
+            ], 422);
+        }
+
+        // ---- Remove from the list, keep the history ----
+        $roomId = $tenant->room_id;
+
+        DB::transaction(function () use ($tenant) {
+            $tenant->update([
+                'room_id'    => null,
+                'status'     => 'inactive',
+                'removed_at' => now(),
+            ]);
+        });
+
+        if ($roomId) {
+            \App\Models\Room::find($roomId)?->syncStatus();
+        }
+
+        \App\Services\AuditLogger::log([
+            'action'       => 'DELETE',
+            'module'       => 'TENANTS',
+            'description'  => "Removed tenant {$name} from the tenant list"
+                . ($tenant->room ? " (unassigned from Room {$tenant->room->room_number})" : '')
+                . '. Account and history kept.',
+            'status'       => 'warning',
+            'subject_type' => Tenant::class,
+            'subject_id'   => $tenant->id,
+        ]);
+
+        try {
+            event(new \App\Events\ReservationUpdated('room_updated', null));
+        } catch (\Throwable $e) {
+            report($e);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => "{$name} was removed from the tenant list.",
+        ]);
     }
 
     /**

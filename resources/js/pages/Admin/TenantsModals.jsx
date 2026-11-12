@@ -56,6 +56,7 @@ export default function TenantsModals() {
     // Edit form state
     const [form, setForm] = useState(null);
     const [saving, setSaving] = useState(false);
+    const [deleteError, setDeleteError] = useState('');
     const [error, setError] = useState('');
 
     // -------- open modals via delegated clicks --------
@@ -173,26 +174,34 @@ export default function TenantsModals() {
     const confirmDelete = async () => {
         if (!deleteTarget) return;
         setSaving(true);
+        setDeleteError('');
         try {
             const res = await fetch(`/admin/tenants/${deleteTarget.id}`, {
                 method: 'DELETE',
                 headers: {
-                    'Accept':       'application/json',
-                    'X-CSRF-TOKEN': csrfToken(),
+                    'Accept':           'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRF-TOKEN':     csrfToken(),
                 },
+                credentials: 'same-origin',
             });
 
             const json = await res.json().catch(() => ({}));
 
+            if (res.status === 401 && json.redirect) {
+                window.location.href = json.redirect;
+                return;
+            }
             if (!res.ok) {
-                throw new Error(json.message || 'Failed to delete tenant.');
+                throw new Error(json.message || 'Failed to remove tenant.');
             }
 
             setShowDelete(false);
             setDeleteTarget(null);
             window.location.reload();
         } catch (err) {
-            alert(err.message || 'Something went wrong.');
+            // Shown inside the dialog (e.g. "can't be removed while they have an ongoing stay")
+            setDeleteError(err.message || 'Something went wrong.');
         } finally {
             setSaving(false);
         }
@@ -202,6 +211,7 @@ export default function TenantsModals() {
         if (saving) return;
         setShowDelete(false);
         setDeleteTarget(null);
+        setDeleteError('');
     };
 
     // -------- derived --------
@@ -485,7 +495,7 @@ export default function TenantsModals() {
             {showDelete && deleteTarget && (
                 <Modal onClose={closeDeleteModal} maxWidth="max-w-[460px]">
                     <div className="p-5 pb-4 flex items-center justify-between border-b border-slate-100">
-                        <h3 className="text-lg font-bold text-slate-900">Delete Tenant</h3>
+                        <h3 className="text-lg font-bold text-slate-900">Remove Tenant</h3>
                         <button
                             onClick={closeDeleteModal}
                             disabled={saving}
@@ -501,7 +511,7 @@ export default function TenantsModals() {
                         </div>
                         <h4 className="text-lg font-bold text-slate-900 mb-2">Are you sure?</h4>
                         <p className="text-slate-500 text-[13px] mb-2">
-                            You are about to permanently delete:
+                            You are about to remove this tenant from the list:
                         </p>
                         <p className="font-bold text-slate-900 text-[15px] mb-4">
                             {deleteTarget.name}
@@ -510,11 +520,19 @@ export default function TenantsModals() {
                         <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-left">
                             <p className="text-[12px] text-amber-800 leading-snug">
                                 <i className="fa-solid fa-circle-info mr-1"></i>
-                                This will remove the tenant record and unassign them from their current room.
-                                Their user account, reservation history, and billing records will be preserved.{' '}
-                                <strong>This action cannot be undone.</strong>
+                                They will be unassigned from their room, set to Inactive and hidden from the Tenants list.
+                                Their account, reservations, billing, service requests and messages are kept.
+                                If they make a new reservation that gets approved, they will appear here again.
                             </p>
                         </div>
+                        {deleteError && (
+                            <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 text-left mt-3" role="alert">
+                                <p className="text-[12.5px] text-rose-700 leading-snug flex items-start gap-2">
+                                    <i className="fa-solid fa-circle-exclamation mt-0.5"></i>
+                                    <span>{deleteError}</span>
+                                </p>
+                            </div>
+                        )}
                     </div>
 
                     <div className="p-5 border-t border-slate-100 flex justify-end gap-3">
@@ -533,12 +551,12 @@ export default function TenantsModals() {
                             {saving ? (
                                 <>
                                     <i className="fa-solid fa-spinner fa-spin"></i>
-                                    Deleting…
+                                    Removing…
                                 </>
                             ) : (
                                 <>
                                     <i className="fa-solid fa-trash-can"></i>
-                                    Yes, Delete
+                                    Yes, Remove
                                 </>
                             )}
                         </button>

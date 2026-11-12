@@ -146,6 +146,13 @@ export default function ReservationsModal() {
 
     const [reservationsData, setReservationsData] = useState({});
 
+    // Logged-in tenant's name (from the Blade mount element) → Lead Guest
+    const [leadGuestName] = useState(
+        () =>
+            document.getElementById("tenant-reservations-modals")?.dataset
+                ?.userName || "",
+    );
+
     const [form, setForm] = useState({
         check_in_date: "",
         check_in_time: "",
@@ -1108,7 +1115,7 @@ export default function ReservationsModal() {
                                     <input
                                         type="text"
                                         readOnly
-                                        value="Elle Dela Cruz" // You can pass the actual user name here if available in props/context
+                                        value={leadGuestName}
                                         className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-[13px] text-slate-500 cursor-not-allowed"
                                     />
                                 </div>

@@ -38,7 +38,7 @@
     @endphp
 
     {{-- React mount point for History modals --}}
-    <div id="tenant-history-modals" data-items='@json($itemsMap)'></div>
+    <div id="tenant-history-modals" data-user-name="{{ auth()->user()?->name }}" data-items='@json($itemsMap)'></div>
 
     <div class="p-4 md:p-8 max-w-6xl mx-auto">
 

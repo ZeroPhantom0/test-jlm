@@ -240,6 +240,7 @@ Route::middleware(['auth', 'admin', 'prevent.back.cache'])->prefix('admin')->nam
     // ---------- Tenants ----------
     Route::get('/tenants',          [TenantController::class, 'index'])->name('tenants');
     Route::put('/tenants/{tenant}', [TenantController::class, 'update'])->name('tenants.update');
+    Route::delete('/tenants/{tenant}', [TenantController::class, 'destroy'])->name('tenants.destroy');
 
     // ---------- Billing ----------
     Route::get('/billing/data', [BillingController::class, 'data'])->name('billing.data');

@@ -29,51 +29,77 @@ class TenantInactivityService
     public const MONTHS = 6;
 
     /**
-     * @return array{inactivated: array<int,array{tenant:string,last:string}>, emailed: int}
+     * Correct EVERY tenant's status to what the 6-month rule says it should
+     * be, in both directions, and email each tenant who is Inactive and has
+     * not been notified yet (including ones that were already Inactive).
+     *
+     * @param bool $sendNow send emails immediately instead of queueing them
+     * @return array{rows: array<int,array>, activated:int, inactivated:int, emailed:int, email_failed:int}
      */
-    public function run(bool $dryRun = false): array
+    public function reconcile(bool $dryRun = false, bool $sendNow = false): array
     {
         $cutoff = now()->subMonths(self::MONTHS);
-        $result = ['inactivated' => [], 'emailed' => 0];
+        $out = ['rows' => [], 'activated' => 0, 'inactivated' => 0, 'emailed' => 0, 'email_failed' => 0];
 
-        $candidates = Tenant::with('user')
-            ->where('status', 'active')
-            ->whereNull('room_id')
-            ->get();
+        // Tenants an admin removed from the list are left alone
+        foreach (Tenant::with('user')->whereNull('removed_at')->get() as $tenant) {
+            $user = $tenant->user;
+            if (! $user || ! $user->isTenant()) continue;
 
-        foreach ($candidates as $tenant) {
-            if (! $tenant->user || ! $tenant->user->isTenant()) continue;
-            if ($this->hasOngoingObligation($tenant)) continue;
+            $last   = $this->lastActivityAt($tenant);
+            $reason = match (true) {
+                (bool) $tenant->room_id                  => 'has a room',
+                $this->hasOngoingObligation($tenant)     => 'open reservation / unsettled billing',
+                $last && $last->greaterThan($cutoff)     => 'reserved within 6 months',
+                default                                  => null,
+            };
+            $should = $reason ? 'active' : 'inactive';
+            $email  = $should === 'inactive' && ! $tenant->inactivity_notified_at && $user->email;
 
-            $last = $this->lastActivityAt($tenant);
-            if ($last && $last->greaterThan($cutoff)) continue;
-
-            $result['inactivated'][] = [
-                'tenant' => $tenant->user->name,
+            $row = [
+                'tenant' => $user->name,
                 'last'   => $last?->format('M j, Y') ?? '—',
+                'from'   => $tenant->status,
+                'to'     => $should,
+                'why'    => $reason ?? 'no reservation in 6 months',
+                'email'  => $email ? ($dryRun ? 'will send' : 'sent') : ($should === 'inactive' ? 'already notified' : '—'),
             ];
-            if ($dryRun) continue;
 
-            $tenant->update(['status' => 'inactive', 'inactivity_notified_at' => now()]);
-
-            try {
-                if ($tenant->user->email) {
-                    Mail::to($tenant->user->email)->queue(new TenantInactiveMail($tenant->user, $last));
-                    $result['emailed']++;
+            if (! $dryRun) {
+                if ($tenant->status !== $should) {
+                    $tenant->update(['status' => $should]); // → active clears the notice flag
+                    $should === 'active' ? $out['activated']++ : $out['inactivated']++;
                 }
-            } catch (\Throwable $e) {
-                Log::warning('[inactivity] email failed', ['tenant' => $tenant->id, 'error' => $e->getMessage()]);
+
+                if ($email) {
+                    try {
+                        $mail = new TenantInactiveMail($user, $last);
+                        $sendNow ? Mail::to($user->email)->send($mail) : Mail::to($user->email)->queue($mail);
+                        $tenant->forceFill(['inactivity_notified_at' => now()])->save();
+                        $out['emailed']++;
+                    } catch (\Throwable $e) {
+                        $row['email'] = 'FAILED: ' . $e->getMessage();
+                        $out['email_failed']++;
+                        Log::warning('[inactivity] email failed', ['tenant' => $tenant->id, 'error' => $e->getMessage()]);
+                    }
+                }
+            } else {
+                if ($tenant->status !== $should) {
+                    $should === 'active' ? $out['activated']++ : $out['inactivated']++;
+                }
+                if ($email) $out['emailed']++;
             }
+
+            $out['rows'][] = $row;
         }
 
-        if (! $dryRun && count($result['inactivated']) > 0) {
+        if (! $dryRun && ($out['activated'] || $out['inactivated'] || $out['emailed'])) {
             try {
                 AuditLogger::log([
                     'action'      => 'UPDATE',
                     'module'      => 'TENANTS',
-                    'description' => 'Marked ' . count($result['inactivated']) . ' tenant(s) inactive after '
-                        . self::MONTHS . ' months without a reservation: '
-                        . collect($result['inactivated'])->pluck('tenant')->implode(', ') . '.',
+                    'description' => "Tenant status check (6-month rule): {$out['activated']} set Active, "
+                        . "{$out['inactivated']} set Inactive, {$out['emailed']} inactivity email(s) sent.",
                     'status'      => 'warning',
                     'user_name'   => 'System',
                     'user_role'   => 'system',
@@ -83,7 +109,25 @@ class TenantInactivityService
             }
         }
 
-        return $result;
+        return $out;
+    }
+
+    /**
+     * Daily job: same rule as reconcile(). Kept for the command's output shape.
+     *
+     * @return array{inactivated: array<int,array{tenant:string,last:string}>, emailed: int}
+     */
+    public function run(bool $dryRun = false): array
+    {
+        $r = $this->reconcile($dryRun);
+
+        return [
+            'inactivated' => collect($r['rows'])
+                ->filter(fn ($row) => $row['from'] === 'active' && $row['to'] === 'inactive')
+                ->map(fn ($row) => ['tenant' => $row['tenant'], 'last' => $row['last']])
+                ->values()->all(),
+            'emailed' => $r['emailed'],
+        ];
     }
 
     /**
@@ -98,7 +142,7 @@ class TenantInactivityService
         $cutoff = now()->subMonths(self::MONTHS);
         $names  = [];
 
-        foreach (Tenant::with('user')->where('status', 'inactive')->get() as $tenant) {
+        foreach (Tenant::with('user')->whereNull('removed_at')->where('status', 'inactive')->get() as $tenant) {
             if (! $tenant->user || ! $tenant->user->isTenant()) continue;
 
             $last = $this->lastActivityAt($tenant);
@@ -139,10 +183,25 @@ class TenantInactivityService
             ->contains(fn (Reservation $r) => $r->status === 'Pending' || ! $r->isStayOver());
         if ($openReservation) return true;
 
-        // Unsettled billing
+        // Unsettled billing — ignoring invoices of cancelled / rejected
+        // reservations (forfeited balances Billing no longer collects)
+        $closedRefs = Reservation::where('user_id', $tenant->user_id)
+            ->whereIn('status', ['Cancelled', 'Rejected'])
+            ->pluck('reference_no')
+            ->filter()
+            ->all();
+
         return Invoice::where('tenant_id', $tenant->id)
             ->whereIn('status', ['Unpaid', 'Partial', 'Pending', 'Overdue'])
             ->where('balance', '>', 0.005)
-            ->exists();
+            ->get()
+            ->contains(function (Invoice $inv) use ($closedRefs) {
+                foreach ($closedRefs as $ref) {
+                    if (preg_match('/' . preg_quote($ref, '/') . '(?!\d)/', (string) $inv->description)) {
+                        return false; // belongs to a closed reservation
+                    }
+                }
+                return true;
+            });
     }
 }

@@ -259,7 +259,7 @@
         @endif
     </div>
 
-    <div id="tenant-reservations-modals" data-reservations='@json($reservations ?? [])'></div>
+    <div id="tenant-reservations-modals" data-user-name="{{ auth()->user()?->name }}" data-reservations='@json($reservations ?? [])'></div>
 @endsection
 
 @push('scripts')
