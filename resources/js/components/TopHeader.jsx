@@ -38,7 +38,6 @@ function csrfToken() {
     );
 }
 
-/* Reusable avatar block: shows uploaded pic if present, otherwise a default user icon */
 function UserAvatar({ src, name = "User", size = 34, className = "" }) {
     const dimension = `${size}px`;
 
@@ -76,38 +75,28 @@ export default function TopHeader({
     const [notifOpen, setNotifOpen] = useState(false);
 
     const [rawNotifications, setRawNotifications] = useState([]);
-
-    const [locallyRead, setLocallyRead] = useState(new Set());
+    
+    // Store dismissed/read IDs in sessionStorage so they survive page reloads
     const [dismissed, setDismissed] = useState(() => readDismissed());
-
     const [loading, setLoading] = useState(false);
 
     const dropdownRef = useRef(null);
     const notifRef = useRef(null);
 
     const displayRole = isTenant ? "Tenant" : "New Tenant";
-
-    // 🛡️ Coerce PHP/MySQL booleans safely
     const isTruthy = (v) => v === true || v === 1 || v === "1" || v === "true";
 
-    // 1. Process notifications
+    // Process notifications and filter out anything dismissed/read
     const processedNotifications = rawNotifications
-        .map((n) => ({
-            ...n,
-            isUnread:
-                isTruthy(n.unread) &&
-                !locallyRead.has(n.id) &&
-                !dismissed.has(n.id),
-        }))
         .filter((n) => !dismissed.has(n.id))
         .slice(0, MAX_VISIBLE);
 
-    const unreadCount = processedNotifications.filter((n) => n.isUnread).length;
+    const unreadCount = processedNotifications.filter((n) => isTruthy(n.unread)).length;
 
     const fetchingRef = useRef(false);
 
     const fetchNotifications = async () => {
-        if (fetchingRef.current) return; // skip if already in flight
+        if (fetchingRef.current) return;
         fetchingRef.current = true;
         try {
             setLoading(true);
@@ -130,13 +119,12 @@ export default function TopHeader({
         }
     };
 
-    // Initial fetch + fallback poll (only when Echo is NOT live)
     useEffect(() => {
         fetchNotifications();
 
         const intervalId = setInterval(() => {
             if (document.visibilityState !== "visible") return;
-            if (window.__liveAvailable === true) return; // Echo is pushing updates
+            if (window.__liveAvailable === true) return; 
             fetchNotifications();
         }, 60000);
 
@@ -151,26 +139,12 @@ export default function TopHeader({
         };
     }, []);
 
-    // ── Real-time: refetch whenever any tenant-side event fires ──
     useEffect(() => {
         if (!window.Echo) return;
-
         const chans = window.LiveTenantChannels;
         if (!chans) return;
 
         const handler = () => fetchNotifications();
-
-        // Tenant ID is needed for the per-tenant messages channel.
-        // window.__appConfig.userId is the tenant's user ID; the
-        // channel expects the tenant record ID, so we fetch it from
-        // the tenant-specific channels that don't need an ID, and
-        // rely on billing/services/reservations for everything else.
-        //
-        // (The messages channel key is `tenant.{tenantId}.messages`
-        //  where tenantId is the Tenant record ID. We don't have it
-        //  in appConfig, so message-refresh is covered by the slow
-        //  fallback poll and by the initial fetch. Everything else
-        //  is real-time.)
         const tenantId = window.__appConfig?.tenantId;
         const unsubs = [
             chans.reservations(handler),
@@ -198,10 +172,7 @@ export default function TopHeader({
 
     useEffect(() => {
         const handleClickOutside = (e) => {
-            if (
-                dropdownRef.current &&
-                !dropdownRef.current.contains(e.target)
-            ) {
+            if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
                 setDropdownOpen(false);
             }
             if (notifRef.current && !notifRef.current.contains(e.target)) {
@@ -209,38 +180,33 @@ export default function TopHeader({
             }
         };
         document.addEventListener("mousedown", handleClickOutside);
-        return () =>
-            document.removeEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
     }, []);
 
+    // This will mark it read locally and save to sessionStorage so it disappears
     const markAsRead = (id) => {
-        setLocallyRead((prev) => {
-            const next = new Set(prev);
-            next.add(id);
-            return next;
-        });
+        const next = new Set(dismissed);
+        next.add(id);
+        saveDismissed(next);
+        setDismissed(next);
     };
 
     const markAllAsRead = () => {
-        setLocallyRead((prev) => {
-            const next = new Set(prev);
-            processedNotifications.forEach((n) => next.add(n.id));
-            return next;
-        });
+        const next = new Set(dismissed);
+        processedNotifications.forEach((n) => next.add(n.id));
+        saveDismissed(next);
+        setDismissed(next);
     };
 
     const clearAll = () => {
-        const nextDismissed = new Set(dismissed);
-        processedNotifications.forEach((n) => {
-            if (!n.isUnread) {
-                nextDismissed.add(n.id);
-            }
-        });
-        saveDismissed(nextDismissed);
-        setDismissed(nextDismissed);
+        const next = new Set(dismissed);
+        processedNotifications.forEach((n) => next.add(n.id));
+        saveDismissed(next);
+        setDismissed(next);
     };
 
     const handleClickNotification = (n) => {
+        // This will remove it from the list immediately
         markAsRead(n.id);
         setNotifOpen(false);
 
@@ -266,9 +232,7 @@ export default function TopHeader({
                 <button
                     type="button"
                     className="md:hidden text-slate-800 text-lg p-1.5 rounded-md hover:bg-slate-100"
-                    onClick={() =>
-                        window.dispatchEvent(new Event("open-mobile-sidebar"))
-                    }
+                    onClick={() => window.dispatchEvent(new Event("open-mobile-sidebar"))}
                     aria-label="Open menu"
                 >
                     <i className="fa-solid fa-bars" />
@@ -298,28 +262,12 @@ export default function TopHeader({
 
                     {notifOpen && (
                         <>
-                            {/* Mobile backdrop — closes panel on tap outside */}
                             <div
                                 className="fixed inset-0 z-[1999] bg-black/20 md:hidden"
                                 onClick={() => setNotifOpen(false)}
                             />
 
-                            <div
-                                className="
-                    fixed md:absolute
-                    left-1/2 md:left-auto -translate-x-1/2 md:translate-x-0
-                    md:right-0 md:mt-3
-                    top-[68px] md:top-auto
-                    w-[calc(100vw-2rem)] sm:w-[360px] md:w-[380px]
-                    max-w-[420px]
-                    max-h-[calc(100dvh-90px)] md:max-h-[560px]
-                    bg-white rounded-2xl border border-slate-200 shadow-2xl
-                    z-[2000] flex flex-col overflow-hidden
-                "
-                                role="dialog"
-                                aria-label="Notifications"
-                            >
-                                {/* Header */}
+                            <div className="fixed md:absolute left-1/2 md:left-auto -translate-x-1/2 md:translate-x-0 md:right-0 md:mt-3 top-[68px] md:top-auto w-[calc(100vw-2rem)] sm:w-[360px] md:w-[380px] max-w-[420px] max-h-[calc(100dvh-90px)] md:max-h-[560px] bg-white rounded-2xl border border-slate-200 shadow-2xl z-[2000] flex flex-col overflow-hidden">
                                 <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-slate-100 shrink-0">
                                     <div className="flex items-center gap-2 min-w-0">
                                         <h4 className="text-[14px] font-bold text-slate-900 truncate">
@@ -347,18 +295,15 @@ export default function TopHeader({
                                                 type="button"
                                                 onClick={clearAll}
                                                 className="text-[11px] font-semibold text-orange-600 hover:text-orange-700 whitespace-nowrap"
-                                                title="Dismiss read notifications"
                                             >
-                                                Clear read
+                                                Clear
                                             </button>
                                         </div>
                                     )}
                                 </div>
 
-                                {/* Scrollable list */}
                                 <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
-                                    {loading &&
-                                    processedNotifications.length === 0 ? (
+                                    {loading && processedNotifications.length === 0 ? (
                                         <div className="py-12 text-center text-[12px] text-slate-500">
                                             Loading…
                                         </div>
@@ -376,30 +321,16 @@ export default function TopHeader({
                                             <a
                                                 key={n.id}
                                                 href={n.link}
-                                                onClick={() =>
-                                                    handleClickNotification(n)
-                                                }
+                                                onClick={() => handleClickNotification(n)}
                                                 className={`flex items-start gap-3 px-4 py-3 border-b border-slate-50 last:border-b-0 hover:bg-slate-50 transition ${
-                                                    n.isUnread
-                                                        ? "bg-orange-50/40"
-                                                        : ""
+                                                    isTruthy(n.unread) ? "bg-orange-50/40" : ""
                                                 }`}
                                             >
-                                                <div
-                                                    className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${n.color}`}
-                                                >
-                                                    <i
-                                                        className={`${n.icon} text-[13px]`}
-                                                    ></i>
+                                                <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${n.color}`}>
+                                                    <i className={`${n.icon} text-[13px]`}></i>
                                                 </div>
                                                 <div className="flex-1 min-w-0">
-                                                    <p
-                                                        className={`text-[12.5px] leading-tight break-words ${
-                                                            n.isUnread
-                                                                ? "font-bold text-slate-900"
-                                                                : "font-medium text-slate-600"
-                                                        }`}
-                                                    >
+                                                    <p className={`text-[12.5px] leading-tight break-words ${isTruthy(n.unread) ? "font-bold text-slate-900" : "font-medium text-slate-600"}`}>
                                                         {n.title}
                                                     </p>
                                                     <p className="text-[11.5px] text-slate-500 mt-0.5 truncate">
@@ -409,7 +340,7 @@ export default function TopHeader({
                                                         {timeAgo(n.time)}
                                                     </p>
                                                 </div>
-                                                {n.isUnread && (
+                                                {isTruthy(n.unread) && (
                                                     <span className="w-2 h-2 rounded-full bg-rose-500 mt-1.5 flex-shrink-0" />
                                                 )}
                                             </a>
@@ -442,35 +373,21 @@ export default function TopHeader({
                     {dropdownOpen && (
                         <div className="absolute right-0 top-[calc(100%+12px)] w-60 bg-white rounded-2xl border border-slate-100 shadow-xl p-3 z-[1000] animate-in fade-in slide-in-from-top-2 duration-150">
                             <div className="flex items-center gap-3 p-2 pb-3 border-b border-slate-100 mb-1.5">
-                                <UserAvatar
-                                    src={avatar}
-                                    name={userName}
-                                    size={38}
-                                />
+                                <UserAvatar src={avatar} name={userName} size={38} />
                                 <div className="overflow-hidden">
-                                    <h4 className="text-[13px] font-bold text-slate-900">
-                                        {userName}
-                                    </h4>
+                                    <h4 className="text-[13px] font-bold text-slate-900">{userName}</h4>
                                     <p className="text-[11px] text-slate-400 truncate">
-                                        {userEmail ||
-                                            `${displayRole.toLowerCase().replace(/\s+/g, "")}@jlmcozycabin.com`}
+                                        {userEmail || `${displayRole.toLowerCase().replace(/\s+/g, "")}@jlmcozycabin.com`}
                                     </p>
                                 </div>
                             </div>
 
-                            <a
-                                href="/tenants/settings"
-                                className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors"
-                            >
+                            <a href="/tenants/settings" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors">
                                 <i className="fa-solid fa-gear w-[18px] text-center text-sm" />
                                 <span>Account Settings</span>
                             </a>
 
-                            <button
-                                type="button"
-                                onClick={(e) => logout(e)}
-                                className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-medium text-red-600 hover:bg-red-50 transition-colors w-full text-left"
-                            >
+                            <button type="button" onClick={(e) => logout(e)} className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-medium text-red-600 hover:bg-red-50 transition-colors w-full text-left">
                                 <i className="fa-solid fa-right-from-bracket w-[18px] text-center text-sm" />
                                 <span>Logout</span>
                             </button>

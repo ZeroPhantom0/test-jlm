@@ -97,6 +97,7 @@
         </main>
     </div>
 
+    {{-- CRITICAL: This stack was missing! It tells Blade where to inject @push('scripts') --}}
+    @stack('scripts')
 </body>
-
 </html>

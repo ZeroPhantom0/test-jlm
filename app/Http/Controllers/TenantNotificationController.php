@@ -63,7 +63,7 @@ class TenantNotificationController extends Controller
         // 2) Outstanding / overdue invoices
         $invoices = DB::table('invoices')
             ->where('tenant_id', $tenant->id)
-            ->whereNull('deleted_at')    
+            ->whereNull('deleted_at')
             ->whereIn('status', ['Unpaid', 'Partial', 'Overdue'])
             ->orderByRaw("FIELD(status, 'Overdue', 'Unpaid', 'Partial')")
             ->orderBy('due_date')
@@ -95,7 +95,7 @@ class TenantNotificationController extends Controller
         // 2a) Recently verified invoices (Paid / Partial after admin verify)
         $resolvedInvoices = DB::table('invoices')
             ->where('tenant_id', $tenant->id)
-            ->whereNull('deleted_at') 
+            ->whereNull('deleted_at')
             ->whereIn('status', ['Paid', 'Partial'])
             ->whereNotNull('verified_at')
             ->where('verified_at', '>=', now()->subDays(14))
@@ -178,6 +178,11 @@ class TenantNotificationController extends Controller
                 default    => 'fa-regular fa-circle',
             };
 
+            // NEW LOGIC: Route to Dashboard if approved, History if rejected/expired
+            $link = $r->status === 'Approved'
+                ? '/tenants'
+                : '/tenants/history';
+
             $notifications[] = [
                 'id'          => 'res-' . $r->id . '-' . Str::slug($r->status),
                 'type'        => 'reservation',
@@ -187,7 +192,7 @@ class TenantNotificationController extends Controller
                 'description' => $r->desired_room . ' · ' . $r->reference_no,
                 'time'        => $r->processed_at ?? $r->updated_at ?? $r->created_at,
                 'unread'      => true,
-                'link'        => '/tenants/reservations',
+                'link'        => $link, // <-- Updated Link
             ];
         }
 

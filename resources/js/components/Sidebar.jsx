@@ -17,7 +17,6 @@ const NAV_ITEMS = [
         hasSub: true,
         requiresTenant: true,
     },
-    // REMOVED BILLING HERE
     {
         key: "reservations",
         label: "Reservations",
@@ -41,6 +40,27 @@ const NAV_ITEMS = [
         label: "Settings",
         icon: "fa-solid fa-gear",
         href: "/tenants/settings",
+    },
+];
+
+const SERVICES_SUB = [
+    {
+        key: "services.maintenance",
+        label: "Maintenance",
+        icon: "fa-solid fa-wrench",
+        href: "/tenants/services/maintenance",
+    },
+    {
+        key: "services.room-change",
+        label: "Room Change",
+        icon: "fa-solid fa-house",
+        href: "/tenants/services/room-change",
+    },
+    {
+        key: "services.stay-extension",
+        label: "Stay Extension",
+        icon: "fa-regular fa-calendar",
+        href: "/tenants/services/stay-extension",
     },
 ];
 
@@ -73,8 +93,6 @@ export default function Sidebar({
     userRole = "Tenant",
     avatar = null, // Strictly null by default
     isTenant = false,
-    hasActiveReservation = false, // NEW: Hides Services if they have pending/partial reservations
-    hasPastReservations = false,  // NEW: Ensures they actually have an approved reservation
 }) {
     const [collapsed, setCollapsed] = useState(false);
     const [mobileOpen, setMobileOpen] = useState(false);
@@ -98,17 +116,9 @@ export default function Sidebar({
 
     const isServicesActive = active.startsWith("services");
 
-    // Show services ONLY IF:
-    // 1. They are a tenant
-    // 2. They DO NOT have an active/pending reservation
-    // 3. They HAVE an approved past reservation (meaning they are an active tenant)
-    const showServices = isTenant && !hasActiveReservation && hasPastReservations;
-
-    const visibleItems = NAV_ITEMS.filter((item) => {
-        if (item.requiresTenant && !isTenant) return false;
-        if (item.key === "services" && !showServices) return false;
-        return true;
-    });
+    const visibleItems = NAV_ITEMS.filter(
+        (item) => !item.requiresTenant || isTenant,
+    );
 
     return (
         <>
