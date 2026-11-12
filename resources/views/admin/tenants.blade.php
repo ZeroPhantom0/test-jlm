@@ -55,7 +55,6 @@
                             <th class="py-3 px-4">Name</th>
                             <th class="py-3 px-4">Contact</th>
                             <th class="py-3 px-4">Room</th>
-                            <th class="py-3 px-4">Rent Rate</th>
                             <th class="py-3 px-4">Status</th>
                             <th class="py-3 px-4 text-right">Actions</th>
                         </tr>
@@ -99,32 +98,30 @@
                                     {{-- 🔥 FIXED: Added ?-> here to prevent crashing when room is null --}}
                                     {{ $tenant->room?->room_number ? 'Room ' . $tenant->room->room_number : '—' }}
                                 </td>
-                                <td class="py-3.5 px-4 text-[13.5px] font-bold text-slate-900 tracking-tight">
-                                    ₱{{ number_format($tenant->rent_rate, 0) }}
-                                </td>
                                 <td class="py-3.5 px-4">
-                                    <span class="inline-block px-2.5 py-1 rounded-md text-[10.5px] font-bold tracking-wide uppercase {{ $tenant->status === 'active' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600' }}">
+                                    {{-- Active / Inactive is automatic: 6 months without a reservation → Inactive --}}
+                                    <span class="inline-block px-2.5 py-1 rounded-md text-[10.5px] font-bold tracking-wide uppercase {{ $tenant->status === 'active' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600' }}"
+                                        title="{{ $tenant->status === 'active' ? 'Has reservation activity in the last 6 months' : 'No reservation in the last 6 months' . ($tenant->inactivity_notified_at ? ' · notified ' . $tenant->inactivity_notified_at->format('M j, Y') : '') }}">
                                         {{ ucfirst($tenant->status) }}
                                     </span>
                                 </td>
                                 <td class="py-3.5 px-4">
                                     <div class="flex items-center justify-end gap-3.5 text-slate-400">
                                         <i class="fa-regular fa-eye text-[14px] cursor-pointer hover:text-slate-900 transition-colors view-tenant-btn"></i>
-                                        <i class="fa-solid fa-pencil text-[13px] cursor-pointer hover:text-slate-900 transition-colors edit-tenant-btn"></i>
                                         <i class="fa-regular fa-trash-can text-[14px] cursor-pointer hover:text-rose-600 transition-colors delete-tenant-btn"></i>
                                     </div>
                                 </td>
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="6" class="py-10 text-center text-slate-400 text-sm">
+                                <td colspan="5" class="py-10 text-center text-slate-400 text-sm">
                                     No tenants found.
                                 </td>
                             </tr>
                         @endforelse
 
                         <tr id="tenant-empty-filter" class="hidden">
-                            <td colspan="6" class="py-10 text-center text-slate-400 text-sm">
+                            <td colspan="5" class="py-10 text-center text-slate-400 text-sm">
                                 <i class="fa-solid fa-magnifying-glass text-3xl mb-2 block opacity-50"></i>
                                 No tenants match your current filters.
                             </td>

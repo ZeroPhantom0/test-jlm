@@ -37,6 +37,9 @@ return Application::configure(basePath: dirname(__DIR__))
         // Every 5 minutes so a stay ends at its actual check-out time
         $schedule->command('reservations:expire-past')->everyFiveMinutes()->withoutOverlapping();
 
+        // Tenants with no reservation for 6 months → Inactive + one email
+        $schedule->command('tenants:mark-inactive')->dailyAt('08:00')->withoutOverlapping();
+
         // Remaining-balance SMS reminders / payment-policy cancellations
         $schedule->command('billing:balance-reminders')->everyMinute()->withoutOverlapping();
     })

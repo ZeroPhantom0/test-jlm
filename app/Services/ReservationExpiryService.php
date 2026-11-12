@@ -38,8 +38,9 @@ class ReservationExpiryService
             ->filter(fn (Reservation $r) => $r->isStayOver())
             ->values();
 
+        // Tenants still holding a room on a stay that already ended
         $stuckTenants = Tenant::query()
-            ->where('status', 'active')
+            ->whereNotNull('room_id')
             ->whereHas('approvedReservation', fn ($q) => $q->whereIn('status', self::ENDED))
             ->get();
 
@@ -72,7 +73,7 @@ class ReservationExpiryService
 
             foreach ($stuckTenants as $tenant) {
                 if ($tenant->room_id) $roomIds[$tenant->room_id] = true;
-                $tenant->update(['status' => 'inactive', 'room_id' => null]);
+                $tenant->update(['room_id' => null]); // free the room; Active/Inactive follows the 6-month rule
                 $released++;
             }
 
@@ -114,12 +115,12 @@ class ReservationExpiryService
     private function releaseTenantsOf(int $reservationId, array &$roomIds): int
     {
         $tenants = Tenant::where('approved_reservation_id', $reservationId)
-            ->where('status', 'active')
+            ->whereNotNull('room_id')
             ->get();
 
         foreach ($tenants as $tenant) {
             if ($tenant->room_id) $roomIds[$tenant->room_id] = true;
-            $tenant->update(['status' => 'inactive', 'room_id' => null]);
+            $tenant->update(['room_id' => null]); // free the room; Active/Inactive follows the 6-month rule
         }
 
         return $tenants->count();

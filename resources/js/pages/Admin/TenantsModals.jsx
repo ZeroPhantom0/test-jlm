@@ -254,9 +254,14 @@ export default function TenantsModals() {
                                 <div className="text-[13px] font-bold text-slate-900 mt-1">{tenant.room}</div>
                             </div>
                             <div className="bg-slate-50 rounded-xl p-3.5">
-                                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Rent Rate</div>
-                                <div className="text-[13px] font-bold text-slate-900 mt-1">
-                                    ₱{Number(tenant.rent_rate || 0).toLocaleString()}
+                                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Status</div>
+                                <div className={`text-[13px] font-bold mt-1 ${tenant.status === 'active' ? 'text-green-700' : 'text-slate-500'}`}>
+                                    {tenant.status === 'active' ? 'Active' : 'Inactive'}
+                                    <span className="block text-[10.5px] font-medium text-slate-400 mt-0.5">
+                                        {tenant.status === 'active'
+                                            ? 'Reserved within the last 6 months'
+                                            : 'No reservation in 6 months'}
+                                    </span>
                                 </div>
                             </div>
                             <div className="bg-slate-50 rounded-xl p-3.5">

@@ -281,7 +281,7 @@ class BalanceReminderService
 
             // Release the tenant + room held by this reservation.
             Tenant::where('approved_reservation_id', $locked->id)
-                ->update(['status' => 'inactive', 'room_id' => null]);
+                ->update(['room_id' => null]); // free the room; Active/Inactive follows the 6-month rule
 
             $locked->room?->syncStatus();
 
