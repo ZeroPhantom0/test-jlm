@@ -80,7 +80,7 @@
 
         {{-- ============ AVAILABLE ROOMS ============ --}}
         <div class="flex justify-between items-center mb-5 flex-wrap gap-3">
-            <h3 class="text-lg font-bold">Available Rooms (With Virtual Tour)</h3>
+            <h3 class="text-lg font-bold">Available Rooms</h3>
             <div class="text-[12px] text-slate-500" id="room-count-text">
                 {{ $rooms->count() }} room{{ $rooms->count() === 1 ? '' : 's' }} available
             </div>
@@ -93,14 +93,38 @@
                 <p class="text-sm font-medium text-slate-600">No rooms with virtual tours yet.</p>
                 <p class="text-xs mt-1">The admin needs to publish at least one virtual tour.</p>
             </div>
-            <div id="available-rooms-grid" class="grid grid-cols-1 md:grid-cols-2 gap-5 mb-8 hidden"></div>
+            <div id="available-rooms-grid" class="flex flex-col gap-8 mb-8 hidden"></div>
         @else
             @php
                 $fromPath = '/' . ltrim(request()->path(), '/');
             @endphp
 
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-5 mb-8" id="available-rooms-grid">
-                @foreach ($rooms as $room)
+            @php
+                // Group like the landing page: Solo Rooms → Barkada Rooms → Bedspace
+                $roomCategory = function ($type) {
+                    $type = (string) $type;
+                    return match (true) {
+                        str_contains($type, 'Solo')     => 'Solo Rooms',
+                        str_contains($type, 'Barkada')  => 'Barkada Rooms',
+                        str_contains($type, 'Bedspace') => 'Bedspace',
+                        default                         => 'Other Rooms',
+                    };
+                };
+                $categoryOrder = ['Solo Rooms', 'Barkada Rooms', 'Bedspace', 'Other Rooms'];
+                $roomGroups = collect($rooms)
+                    ->groupBy(fn ($r) => $roomCategory($r['name']))
+                    ->sortBy(fn ($group, $key) => array_search($key, $categoryOrder));
+            @endphp
+
+            <div class="flex flex-col gap-8 mb-8" id="available-rooms-grid">
+                @foreach ($roomGroups as $category => $groupRooms)
+                <div class="room-category-group">
+                    <div class="flex items-center gap-4 mb-4">
+                        <h3 class="text-[15px] font-bold text-slate-900 whitespace-nowrap">{{ $category }}</h3>
+                        <div class="h-px flex-1 bg-slate-200"></div>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                @foreach ($groupRooms as $room)
                     @php
                         $roomData = [
                             'id' => $room['id'],
@@ -211,6 +235,9 @@
                             </div>
                         </div>
                     </div>
+                @endforeach
+                    </div>
+                </div>
                 @endforeach
             </div>
         @endif
@@ -350,7 +377,7 @@
                 const currentPath = window.location.pathname;
                 const fromPath = currentPath.startsWith('/') ? currentPath : '/' + currentPath;
 
-                grid.innerHTML = rooms.map(room => {
+                const renderCard = (room) => {
                     const roomData = {
                         id: room.id,
                         name: room.name,
@@ -447,7 +474,35 @@
                     </div>
                 </div>
             `;
-                }).join('');
+                };
+
+                // Group like the landing page: Solo Rooms → Barkada Rooms → Bedspace
+                const categoryOf = (type) => {
+                    type = String(type || '');
+                    if (type.includes('Solo')) return 'Solo Rooms';
+                    if (type.includes('Barkada')) return 'Barkada Rooms';
+                    if (type.includes('Bedspace')) return 'Bedspace';
+                    return 'Other Rooms';
+                };
+                const order = ['Solo Rooms', 'Barkada Rooms', 'Bedspace', 'Other Rooms'];
+                const groups = {};
+                rooms.forEach(room => {
+                    (groups[categoryOf(room.name)] ||= []).push(room);
+                });
+
+                grid.innerHTML = order
+                    .filter(cat => groups[cat]?.length)
+                    .map(cat => `
+                <div class="room-category-group">
+                    <div class="flex items-center gap-4 mb-4">
+                        <h3 class="text-[15px] font-bold text-slate-900 whitespace-nowrap">${cat}</h3>
+                        <div class="h-px flex-1 bg-slate-200"></div>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                        ${groups[cat].map(renderCard).join('')}
+                    </div>
+                </div>
+            `).join('');
             }
 
             window.addEventListener("reservation:refresh", refreshReservations);

@@ -10,6 +10,13 @@ class TourScene extends Model
 {
     protected $table = 'tour_scenes';
 
+    // A tour gaining / losing scenes can change what the landing page shows
+    protected static function booted(): void
+    {
+        static::saved(fn () => \App\Events\PublicRoomsUpdated::dispatchOnce());
+        static::deleted(fn () => \App\Events\PublicRoomsUpdated::dispatchOnce());
+    }
+
     /**
      * The table only has `created_at`, not `updated_at`.
      */

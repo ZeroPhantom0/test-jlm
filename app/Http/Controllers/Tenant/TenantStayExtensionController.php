@@ -9,6 +9,7 @@ use App\Models\StayExtensionRequest;
 use App\Models\Tenant;
 use App\Models\Reservation;
 use App\Models\Invoice;
+use App\Services\BillingService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -181,7 +182,7 @@ class TenantStayExtensionController extends Controller
             ]);
 
             // 3. Create the Pending Invoice
-            Invoice::create([
+            $invoice = Invoice::create([
                 'transaction_no' => Invoice::generateTransactionNo(),
                 'tenant_id'      => $tenant->id,
                 'room_id'        => $tenant->room_id,
@@ -208,6 +209,8 @@ class TenantStayExtensionController extends Controller
 
             // Notify admin bell — new request
             event(new ServiceRequestUpdated('stay_extension', 'created', $stayExtension->id));
+            // Push the new pending payment to Admin Billing in real time
+            BillingService::broadcastInvoiceChange('submitted', [$invoice->id]);
 
             return response()->json([
                 'success' => true,
@@ -299,12 +302,18 @@ class TenantStayExtensionController extends Controller
             ], 422);
         }
 
-        $stayExtensionRequest->update([
-            'status' => 'Rejected',
-        ]);
+        $voidedInvoiceIds = DB::transaction(function () use ($stayExtensionRequest) {
+            $stayExtensionRequest->update([
+                'status' => 'Rejected',
+            ]);
+
+            // The unverified fee invoice is withdrawn with the request
+            return BillingService::voidServiceRequestInvoices($stayExtensionRequest->reference_no);
+        });
 
         // Notify admin bell — tenant cancelled stay extension
         event(new ServiceRequestUpdated('stay_extension', 'cancelled', $stayExtensionRequest->id));
+        BillingService::broadcastInvoiceChange('cancelled', $voidedInvoiceIds);
 
         return response()->json([
             'success' => true,

@@ -10,6 +10,7 @@ use App\Models\RoomChangeRequest;
 use App\Models\Tenant;
 use App\Models\Reservation;
 use App\Models\Invoice;
+use App\Services\BillingService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -236,7 +237,7 @@ class TenantRoomChangeController extends Controller
             ]);
 
                         // 5. Create the Pending Invoice for Admin Verification
-            Invoice::create([
+            $invoice = Invoice::create([
                 'transaction_no' => Invoice::generateTransactionNo(),
                 'tenant_id'      => $tenant->id,
                 'room_id'        => $requestedRoomId,
@@ -265,6 +266,8 @@ class TenantRoomChangeController extends Controller
             DB::commit();
 
             event(new ServiceRequestUpdated('room_change', 'created', $roomChange->id));
+            // Push the new pending payment to Admin Billing in real time
+            BillingService::broadcastInvoiceChange('submitted', [$invoice->id]);
 
             return response()->json([
                 'success' => true,
@@ -299,11 +302,17 @@ class TenantRoomChangeController extends Controller
             ], 422);
         }
 
-        $roomChangeRequest->update([
-            'status' => 'Rejected',
-        ]);
+        $voidedInvoiceIds = DB::transaction(function () use ($roomChangeRequest) {
+            $roomChangeRequest->update([
+                'status' => 'Rejected',
+            ]);
+
+            // The unverified fee invoice is withdrawn with the request
+            return BillingService::voidServiceRequestInvoices($roomChangeRequest->reference_no);
+        });
 
         event(new ServiceRequestUpdated('room_change', 'cancelled', $roomChangeRequest->id));
+        BillingService::broadcastInvoiceChange('cancelled', $voidedInvoiceIds);
 
         return response()->json([
             'success' => true,

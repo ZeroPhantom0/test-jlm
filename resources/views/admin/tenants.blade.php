@@ -60,7 +60,7 @@
                             <th class="py-3 px-4 text-right">Actions</th>
                         </tr>
                     </thead>
-                    <tbody id="tenant-tbody">
+                    <tbody id="tenant-tbody" data-paginate data-pager-reset="#tenant-search, #tenant-status-filter">
                         @forelse ($tenants as $tenant)
                             @php
                                 $reservation = $tenant->approvedReservation;

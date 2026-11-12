@@ -13,6 +13,13 @@ class VirtualTour extends Model
 {
     protected $table = 'virtual_tours';
 
+    // Publishing / unpublishing / thumbnail changes show on the landing page live
+    protected static function booted(): void
+    {
+        static::saved(fn () => \App\Events\PublicRoomsUpdated::dispatchOnce());
+        static::deleted(fn () => \App\Events\PublicRoomsUpdated::dispatchOnce());
+    }
+
     protected $fillable = [
         'room_id',
         'title',

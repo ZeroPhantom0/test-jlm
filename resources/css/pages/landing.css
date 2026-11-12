@@ -1139,7 +1139,7 @@ body:has(.landing-page) {
     margin: 0 auto;
     padding: 44px 6% 36px;
     display: grid;
-    grid-template-columns: 1.6fr 1fr 1.2fr 1fr;
+    grid-template-columns: 1.6fr 1fr 1fr;
     gap: 40px;
     align-items: start;
 }
@@ -1161,6 +1161,12 @@ body:has(.landing-page) {
     font-size: 11px;
     font-weight: 800;
     letter-spacing: 0.5px;
+}
+.footer-logo-img {
+    width: 44px;
+    height: 44px;
+    object-fit: contain;
+    flex-shrink: 0;
 }
 .footer-brand h2 {
     margin: 0;
@@ -1288,11 +1294,11 @@ body:has(.landing-page) {
     }
 
     .footer-container {
-        grid-template-columns: 1.5fr 1fr 1fr;
+        grid-template-columns: 1fr 1fr;
         gap: 32px;
     }
     .footer-brand {
-        grid-column: span 3;
+        grid-column: span 2;
     }
 }
 

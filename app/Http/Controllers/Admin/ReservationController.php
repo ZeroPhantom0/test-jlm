@@ -307,6 +307,14 @@ class ReservationController extends Controller
             report($e);
         }
 
+        // Remaining-balance reminder: send now if within 3 hours of time-in,
+        // otherwise it's scheduled (billing:balance-reminders).
+        try {
+            app(\App\Services\BalanceReminderService::class)->handleApproval($reservation);
+        } catch (\Throwable $e) {
+            report($e);
+        }
+
         AuditLogger::log([
             'action'       => 'APPROVE',
             'module'       => 'RESERVATIONS',

@@ -68,7 +68,7 @@
                             <th class="py-3.5 px-5 min-w-20"></th>
                         </tr>
                     </thead>
-                    <tbody id="maintenance-tbody">
+                    <tbody id="maintenance-tbody" data-paginate>
                         {{-- Server-rendered on first paint --}}
                         @forelse($activeRequests as $req)
                             <tr class="border-b border-slate-50 last:border-0">

@@ -48,6 +48,8 @@ class AuditLogger
             'SUBMIT'         => 'fa-solid fa-plus',
             'PUBLISH'        => 'fa-solid fa-bullhorn',
             'EXPORT'         => 'fa-solid fa-file-export', // Added EXPORT icon
+            'NOTIFY'         => 'fa-solid fa-comment-sms',
+            'CANCEL'         => 'fa-solid fa-ban',
             default          => 'fa-solid fa-circle-info',
         };
     }

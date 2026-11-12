@@ -70,9 +70,9 @@
                             <th class="py-3 px-4">Actions</th>
                         </tr>
                     </thead>
-                    <tbody id="billing-tbody">
+                    <tbody id="billing-tbody" data-paginate data-pager-reset="#billing-status-filter">
                         @forelse($invoices as $inv)
-                            <tr class="border-b border-slate-100 last:border-0" data-tn="{{ $inv->transaction_no }}">
+                            <tr class="billing-row border-b border-slate-100 last:border-0" data-tn="{{ $inv->transaction_no }}" data-status="{{ $inv->status }}">
                                 <td class="py-3.5 px-4 text-[13px] font-semibold text-slate-800">{{ $inv->transaction_no }}
                                 </td>
                                 <td class="py-3.5 px-4">
@@ -147,6 +147,27 @@
                 document.querySelector('meta[name="csrf-token"]')?.content ||
                 document.querySelector('input[name="_token"]')?.value;
 
+            // --- Status filter ---
+            const statusFilter = document.getElementById('billing-status-filter');
+            const emptyFilter  = document.getElementById('billing-empty-filter');
+
+            function applyFilters() {
+                const tbody = document.getElementById('billing-tbody');
+                if (!tbody) return;
+                const status = statusFilter?.value || '';
+                const rows = tbody.querySelectorAll('.billing-row');
+                let visible = 0;
+                rows.forEach((row) => {
+                    const show = !status || row.dataset.status === status;
+                    row.style.display = show ? '' : 'none';
+                    if (show) visible++;
+                });
+                emptyFilter?.classList.toggle('hidden', !(rows.length > 0 && visible === 0));
+            }
+
+            statusFilter?.addEventListener('change', applyFilters);
+            applyFilters();
+
             async function refreshBilling() {
                 try {
                     const res = await fetch('/admin/billing/data', {
@@ -182,7 +203,7 @@
                             `;
                         } else {
                             tbody.innerHTML = data.rows.map(inv => `
-                                <tr class="border-b border-slate-100 last:border-0" data-tn="${inv.transaction_no}">
+                                <tr class="billing-row border-b border-slate-100 last:border-0" data-tn="${inv.transaction_no}" data-status="${inv.status}">
                                     <td class="py-3.5 px-4 text-[13px] font-semibold text-slate-800">${inv.transaction_no}</td>
                                     <td class="py-3.5 px-4">
                                         <div class="text-[13px] text-slate-600 font-medium">${inv.tenant_name}</div>
@@ -218,6 +239,7 @@
                                 </tr>
                             `).join('');
                         }
+                        applyFilters();
                     }
 
                     // Update React Modal's data attribute
@@ -254,16 +276,43 @@
             }
 
             // Real-time listeners
-            if (window.Echo) {
-                window.Echo.private('admin.billing')
-                    .listen('.invoice.updated', () => {
-                        const modalRoot = document.getElementById('admin-billing-modals');
-                        if (modalRoot && modalRoot.dataset.saving === 'true') return;
-
-                        console.log('[Live] Invoice updated, refreshing...');
-                        setTimeout(() => refreshBilling(), 600);
-                    });
+            // Coalesce bursts (e.g. approve → several events) into one fetch, and
+            // retry instead of dropping the update while a modal is mid-save.
+            let liveTimer = null;
+            function scheduleRefresh(delay = 600) {
+                clearTimeout(liveTimer);
+                liveTimer = setTimeout(() => {
+                    const modalRoot = document.getElementById('admin-billing-modals');
+                    if (modalRoot && modalRoot.dataset.saving === 'true') {
+                        scheduleRefresh(1000);
+                        return;
+                    }
+                    refreshBilling();
+                }, delay);
             }
+
+            if (window.Echo) {
+                // Any invoice change: tenant payments, room change / stay extension
+                // submissions & cancellations, reservations, admin actions.
+                window.Echo.private('admin.billing')
+                    .listen('.invoice.updated', () => scheduleRefresh());
+
+                // Service requests can change billing too (approve → new invoice)
+                window.Echo.private('admin.services')
+                    .listen('.room-change.updated', () => scheduleRefresh())
+                    .listen('.stay-extension.updated', () => scheduleRefresh());
+            }
+
+            // Catch up on anything missed while offline / in another tab
+            let wasOffline = false;
+            document.addEventListener('echo:unavailable', () => { wasOffline = true; });
+            document.addEventListener('echo:connected', () => {
+                if (wasOffline) scheduleRefresh(0);
+                wasOffline = false;
+            });
+            document.addEventListener('visibilitychange', () => {
+                if (document.visibilityState === 'visible') scheduleRefresh(0);
+            });
 
             window.addEventListener('billing:refresh', refreshBilling);
         });

@@ -12,6 +12,13 @@ class Room extends Model
 {
     use HasFactory;
 
+    // Keep the public landing page's room list live (status, price, details)
+    protected static function booted(): void
+    {
+        static::saved(fn () => \App\Events\PublicRoomsUpdated::dispatchOnce());
+        static::deleted(fn () => \App\Events\PublicRoomsUpdated::dispatchOnce());
+    }
+
     protected $fillable = [
         'room_number', 'floor', 'room_type', 'description', 'total_beds',
         'upper_deck', 'lower_deck', 'daily_rent', 'status', 'room_bed_id', 'tenant_name',

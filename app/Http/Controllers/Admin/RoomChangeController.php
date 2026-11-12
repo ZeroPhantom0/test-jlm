@@ -8,6 +8,7 @@ use App\Events\ReservationUpdated;
 use App\Events\ServiceRequestUpdated;
 use App\Http\Controllers\Controller;
 use App\Models\Invoice;
+use App\Services\BillingService;
 use App\Models\Reservation;
 use App\Models\Room;
 use App\Models\RoomChangeRequest;
@@ -249,14 +250,20 @@ class RoomChangeController extends Controller
             'admin_notes' => ['nullable', 'string'],
         ]);
 
-        $roomChangeRequest->update([
-            'status'       => 'Rejected',
-            'admin_notes'  => $validated['admin_notes'] ?? $roomChangeRequest->admin_notes,
-            'processed_by' => $request->user()->id,
-            'processed_at' => now(),
-        ]);
+        $voidedInvoiceIds = DB::transaction(function () use ($roomChangeRequest, $validated, $request) {
+            $roomChangeRequest->update([
+                'status'       => 'Rejected',
+                'admin_notes'  => $validated['admin_notes'] ?? $roomChangeRequest->admin_notes,
+                'processed_by' => $request->user()->id,
+                'processed_at' => now(),
+            ]);
+
+            // Drop the unverified fee invoice so it leaves Billing too
+            return BillingService::voidServiceRequestInvoices($roomChangeRequest->reference_no);
+        });
 
         event(new ServiceRequestUpdated('room_change', 'rejected', $roomChangeRequest->id));
+        BillingService::broadcastInvoiceChange('rejected', $voidedInvoiceIds);
 
         return response()->json([
             'success' => true,
@@ -301,9 +308,15 @@ class RoomChangeController extends Controller
     public function destroy(RoomChangeRequest $roomChangeRequest)
     {
         $id = $roomChangeRequest->id;
-        $roomChangeRequest->delete();
+
+        $voidedInvoiceIds = DB::transaction(function () use ($roomChangeRequest) {
+            $ids = BillingService::voidServiceRequestInvoices($roomChangeRequest->reference_no);
+            $roomChangeRequest->delete();
+            return $ids;
+        });
 
         event(new ServiceRequestUpdated('room_change', 'deleted', $id));
+        BillingService::broadcastInvoiceChange('deleted', $voidedInvoiceIds);
 
         return response()->json([
             'success' => true,

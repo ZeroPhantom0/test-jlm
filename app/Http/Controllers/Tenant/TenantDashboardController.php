@@ -275,7 +275,7 @@ class TenantDashboardController extends Controller
 
         if ($tenant) {
             $rejectedRefs = \App\Models\Reservation::where('user_id', $user->id)
-                ->where('status', 'Rejected')
+                ->whereIn('status', ['Rejected', 'Cancelled'])
                 ->pluck('reference_no')
                 ->toArray();
 

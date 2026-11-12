@@ -140,6 +140,15 @@ class TenantReservationController extends Controller
             'tenants'     => fn($q) => $q->where('status', 'active')->with('approvedReservation'),
         ])
             ->whereHas('virtualTour', fn($q) => $q->where('status', 'Published'))
+            // Sort by room type priority: Solo → Barkada → Bedspace → others, then room number
+            ->orderByRaw("
+                CASE
+                    WHEN room_type LIKE '%Solo%'     THEN 1
+                    WHEN room_type LIKE '%Barkada%'  THEN 2
+                    WHEN room_type LIKE '%Bedspace%' THEN 3
+                    ELSE 4
+                END
+            ")
             ->orderBy('room_number')
             ->get()
             ->map(function (Room $room) use ($myReservations, $currentRoomId) {

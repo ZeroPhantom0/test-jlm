@@ -31,7 +31,7 @@ class BillingController extends Controller
     {
         $filters = ['status' => $request->query('status')];
 
-        $rejectedRefs = \App\Models\Reservation::where('status', 'Rejected')->pluck('reference_no')->toArray();
+        $rejectedRefs = \App\Models\Reservation::whereIn('status', ['Rejected', 'Cancelled'])->pluck('reference_no')->toArray();
 
         $query = Invoice::query()->latest();
 
@@ -45,9 +45,9 @@ class BillingController extends Controller
             $query->where('description', 'NOT LIKE', "%{$ref}%");
         }
 
-        $invoices = $query->paginate(50);
+        $invoices = $query->get();
 
-        $invoices->getCollection()->transform(function ($inv) {
+        $invoices->transform(function ($inv) {
             $inv->formatted_total   = '₱' . number_format($inv->total_amount, 0);
             $inv->formatted_paid    = '₱' . number_format($inv->amount_paid, 0);
             $inv->formatted_balance = '₱' . number_format($inv->balance, 0);
@@ -76,7 +76,7 @@ class BillingController extends Controller
                 ->sum('balance'),
         ];
 
-        $invoicesForReact = $invoices->getCollection()
+        $invoicesForReact = $invoices
             ->keyBy('transaction_no')
             ->map(fn($inv) => $this->reactPayload($inv));
 
@@ -102,12 +102,12 @@ class BillingController extends Controller
             $query->whereIn('status', static::ACTIONABLE_STATUSES);
         }
 
-        $rejectedRefs = \App\Models\Reservation::where('status', 'Rejected')->pluck('reference_no')->toArray();
+        $rejectedRefs = \App\Models\Reservation::whereIn('status', ['Rejected', 'Cancelled'])->pluck('reference_no')->toArray();
         foreach ($rejectedRefs as $ref) {
             $query->where('description', 'NOT LIKE', "%{$ref}%");
         }
 
-        $invoices = $query->paginate(50);
+        $invoices = $query->get();
 
         $metricsQuery = Invoice::query();
         foreach ($rejectedRefs as $ref) {
@@ -122,7 +122,7 @@ class BillingController extends Controller
             'pending'   => (clone $metricsQuery)->whereIn('status', ['Pending', 'Partial', 'Unpaid'])->sum('balance'),
         ];
 
-        $rows = $invoices->getCollection()->map(function (Invoice $inv) {
+        $rows = $invoices->map(function (Invoice $inv) {
             return [
                 'id'                => $inv->id,
                 'transaction_no'    => $inv->transaction_no,
@@ -145,7 +145,7 @@ class BillingController extends Controller
             ];
         })->values();
 
-        $reactMap = $invoices->getCollection()
+        $reactMap = $invoices
             ->keyBy('transaction_no')
             ->map(fn($inv) => $this->reactPayload($inv))
             ->toArray();

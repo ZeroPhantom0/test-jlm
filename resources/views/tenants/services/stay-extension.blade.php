@@ -6,7 +6,7 @@
         $activeRequests = $requests->filter(fn($r) => $r->status === 'Pending')->values();
     @endphp
 
-    <div class="p-4 md:p-8 max-w-6xl">
+    <div class="p-4 md:p-8 max-w-6xl" data-live-page data-live-region="main" data-live-listen="tenant.services:.stay-extension.updated tenant.reservations:.reservation.updated tenant.billing:.invoice.updated" data-live-refresh-on="stay-extension:refresh">
         <div class="flex items-center justify-between mb-6">
             <div class="flex items-center gap-4">
                 <div class="w-11 h-11 rounded-xl bg-purple-100 text-purple-500 flex items-center justify-center text-lg">
@@ -112,7 +112,7 @@
         </div>
     </div>
 
-    <div id="services-stay-extension-root" 
+    <div id="services-stay-extension-root" data-live-root="stay-extension:data-updated"
          data-room-number="{{ $roomNumber }}"
          data-current-lease-end="{{ $currentLeaseEnd }}" 
          data-min-requested-date="{{ $minRequestedDate }}"
@@ -120,99 +120,3 @@
          data-requests='@json($requestsForReact)'></div>
 @endsection
 
-{{-- The JS script remains exactly the same --}}
-@push('scripts')
-    <script>
-        (function() {
-            window.addEventListener('load', () => {
-                async function refresh() {
-                    try {
-                        const res = await fetch("{{ route('tenants.services.stay-extension.data') }}", {
-                            headers: {
-                                'Accept': 'application/json'
-                            },
-                            cache: 'no-store'
-                        });
-                        if (!res.ok) return;
-                        const data = await res.json();
-
-                        const container = document.getElementById('tenant-stay-extension-container');
-                        const active = (data.rows || []).filter(r => r.is_pending);
-
-                        const countEl = document.querySelector('[data-active-count]');
-                        if (countEl) {
-                            countEl.textContent = `${active.length} active request${active.length === 1 ? '' : 's'}`;
-                        }
-
-                        if (!container) return;
-
-                        if (active.length === 0) {
-                            container.innerHTML = `
-                        <div class="text-center py-12 text-slate-400 text-sm">
-                            <i class="fa-solid fa-inbox text-3xl mb-3"></i>
-                            <p>No active stay extension requests.</p>
-                        </div>`;
-                        } else {
-                            container.innerHTML = `
-                        <div class="overflow-x-auto -mx-6 px-6 sm:mx-0 sm:px-0">
-                            <table class="w-full min-w-[720px] text-left">
-                                <thead>
-                                    <tr class="text-[13px] text-slate-600 border-b border-slate-100">
-                                        <th class="py-3 px-4 font-semibold min-w-[180px]">Name &amp; Room</th>
-                                        <th class="py-3 px-4 font-semibold min-w-[150px]">Current Lease End</th>
-                                        <th class="py-3 px-4 font-semibold min-w-[150px]">Requested End</th>
-                                        <th class="py-3 px-4 font-semibold min-w-[110px]">Status</th>
-                                        <th class="py-3 px-4 font-semibold text-right min-w-[110px]">Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    ${active.map(r => `
-                                            <tr class="border-b border-slate-50 last:border-0">
-                                                <td class="py-4 px-4">
-                                                    <span class="block font-semibold text-slate-900">${r.tenant_name}</span>
-                                                    <span class="block text-xs text-slate-400 mt-0.5">${r.room_number}</span>
-                                                </td>
-                                                <td class="py-4 px-4 text-[13.5px]">${r.current_lease_end}</td>
-                                                <td class="py-4 px-4 text-[13.5px]">${r.requested_lease_end}</td>
-                                                <td class="py-4 px-4">
-                                                    <span class="bg-amber-100 text-amber-700 text-[11.5px] font-semibold px-2.5 py-1 rounded-full inline-flex items-center gap-1">
-                                                        <i class="fa-regular fa-clock"></i> ${r.status}
-                                                    </span>
-                                                </td>
-                                                <td class="py-4 px-4">
-                                                    <div class="flex justify-end gap-3 text-slate-400 text-[15px]">
-                                                        <i class="fa-regular fa-eye cursor-pointer hover:text-slate-600 view-stay-extension-details-btn" data-request-id="${r.id}" title="View Details"></i>
-                                                        <i class="fa-regular fa-circle-xmark cursor-pointer hover:text-rose-600 cancel-stay-extension-btn" data-request-id="${r.id}" title="Cancel Request"></i>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        `).join('')}
-                                </tbody>
-                            </table>
-                        </div>`;
-                        }
-
-                        const modalEl = document.getElementById('services-stay-extension-root');
-                        if (modalEl && data.react) {
-                            modalEl.dataset.requests = JSON.stringify(data.react);
-                            window.dispatchEvent(new CustomEvent('stay-extension:data-updated', {
-                                detail: data.react
-                            }));
-                        }
-                    } catch (e) {
-                        console.error('Failed to refresh stay extensions:', e);
-                    }
-                }
-
-                if (window.Echo) {
-                    window.Echo.private('tenant.services')
-                        .listen('.stay-extension.updated', () => {
-                            setTimeout(refresh, 800);
-                        });
-                }
-
-                window.addEventListener('stay-extension:refresh', refresh);
-            });
-        })();
-    </script>
-@endpush

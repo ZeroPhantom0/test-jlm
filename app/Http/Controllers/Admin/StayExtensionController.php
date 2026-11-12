@@ -8,6 +8,7 @@ use App\Events\ReservationUpdated;
 use App\Events\ServiceRequestUpdated;
 use App\Http\Controllers\Controller;
 use App\Models\Invoice;
+use App\Services\BillingService;
 use App\Models\StayExtensionRequest;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -155,14 +156,20 @@ class StayExtensionController extends Controller
             'admin_notes' => ['nullable', 'string'],
         ]);
 
-        $stayExtensionRequest->update([
-            'status'       => 'Rejected',
-            'admin_notes'  => $validated['admin_notes'] ?? $stayExtensionRequest->admin_notes,
-            'processed_by' => $request->user()->id,
-            'processed_at' => now(),
-        ]);
+        $voidedInvoiceIds = DB::transaction(function () use ($stayExtensionRequest, $validated, $request) {
+            $stayExtensionRequest->update([
+                'status'       => 'Rejected',
+                'admin_notes'  => $validated['admin_notes'] ?? $stayExtensionRequest->admin_notes,
+                'processed_by' => $request->user()->id,
+                'processed_at' => now(),
+            ]);
+
+            // Drop the unverified fee invoice so it leaves Billing too
+            return BillingService::voidServiceRequestInvoices($stayExtensionRequest->reference_no);
+        });
 
         event(new ServiceRequestUpdated('stay_extension', 'rejected', $stayExtensionRequest->id));
+        BillingService::broadcastInvoiceChange('rejected', $voidedInvoiceIds);
 
         return response()->json([
             'success' => true,
@@ -188,9 +195,15 @@ class StayExtensionController extends Controller
     public function destroy(StayExtensionRequest $stayExtensionRequest)
     {
         $id = $stayExtensionRequest->id;
-        $stayExtensionRequest->delete();
+
+        $voidedInvoiceIds = DB::transaction(function () use ($stayExtensionRequest) {
+            $ids = BillingService::voidServiceRequestInvoices($stayExtensionRequest->reference_no);
+            $stayExtensionRequest->delete();
+            return $ids;
+        });
 
         event(new ServiceRequestUpdated('stay_extension', 'deleted', $id));
+        BillingService::broadcastInvoiceChange('deleted', $voidedInvoiceIds);
 
         return response()->json([
             'success' => true,

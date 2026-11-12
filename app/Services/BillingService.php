@@ -198,6 +198,62 @@ class BillingService
      */
     public static function archiveReceipt(?string $path): ?string
     {
+        return self::doArchiveReceipt($path);
+    }
+
+    /**
+     * Remove the still-unverified invoice(s) of a room change / stay extension
+     * request (ref like "#RC-12" / "#SE-4") when that request is cancelled,
+     * rejected or deleted, so a withdrawn request can't be "verified" from
+     * Billing. Receipts are archived, not destroyed. Verified (Paid/Partial)
+     * invoices are never touched.
+     *
+     * Matching is exact: "#RC-1" does not match "#RC-11".
+     *
+     * @return int[] ids of the removed invoices
+     */
+    public static function voidServiceRequestInvoices(?string $ref): array
+    {
+        if (! $ref) {
+            return [];
+        }
+
+        $pattern = '/' . preg_quote($ref, '/') . '(?!\d)/';
+
+        $invoices = Invoice::query()
+            ->where('description', 'like', '%' . $ref . '%')
+            ->whereIn('status', ['Pending', 'Unpaid'])
+            ->get()
+            ->filter(fn (Invoice $inv) => preg_match($pattern, (string) $inv->description));
+
+        $ids = [];
+        foreach ($invoices as $inv) {
+            if ($inv->receipt_path) {
+                self::archiveReceipt($inv->receipt_path);
+            }
+            $ids[] = $inv->id;
+            $inv->delete();
+        }
+
+        return $ids;
+    }
+
+    /** Broadcast invoice changes so Admin Billing / tenant pages refresh live. */
+    public static function broadcastInvoiceChange(string $action, array $ids): void
+    {
+        try {
+            if (count($ids) === 1) {
+                event(new \App\Events\InvoiceUpdated($action, $ids[0]));
+            } elseif (count($ids) > 1) {
+                event(new \App\Events\InvoiceUpdated($action, null));
+            }
+        } catch (\Throwable $e) {
+            report($e);
+        }
+    }
+
+    private static function doArchiveReceipt(?string $path): ?string
+    {
         if (!$path) {
             return null;
         }

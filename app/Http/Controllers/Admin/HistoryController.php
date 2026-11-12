@@ -21,7 +21,9 @@ class HistoryController extends Controller
     {
         $filters = $request->only(['search', 'category']);
 
-        $events  = $this->history->build($filters);
+        // Load every event; category / search filtering + pagination run client-side
+        // so switching filters never hides records the server already dropped.
+        $events  = $this->history->build();
         $metrics = $this->history->metrics();
 
         return view('admin.history', compact('events', 'metrics', 'filters'));

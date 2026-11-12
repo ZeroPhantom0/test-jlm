@@ -68,7 +68,7 @@
                             <th class="py-3 px-4 text-right">Actions</th>
                         </tr>
                     </thead>
-                    <tbody id="res-tbody">
+                    <tbody id="res-tbody" data-paginate data-pager-reset="#res-search">
                         @forelse($reservations as $r)
                             <tr class="res-row border-b border-slate-50 last:border-0" data-id="{{ $r->id }}"
                                 data-status="{{ $r->status }}"
@@ -126,7 +126,7 @@
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="9" class="py-12 text-center text-slate-400">
+                                <td colspan="7" class="py-12 text-center text-slate-400">
                                     <div class="flex flex-col items-center justify-center gap-3">
                                         <div class="w-14 h-14 rounded-full bg-slate-100 flex items-center justify-center">
                                             <i class="fa-regular fa-calendar-xmark text-slate-400 text-xl"></i>
@@ -155,11 +155,28 @@
                 // --- Filter Logic ---
                 function applyFilters() {
                     const q = (searchInput?.value || '').toLowerCase().trim();
-                    tbody.querySelectorAll('.res-row').forEach((row) => {
-                        const searchMatch = !q || row.dataset.search.includes(q);
+                    const rows = tbody.querySelectorAll('.res-row');
+                    let visible = 0;
+                    rows.forEach((row) => {
+                        const searchMatch = !q || (row.dataset.search || '').includes(q);
                         row.style.display = searchMatch ? '' : 'none';
+                        if (searchMatch) visible++;
                     });
+
+                    // "No matches" row (re-created after live refreshes replace the tbody)
+                    let emptyRow = tbody.querySelector('#res-empty-filter');
+                    if (!emptyRow) {
+                        emptyRow = document.createElement('tr');
+                        emptyRow.id = 'res-empty-filter';
+                        emptyRow.innerHTML = `<td colspan="7" class="py-10 text-center text-slate-400 text-sm">
+                            <i class="fa-solid fa-magnifying-glass text-3xl mb-2 block opacity-50"></i>
+                            No reservations match your search.
+                        </td>`;
+                        tbody.appendChild(emptyRow);
+                    }
+                    emptyRow.style.display = rows.length > 0 && visible === 0 ? '' : 'none';
                 }
+                applyFilters();
                 searchInput?.addEventListener('input', applyFilters);
 
                 // --- Event Delegation for Buttons ---
@@ -220,10 +237,6 @@
                                         </div>
                                     </td>
                                     <td class="py-3.5 px-4">
-                                        <div class="text-[12.5px] text-slate-700">${r.email}</div>
-                                        <div class="text-[11px] text-slate-400 mt-0.5">${r.phone}</div>
-                                    </td>
-                                    <td class="py-3.5 px-4">
                                         <div class="text-[12.5px] font-medium text-slate-700">${r.desired_room}</div>
                                     </td>
                                     <td class="py-3.5 px-4">
@@ -239,7 +252,6 @@
                                     <td class="py-3.5 px-4">
                                         <div class="font-bold text-emerald-600 text-[13px] tracking-tight">${r.formatted_fee}</div>
                                     </td>
-                                    <td class="py-3.5 px-4 text-[12.5px] text-slate-600 whitespace-nowrap">${r.created_at}</td>
                                     <td class="py-3.5 px-4">
                                         <span class="inline-flex items-center gap-1.5 ${r.status_class} px-2.5 py-1 rounded-full text-[10.5px] font-bold whitespace-nowrap">
                                             <i class="${r.status_icon}"></i> ${r.status}
@@ -259,7 +271,7 @@
                         } else {
                             tbody.innerHTML = `
                                 <tr>
-                                    <td colspan="9" class="py-12 text-center text-slate-400">
+                                    <td colspan="7" class="py-12 text-center text-slate-400">
                                         <div class="flex flex-col items-center justify-center gap-3">
                                             <div class="w-14 h-14 rounded-full bg-slate-100 flex items-center justify-center">
                                                 <i class="fa-regular fa-calendar-xmark text-slate-400 text-xl"></i>

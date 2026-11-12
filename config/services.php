@@ -46,4 +46,16 @@ return [
         'token' => env('IPROG_SMS_API_TOKEN'),
     ],
 
+    // ────────────────────────────────────────────────────────────
+    // Remaining-balance SMS reminders (see BalanceReminderService)
+    // ────────────────────────────────────────────────────────────
+    'balance_reminders' => [
+        // Hours before time-in that the reminder goes out
+        'hours_before'          => (int) env('BALANCE_REMINDER_HOURS_BEFORE', 3),
+        // Minutes after a payment-policy cancellation that the tenant is notified
+        'cancel_sms_delay_mins' => (int) env('BALANCE_CANCEL_SMS_DELAY_MINUTES', 5),
+        // Used when a reservation has no check_in_time (24h HH:MM)
+        'default_check_in_time' => env('DEFAULT_CHECK_IN_TIME', '14:00'),
+    ],
+
 ];

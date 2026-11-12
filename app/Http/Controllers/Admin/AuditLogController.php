@@ -24,7 +24,7 @@ class AuditLogController extends Controller
             ->module($request->input('module'))
             ->betweenDates($request->input('from'), $request->input('to'))
             ->orderByDate($order)
-            ->paginate(20)
+            ->paginate(10)
             ->withQueryString();
 
         $modules = AuditLog::query()
@@ -51,7 +51,7 @@ class AuditLogController extends Controller
             ->betweenDates($request->input('from'), $request->input('to'))
             ->orderByDate($order);
 
-        $logs = $query->paginate(20)->withQueryString();
+        $logs = $query->paginate(10)->withQueryString();
 
         return response()->json([
             'data' => $logs->getCollection()->map(fn (AuditLog $log) => $this->transform($log))->values(),

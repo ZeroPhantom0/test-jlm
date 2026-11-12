@@ -131,6 +131,13 @@ class TenantController extends Controller
                 'subject_type' => Tenant::class,
                 'subject_id'   => $tenant->id,
             ]);
+
+            // Push the change to the tenant's dashboard / services in real time
+            try {
+                event(new \App\Events\ReservationUpdated('tenant_updated', $tenant->approved_reservation_id));
+            } catch (\Throwable $e) {
+                report($e);
+            }
         }
 
         return response()->json([

@@ -64,7 +64,7 @@
                             <th class="py-3 px-4 text-right">Actions</th>
                         </tr>
                     </thead>
-                    <tbody id="room-change-tbody">
+                    <tbody id="room-change-tbody" data-paginate>
                         @forelse($activeRequests as $req)
                             <tr class="border-b border-slate-50 last:border-0" data-request-id="{{ $req->id }}">
                                 <td class="py-4 px-4">
@@ -113,7 +113,7 @@
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="8" class="text-center py-12 text-slate-400">
+                                <td colspan="7" class="text-center py-12 text-slate-400">
                                     <i class="fa-solid fa-inbox text-4xl mb-3 block"></i>
                                     <p class="text-sm">No pending room change requests found.</p>
                                 </td>
@@ -158,7 +158,7 @@
                             if (active.length === 0) {
                                 tbody.innerHTML = `
                                     <tr>
-                                        <td colspan="8" class="text-center py-12 text-slate-400">
+                                        <td colspan="7" class="text-center py-12 text-slate-400">
                                             <i class="fa-solid fa-inbox text-4xl mb-3 block"></i>
                                             <p class="text-sm">No pending room change requests found.</p>
                                         </td>
@@ -188,7 +188,6 @@
                                         <td class="py-4 px-4 max-w-[240px]">
                                             <p class="text-[13px] text-slate-600 truncate" title="${r.reason}">${r.reason}</p>
                                         </td>
-                                        <td class="py-4 px-4 text-[13px] text-slate-600 whitespace-nowrap">${r.date}</td>
                                         <td class="py-4 px-4">
                                             <span class="inline-flex items-center gap-1.5 ${r.status_class} text-[11px] font-semibold px-3 py-1 rounded-full whitespace-nowrap">
                                                 <i class="${r.status_icon}"></i> ${r.status}

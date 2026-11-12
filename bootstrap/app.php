@@ -33,6 +33,9 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withSchedule(function (Schedule $schedule) {
         // Removed billing:flag-overdue
         $schedule->command('reservations:expire-past')->daily();
+
+        // Remaining-balance SMS reminders / payment-policy cancellations
+        $schedule->command('billing:balance-reminders')->everyMinute()->withoutOverlapping();
     })
     ->withExceptions(function (Exceptions $exceptions) {
         //

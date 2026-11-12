@@ -407,6 +407,8 @@
         let currentSceneId = null;
         let sceneAutoAudioText = '';
         let isMuted = false;
+        const MAX_HFOV = 120;   // widest view (Pannellum's default maximum)
+        let currentHfov = null; // visitor's zoom, carried across scenes
 
         const SCENES_URL = '{{ url('tour-scene-data') }}';
         const BACK_URL = @json($backUrl);
@@ -429,6 +431,8 @@
                 .then(res => res.json())
                 .then(data => {
                     if (viewer) {
+                        // Keep the visitor's zoom when moving between scenes
+                        try { currentHfov = viewer.getHfov(); } catch (e) {}
                         viewer.destroy();
                         viewer = null;
                     }
@@ -441,7 +445,10 @@
                         autoLoad: true,
                         pitch: parseFloat(data.scene.default_pitch || 0),
                         yaw: parseFloat(data.scene.default_yaw || 0),
-                        hfov: parseFloat(data.scene.default_fov || 100),
+                        // Don't force a default zoom on entry: open fully zoomed
+                        // out, then keep whatever zoom the visitor chooses.
+                        hfov: currentHfov ?? MAX_HFOV,
+                        maxHfov: MAX_HFOV,
 
                         showControls: false,
 

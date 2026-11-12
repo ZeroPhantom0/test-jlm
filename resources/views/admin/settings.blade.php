@@ -327,7 +327,7 @@
                                         <th class="text-left py-2.5 px-3">Action</th>
                                     </tr>
                                 </thead>
-                                <tbody>
+                                <tbody data-paginate>
                                     @forelse($backups as $b)
                                         <tr class="border-b border-slate-100 last:border-b-0">
                                             <td class="py-3 px-3">

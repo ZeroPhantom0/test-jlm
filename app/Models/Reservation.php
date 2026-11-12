@@ -47,6 +47,10 @@ class Reservation extends Model
         'check_out'       => 'date',
         'processed_at'    => 'datetime',
         'expires_at'      => 'datetime',
+        'balance_tracked_at'       => 'datetime',
+        'balance_reminder_sent_at' => 'datetime',
+        'cancelled_at'             => 'datetime',
+        'cancellation_sms_sent_at' => 'datetime',
         'total_charges'   => 'decimal:2',
         'reservation_fee' => 'decimal:2',
         'remaining'       => 'decimal:2',
@@ -79,6 +83,7 @@ class Reservation extends Model
             'Approved' => 'bg-green-100 text-green-600',
             'Rejected' => 'bg-rose-100 text-rose-600',
             'Expired'  => 'bg-slate-100 text-slate-500',
+            'Cancelled' => 'bg-rose-100 text-rose-600',
             default    => 'bg-slate-100 text-slate-500',
         };
     }
@@ -90,6 +95,7 @@ class Reservation extends Model
             'Approved' => 'fa-regular fa-circle-check',
             'Rejected' => 'fa-regular fa-circle-xmark',
             'Expired'  => 'fa-regular fa-clock',
+            'Cancelled' => 'fa-solid fa-ban',
             default    => 'fa-regular fa-circle',
         };
     }

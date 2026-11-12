@@ -53,6 +53,10 @@ import AdminSettingsModals from "./pages/Admin/AdminSettingsModals";
 import TenantSettingsAccordions from "./pages/Settings/SettingsAccordions";
 import SettingsModals from "./pages/Settings/SettingsModals";
 
+// Client-side table pagination
+import initTablePagers from "./utils/tablePager";
+import initLivePages from "./utils/livePage";
+
 import AdminSidebar from "./components/AdminSidebar";
 import Sidebar from "./components/Sidebar";
 
@@ -282,6 +286,12 @@ function mountReact() {
         createRoot(logoutModalRoot).render(<LogoutModal />);
         logoutModalRoot.dataset.mounted = "true";
     }
+
+    // Paginate every [data-paginate] table / list (10 per page by default)
+    initTablePagers();
+
+    // Real-time (Pusher) refresh for every [data-live-page]
+    initLivePages();
 }
 
 if (document.readyState === "loading") {

@@ -74,7 +74,7 @@
                         <th class="py-3 px-4 text-right">Actions</th>
                     </tr>
                 </thead>
-                <tbody id="rooms-tbody">
+                <tbody id="rooms-tbody" data-paginate data-pager-reset="#room-search, #room-filter-status, #room-filter-type">
                     @forelse ($rooms as $room)
                         <tr class="border-b border-slate-100 last:border-0 hover:bg-slate-50/50 transition-colors"
                             data-room='@json($room->toRowArray())'

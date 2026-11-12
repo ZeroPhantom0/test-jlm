@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Head, Link, router } from "@inertiajs/react";
 import SplashScreen from "../../components/SplashScreen";
+import { subscribePublic } from "../../utils/publicLive";
 
 /* ============================================================
    AMENITIES DATA
@@ -70,17 +71,43 @@ const NAV_LINKS = [
    MAIN COMPONENT
    ============================================================ */
 export default function Index({ rooms = [] }) {
+    // Returning from a virtual tour lands on /#rooms. Scroll there now and
+    // again once images above have loaded (they shift the layout), so the
+    // visitor really ends up on the Rooms section — not back at Home.
     useEffect(() => {
-        if (window.location.hash === "#rooms") {
-            const el = document.getElementById("rooms");
-            if (el) {
-                setTimeout(
-                    () =>
-                        el.scrollIntoView({ behavior: "auto", block: "start" }),
-                    50,
-                );
-            }
+        const hash = window.location.hash.replace("#", "");
+        if (!hash || !NAV_LINKS.some((l) => l.id === hash)) return;
+
+        const go = () =>
+            document
+                .getElementById(hash)
+                ?.scrollIntoView({ behavior: "auto", block: "start" });
+
+        const t = setTimeout(go, 50);
+        if (document.readyState === "complete") {
+            const t2 = setTimeout(go, 300);
+            return () => {
+                clearTimeout(t);
+                clearTimeout(t2);
+            };
         }
+        window.addEventListener("load", go, { once: true });
+        return () => {
+            clearTimeout(t);
+            window.removeEventListener("load", go);
+        };
+    }, []);
+
+    // Real-time room list over Pusher (public channel — visitors are guests).
+    // Only the `rooms` prop is re-requested; scroll and UI state are kept.
+    useEffect(() => {
+        return subscribePublic("public.rooms", "rooms.updated", () => {
+            router.reload({
+                only: ["rooms"],
+                preserveScroll: true,
+                preserveState: true,
+            });
+        });
     }, []);
 
     return (
@@ -102,7 +129,14 @@ export default function Index({ rooms = [] }) {
    HEADER — OPTIMIZED AUTH NAVIGATION
    ============================================================ */
 function LandingHeader() {
-    const [activeSection, setActiveSection] = useState("home");
+    // Start on the section in the URL (e.g. /#rooms when coming back from a tour)
+    const [activeSection, setActiveSection] = useState(() => {
+        const hash =
+            typeof window !== "undefined"
+                ? window.location.hash.replace("#", "")
+                : "";
+        return NAV_LINKS.some((l) => l.id === hash) ? hash : "home";
+    });
     const [mobileNavOpen, setMobileNavOpen] = useState(false);
     const [scrolled, setScrolled] = useState(false);
     const [splash, setSplash] = useState(null);
@@ -648,7 +682,11 @@ function RoomCard({ room }) {
         room.tour_status === undefined || room.tour_status === "Published";
     const hasTour =
         !isDraft && room.has_tour === true && !!room.tour_id && tourIsPublished;
-    const tourUrl = hasTour ? `/tour/${room.tour_id}` : null;
+    // `from` tells the tour's Back button to return to the Rooms section
+    // (browsers strip the #hash from the referrer, which sent people Home).
+    const tourUrl = hasTour
+        ? `/tour/${room.tour_id}?from=${encodeURIComponent("/#rooms")}`
+        : null;
 
     const ImageWrapper = hasTour ? "a" : "div";
     const imageProps = hasTour
@@ -805,7 +843,11 @@ function LandingFooter() {
             <div className="footer-container">
                 <div className="footer-brand">
                     <div className="footer-brand-title">
-                        <div className="footer-logo">JLM</div>
+                        <img
+                            src="/images/jlm-logo.png"
+                            alt="JLM Cozy Cabin Logo"
+                            className="footer-logo-img"
+                        />
                         <h2>JLM Cozy Cabin</h2>
                     </div>
                     <p>
@@ -838,14 +880,6 @@ function LandingFooter() {
                     <a href="#rooms">› Solo Room</a>
                     <a href="#rooms">› Barkada Room</a>
                     <a href="#rooms">› Bedspace</a>
-                </div>
-
-                <div className="footer-column">
-                    <h3>Resources</h3>
-                    <a href="#">› FAQs</a>
-                    <a href="#">› Privacy Policy</a>
-                    <a href="#">› Terms of Service</a>
-                    <a href="/login">› Tenant Portal</a>
                 </div>
             </div>
 

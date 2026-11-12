@@ -174,7 +174,7 @@
                                 <th class="py-3 px-4">Total</th>
                             </tr>
                         </thead>
-                        <tbody>
+                        <tbody data-paginate>
                             @forelse ($occupancyByType as $row)
                             <tr class="border-b border-slate-50">
                                 <td class="py-3.5 px-4 text-slate-800">{{ $row['type'] }}</td>
@@ -240,7 +240,7 @@
                                 <th class="py-3 px-4">Total</th>
                             </tr>
                         </thead>
-                        <tbody>
+                        <tbody data-paginate>
                             @php
                                 $tRent = 0; $tUtil = 0; $tOther = 0; $tTotal = 0;
                             @endphp
@@ -259,7 +259,7 @@
                                 <td class="py-3.5 px-4 font-bold text-slate-900">{{ $fmt($row['total']) }}</td>
                             </tr>
                             @endforeach
-                            <tr class="bg-[#02122b] text-white font-bold">
+                            <tr class="bg-[#02122b] text-white font-bold" data-no-paginate>
                                 <td class="py-3.5 px-4">TOTAL</td>
                                 <td class="py-3.5 px-4">{{ $fmt($tRent) }}</td>
                                 <td class="py-3.5 px-4">{{ $fmt($tUtil) }}</td>
@@ -420,10 +420,10 @@
 
     tabs.forEach(tab => tab.addEventListener('click', () => {
         tabs.forEach(t => {
-            t.classList.remove('text-emerald-500','border-emerald-500','bg-emerald-50/50');
+            t.classList.remove('active','text-emerald-500','border-emerald-500','bg-emerald-50/50');
             t.classList.add('text-slate-600','border-transparent');
         });
-        tab.classList.add('text-emerald-500','border-emerald-500','bg-emerald-50/50');
+        tab.classList.add('active','text-emerald-500','border-emerald-500','bg-emerald-50/50');
         tab.classList.remove('text-slate-600','border-transparent');
 
         panels.forEach(p => p.classList.add('hidden'));

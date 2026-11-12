@@ -15,6 +15,25 @@ class SmsService
      * @param string $message The message body
      * @return bool
      */
+    /**
+     * Normalise a PH mobile number to the 63XXXXXXXXXX format IPROG expects.
+     * Returns null when nothing usable is left.
+     */
+    public static function normalizePhone(?string $phone): ?string
+    {
+        $digits = preg_replace('/[^0-9]/', '', (string) $phone);
+        if ($digits === '') {
+            return null;
+        }
+        if (str_starts_with($digits, '0')) {
+            return '63' . substr($digits, 1);
+        }
+        if (str_starts_with($digits, '63')) {
+            return $digits;
+        }
+        return '63' . $digits;
+    }
+
     public static function send(string $phoneNumber, string $message): bool
     {
         $apiToken = config('services.iprog_sms.token'); // We'll add this to config/services.php

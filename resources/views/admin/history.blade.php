@@ -136,7 +136,7 @@
         </div>
 
         {{-- History List --}}
-        <div class="flex flex-col gap-3" id="history-list">
+        <div class="flex flex-col gap-3" id="history-list" data-paginate data-item-selector=".history-item" data-pager-reset=".history-filter-pill, #history-search, #history-sort">
 
             @forelse ($events as $item)
                 @php

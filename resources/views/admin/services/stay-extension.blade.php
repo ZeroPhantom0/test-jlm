@@ -63,7 +63,7 @@
                             <th class="py-3.5 px-5"></th>
                         </tr>
                     </thead>
-                    <tbody id="stay-extension-tbody">
+                    <tbody id="stay-extension-tbody" data-paginate>
                         @forelse($activeRequests as $req)
                             <tr class="border-b border-slate-50 last:border-0" data-request-id="{{ $req->id }}">
                                 <td class="py-4 px-5">
