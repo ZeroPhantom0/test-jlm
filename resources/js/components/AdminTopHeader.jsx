@@ -230,12 +230,28 @@ export default function AdminTopHeader({
             document.removeEventListener("mousedown", handleClickOutside);
     }, []);
 
+    const postJson = (url, body = {}) =>
+        fetch(url, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                Accept: "application/json",
+                "X-Requested-With": "XMLHttpRequest",
+                "X-CSRF-TOKEN": csrfToken(),
+            },
+            credentials: "same-origin",
+            body: JSON.stringify(body),
+        }).catch(console.error);
+
+    // Read state is stored on the server per admin — mark locally for an
+    // instant UI, then persist.
     const markAsRead = (id) => {
         setLocallyRead((prev) => {
             const next = new Set(prev);
             next.add(id);
             return next;
         });
+        if (String(id).startsWith("n-")) postJson("/admin/notifications/read", { id });
     };
 
     const markAllAsRead = () => {
@@ -244,6 +260,7 @@ export default function AdminTopHeader({
             processedNotifications.forEach((n) => next.add(n.id));
             return next;
         });
+        postJson("/admin/notifications/read-all");
     };
 
     const clearAll = () => {

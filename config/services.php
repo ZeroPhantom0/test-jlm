@@ -49,6 +49,9 @@ return [
     // ────────────────────────────────────────────────────────────
     // Remaining-balance SMS reminders (see BalanceReminderService)
     // ────────────────────────────────────────────────────────────
+    // One-time production upgrade route (/admin/one-time-upgrade). Remove after use.
+    'upgrade_token' => env('UPGRADE_TOKEN'),
+
     'balance_reminders' => [
         // Hours before time-in that the reminder goes out
         'hours_before'          => (int) env('BALANCE_REMINDER_HOURS_BEFORE', 3),
@@ -56,6 +59,8 @@ return [
         'cancel_sms_delay_mins' => (int) env('BALANCE_CANCEL_SMS_DELAY_MINUTES', 5),
         // Used when a reservation has no check_in_time (24h HH:MM)
         'default_check_in_time' => env('DEFAULT_CHECK_IN_TIME', '14:00'),
+        // Used when a reservation has no check_out_time (24h HH:MM)
+        'default_check_out_time' => env('DEFAULT_CHECK_OUT_TIME', '12:00'),
     ],
 
 ];

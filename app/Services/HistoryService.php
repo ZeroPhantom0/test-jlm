@@ -60,7 +60,7 @@ class HistoryService
         return [
             'total_payments'       => (float) $paidTotal,
             'total_payments_count' => $paidCount,
-            'past_reservations'    => Reservation::whereIn('status', ['Approved', 'Rejected', 'Expired'])->count(),
+            'past_reservations'    => Reservation::whereIn('status', ['Approved', 'Rejected', 'Expired', 'Cancelled'])->count(),
             'service_requests'     => MaintenanceRequest::whereIn('status', ['Completed', 'Cancelled'])->count(),
             'approved_requests'    => RoomChangeRequest::whereIn('status', ['Approved', 'Rejected'])->count()
                                     + StayExtensionRequest::whereIn('status', ['Approved', 'Rejected'])->count(),
@@ -72,24 +72,30 @@ class HistoryService
     // ============================================================
     protected function payments(): Collection
     {
-        return Invoice::whereIn('status', ['Paid', 'Rejected'])
+        // Partial = a verified down payment (balance still due) — it is a real
+        // payment and must appear in history too.
+        return Invoice::whereIn('status', ['Paid', 'Partial', 'Rejected'])
             ->latest()
             ->get()
             ->map(function (Invoice $inv) {
-                $isPaid = $inv->status === 'Paid';
+                $isPaid    = $inv->status === 'Paid';
+                $isPartial = $inv->status === 'Partial';
 
                 $methodLabel = $inv->payment_method ?? 'Not Set';
                 $paidAmount  = (float) $inv->amount_paid;
                 $amountLabel = '₱' . number_format($paidAmount, 0);
 
-                $desc = $isPaid
-                    ? 'Payment of ' . $amountLabel . ' via ' . strtolower($methodLabel)
-                    : 'Payment rejected — ' . ($inv->receipt_no ? 'ref ' . $inv->receipt_no : 'no reference');
+                $desc = match (true) {
+                    $isPaid    => 'Payment of ' . $amountLabel . ' via ' . strtolower($methodLabel),
+                    $isPartial => 'Down payment of ' . $amountLabel . ' received · balance ₱'
+                        . number_format((float) $inv->balance, 0),
+                    default    => 'Payment rejected — ' . ($inv->receipt_no ? 'ref ' . $inv->receipt_no : 'no reference'),
+                };
 
                 return [
                     'category'  => 'payment',
                     'icon'      => 'fa-solid fa-peso-sign',
-                    'color'     => $isPaid ? 'green' : 'red',
+                    'color'     => $isPaid ? 'green' : ($isPartial ? 'yellow' : 'red'),
                     'title'     => $inv->description,
                     'tenant'    => $inv->tenant_name,
                     'room'      => 'Room ' . $inv->room_number,
@@ -98,8 +104,8 @@ class HistoryService
                                  ?? $inv->updated_at?->format('M d, Y · h:i A')
                                  ?? $inv->created_at?->format('M d, Y · h:i A'),
                     'timestamp' => $inv->date_paid ?? $inv->updated_at ?? $inv->created_at,
-                    'amount'    => $isPaid ? $amountLabel : null,
-                    'status'    => $isPaid ? 'paid' : 'rejected',
+                    'amount'    => ($isPaid || $isPartial) ? $amountLabel : null,
+                    'status'    => $isPaid ? 'paid' : ($isPartial ? 'partial' : 'rejected'),
                     'details'   => [
                         ['label' => 'Invoice ID',       'value' => $inv->transaction_no],
                         ['label' => 'Tenant',           'value' => $inv->tenant_name],
@@ -119,22 +125,24 @@ class HistoryService
     // ============================================================
     protected function reservations(): Collection
     {
-        return Reservation::whereIn('status', ['Approved', 'Rejected', 'Expired'])
+        return Reservation::whereIn('status', ['Approved', 'Rejected', 'Expired', 'Cancelled'])
             ->latest()
             ->get()
             ->map(function (Reservation $res) {
                 $statusMap = [
-                    'Approved' => 'approved',
-                    'Rejected' => 'rejected',
-                    'Expired'  => 'expired',
+                    'Approved'  => 'approved',
+                    'Rejected'  => 'rejected',
+                    'Expired'   => 'expired',
+                    'Cancelled' => 'cancelled',
                 ];
                 $status = $statusMap[$res->status] ?? 'expired';
 
                 $color = match ($status) {
-                    'approved' => 'blue',
-                    'rejected' => 'red',
-                    'expired'  => 'yellow',
-                    default    => 'gray',
+                    'approved'  => 'blue',
+                    'rejected'  => 'red',
+                    'expired'   => 'yellow',
+                    'cancelled' => 'gray',
+                    default     => 'gray',
                 };
 
                 return [

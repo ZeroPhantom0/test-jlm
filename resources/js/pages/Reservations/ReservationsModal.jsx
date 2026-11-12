@@ -366,10 +366,13 @@ export default function ReservationsModal() {
 
     const days = computeDays();
 
-    const nightlyRate = isBarkadaRoom
-        ? fixedBeds * roomRate + companionFee
-        : roomRate + companionFee;
+    // Barkada: flat room rate per night (good for total_beds people) plus
+    // ₱150 per additional person per night.
+    //   e.g. ₱1,000 × 5 nights + (1 extra × ₱150 × 5) = ₱5,750
+    const nightlyRate = roomRate + companionFee;
 
+    const roomOnlySubtotal = roomRate * days;
+    const extraPaxSubtotal = isBarkadaRoom ? extraMattresses * 150 * days : 0;
     const roomSubtotal = nightlyRate * days;
     const totalCharges = roomSubtotal;
     const halfPayment = totalCharges / 2;
@@ -1064,8 +1067,8 @@ export default function ReservationsModal() {
                                                 Fixed Beds:
                                             </label>
                                             <div className="text-[11px] text-slate-500 mb-1.5">
-                                                Per head Fee: ₱
-                                                {roomRate.toFixed(2)}
+                                                Included in room rate (good
+                                                for {room.total_beds})
                                             </div>
                                             <input
                                                 type="text"
@@ -1079,7 +1082,8 @@ export default function ReservationsModal() {
                                                 Extra Mattresses:
                                             </label>
                                             <div className="text-[11px] text-slate-500 mb-1.5">
-                                                Extra pax fee: ₱150.00
+                                                Extra pax fee: ₱150.00 / person
+                                                / night
                                             </div>
                                             <input
                                                 type="text"
@@ -1363,52 +1367,35 @@ export default function ReservationsModal() {
                                         <span>Room Rate</span>
                                         <strong>
                                             ₱{roomRate.toLocaleString()}.00 /
-                                            person / night
+                                            night (good for {room.total_beds}{" "}
+                                            pax)
                                         </strong>
                                     </div>
                                     <div className="flex justify-between text-[12px] text-slate-700 mb-1.5">
                                         <span>
-                                            Regular Occupants: {fixedBeds} pax ×
-                                            ₱{roomRate.toLocaleString()}
+                                            Room: ₱{roomRate.toLocaleString()} ×{" "}
+                                            {days} night{days === 1 ? "" : "s"}
                                         </span>
                                         <strong>
-                                            ₱
-                                            {(
-                                                fixedBeds * roomRate
-                                            ).toLocaleString()}
+                                            ₱{roomOnlySubtotal.toLocaleString()}
                                             .00
                                         </strong>
                                     </div>
                                     {extraMattresses > 0 && (
                                         <div className="flex justify-between text-[12px] text-slate-700 mb-1.5">
                                             <span>
-                                                Extra Pax Fee: {extraMattresses}{" "}
-                                                pax × ₱150.00
+                                                Additional Person:{" "}
+                                                {extraMattresses} × ₱150 ×{" "}
+                                                {days} night
+                                                {days === 1 ? "" : "s"}
                                             </span>
                                             <strong>
                                                 ₱
-                                                {(
-                                                    extraMattresses * 150
-                                                ).toLocaleString()}
+                                                {extraPaxSubtotal.toLocaleString()}
                                                 .00
                                             </strong>
                                         </div>
                                     )}
-                                    <div className="flex justify-between text-[13px] font-bold text-slate-800 border-t border-slate-300 pt-2 mt-2 mb-1.5">
-                                        <span>Subtotal per Night:</span>
-                                        <strong>
-                                            ₱{nightlyRate.toLocaleString()}.00
-                                        </strong>
-                                    </div>
-                                    <div className="flex justify-between text-[13px] font-bold text-slate-800 mb-2">
-                                        <span>
-                                            Total Stay: {days} nights × ₱
-                                            {nightlyRate.toLocaleString()}
-                                        </span>
-                                        <strong>
-                                            ₱{roomSubtotal.toLocaleString()}.00
-                                        </strong>
-                                    </div>
                                     <div className="flex justify-between text-[14px] font-extrabold text-slate-900 border-t border-slate-300 pt-2 mb-3">
                                         <span>Total Charges</span>
                                         <strong>

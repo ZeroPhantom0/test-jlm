@@ -87,8 +87,35 @@ class AdminNotificationController extends Controller
         return response()->json(['success' => true]);
     }
 
+    /** Mark one bell notification ("n-123") as read for this admin. */
+    public function markRead(Request $request)
+    {
+        $validated = $request->validate(['id' => ['required', 'string', 'max:40']]);
+
+        if (preg_match('/^n-(\d+)$/', $validated['id'], $m)) {
+            \App\Services\Notifier::markRead((int) Auth::id(), (int) $m[1]);
+        }
+
+        return response()->json(['success' => true]);
+    }
+
+    /** Mark everything as read: bell notifications + unread tenant messages. */
+    public function markAllRead(Request $request)
+    {
+        \App\Services\Notifier::markRead((int) Auth::id());
+
+        DB::table('messages')
+            ->where('sender_role', 'tenant')
+            ->whereNull('read_at')
+            ->update(['read_at' => now()]);
+
+        Cache::forget($this->cacheKey((int) Auth::id()));
+
+        return response()->json(['success' => true]);
+    }
+
     // ============================================================
-    // PAYLOAD BUILDER (unchanged logic, just extracted)
+    // PAYLOAD BUILDER
     // ============================================================
     private function buildPayload(int $currentUserId): array
     {
@@ -129,253 +156,12 @@ class AdminNotificationController extends Controller
             ];
         }
 
-        // 2) Pending reservations
-        $pendingReservations = DB::table('reservations')
-            ->where('status', 'Pending')
-            ->orderByDesc('created_at')
-            ->limit(10)
-            ->get();
-
-        foreach ($pendingReservations as $r) {
-            $notifications[] = [
-                'id'          => 'res-' . $r->id,
-                'type'        => 'reservation',
-                'icon'        => 'fa-regular fa-calendar-check',
-                'color'       => 'text-emerald-600 bg-emerald-50',
-                'title'       => 'New reservation pending',
-                'description' => $r->tenant_name . ' requested ' . $r->desired_room,
-                'time'        => $r->created_at,
-                'unread'      => true,
-                'link'        => '/admin/reservations',
-            ];
-        }
-
-        // 2a) Tenant-cancelled reservations
-        $cancelledReservations = DB::table('reservations')
-            ->where('status', 'Rejected')
-            ->whereNull('processed_by')
-            ->orderByDesc(DB::raw('COALESCE(processed_at, updated_at, created_at)'))
-            ->limit(10)
-            ->get();
-
-        foreach ($cancelledReservations as $r) {
-            $notifications[] = [
-                'id'          => 'res-can-' . $r->id,
-                'type'        => 'reservation',
-                'icon'        => 'fa-regular fa-circle-xmark',
-                'color'       => 'text-amber-600 bg-amber-50',
-                'title'       => 'Reservation cancelled by tenant',
-                'description' => $r->tenant_name . ' — ' . $r->desired_room,
-                'time'        => $r->processed_at ?? $r->updated_at ?? $r->created_at,
-                'unread'      => true,
-                'link'        => '/admin/reservations',
-            ];
-        }
-
-        // 2b) Payments submitted by tenants (awaiting verification)
-        $pendingPayments = DB::table('invoices')
-            ->where('status', 'Pending')
-            ->whereNull('deleted_at')   
-            ->whereNotNull('receipt_path')
-            ->orderByDesc('updated_at')
-            ->limit(10)
-            ->get();
-
-        foreach ($pendingPayments as $inv) {
-            $notifications[] = [
-                'id'          => 'pay-' . $inv->id,
-                'type'        => 'payment',
-                'icon'        => 'fa-solid fa-money-bill-transfer',
-                'color'       => 'text-emerald-600 bg-emerald-50',
-                'title'       => 'Payment submitted — ₱' . number_format((float) $inv->balance, 2),
-                'description' => $inv->tenant_name . ' · ' . $inv->transaction_no
-                    . ' · ' . ($inv->description ?? 'Invoice'),
-                'time'        => $inv->updated_at ?? $inv->created_at,
-                'unread'      => true,
-                'link'        => '/admin/billing',
-            ];
-        }
-
-        // 3) Overdue / unpaid invoices
-        $overdueInvoices = DB::table('invoices')
-            ->whereIn('status', ['Overdue', 'Unpaid'])
-            ->whereNull('deleted_at')    
-            ->whereNotNull('due_date')
-            ->where('due_date', '<', now()->toDateString())
-            ->orderByDesc('due_date')
-            ->limit(10)
-            ->get();
-
-        foreach ($overdueInvoices as $i) {
-            $notifications[] = [
-                'id'          => 'inv-' . $i->id,
-                'type'        => 'invoice',
-                'icon'        => 'fa-solid fa-credit-card',
-                'color'       => 'text-orange-600 bg-orange-50',
-                'title'       => 'Overdue invoice',
-                'description' => $i->transaction_no . ' — ' . $i->tenant_name
-                    . ' (₱' . number_format($i->balance, 2) . ')',
-                'time'        => $i->due_date . ' 00:00:00',
-                'unread'      => true,
-                'link'        => '/admin/billing',
-            ];
-        }
-
-        // 4) Pending maintenance requests
-        $pendingMaintenance = DB::table('maintenance_requests')
-            ->where('status', 'Pending')
-            ->orderByDesc('created_at')
-            ->limit(10)
-            ->get();
-
-        foreach ($pendingMaintenance as $mr) {
-            $notifications[] = [
-                'id'          => 'mnt-' . $mr->id,
-                'type'        => 'maintenance',
-                'icon'        => 'fa-solid fa-wrench',
-                'color'       => 'text-rose-600 bg-rose-50',
-                'title'       => 'Maintenance request (' . $mr->priority . ')',
-                'description' => $mr->title,
-                'time'        => $mr->created_at,
-                'unread'      => true,
-                'link'        => '/admin/services/maintenance',
-            ];
-        }
-
-        // 4a) Tenant-cancelled maintenance requests
-        $tenantCancelledMaintenance = DB::table('maintenance_requests')
-            ->where('status', 'Cancelled')
-            ->whereNotNull('tenant_id')
-            ->where('updated_at', '>=', now()->subDays(30))
-            ->orderByDesc('updated_at')
-            ->limit(10)
-            ->get();
-
-        foreach ($tenantCancelledMaintenance as $mr) {
-            $notifications[] = [
-                'id'          => 'mnt-cancel-' . $mr->id,
-                'type'        => 'maintenance',
-                'icon'        => 'fa-regular fa-circle-xmark',
-                'color'       => 'text-slate-600 bg-slate-100',
-                'title'       => 'Maintenance request cancelled',
-                'description' => $mr->title,
-                'time'        => $mr->updated_at ?? $mr->created_at,
-                'unread'      => true,
-                'link'        => '/admin/services/maintenance',
-            ];
-        }
-
-        // 4b) Pending room change requests
-        $pendingRoomChanges = DB::table('room_change_requests')
-            ->where('status', 'Pending')
-            ->orderByDesc('created_at')
-            ->limit(10)
-            ->get();
-
-        foreach ($pendingRoomChanges as $rc) {
-            $notifications[] = [
-                'id'          => 'rc-' . $rc->id,
-                'type'        => 'room-change',
-                'icon'        => 'fa-solid fa-house',
-                'color'       => 'text-indigo-600 bg-indigo-50',
-                'title'       => 'Room change request',
-                'description' => $rc->current_room . ' → ' . $rc->requested_room,
-                'time'        => $rc->created_at,
-                'unread'      => true,
-                'link'        => '/admin/services/room-change',
-            ];
-        }
-
-        // 4c) Tenant-cancelled room change requests
-        $tenantCancelledRoomChanges = DB::table('room_change_requests')
-            ->where('status', 'Rejected')
-            ->whereNull('processed_by')
-            ->orderByDesc(DB::raw('COALESCE(processed_at, updated_at, created_at)'))
-            ->limit(10)
-            ->get();
-
-        foreach ($tenantCancelledRoomChanges as $rc) {
-            $notifications[] = [
-                'id'          => 'rc-cancel-' . $rc->id,
-                'type'        => 'room-change',
-                'icon'        => 'fa-regular fa-circle-xmark',
-                'color'       => 'text-amber-600 bg-amber-50',
-                'title'       => 'Room change cancelled by tenant',
-                'description' => $rc->current_room . ' → ' . $rc->requested_room,
-                'time'        => $rc->processed_at ?? $rc->updated_at ?? $rc->created_at,
-                'unread'      => true,
-                'link'        => '/admin/services/room-change',
-            ];
-        }
-
-        // 4d) Pending stay extension requests
-        $pendingStayExtensions = DB::table('stay_extension_requests')
-            ->where('status', 'Pending')
-            ->orderByDesc('created_at')
-            ->limit(10)
-            ->get();
-
-        foreach ($pendingStayExtensions as $se) {
-            $notifications[] = [
-                'id'          => 'se-' . $se->id,
-                'type'        => 'stay-extension',
-                'icon'        => 'fa-regular fa-calendar-plus',
-                'color'       => 'text-purple-600 bg-purple-50',
-                'title'       => 'Stay extension request',
-                'description' => '+' . $se->extension_days . ' day(s) · ' . $se->reference_no,
-                'time'        => $se->created_at,
-                'unread'      => true,
-                'link'        => '/admin/services/stay-extension',
-            ];
-        }
-
-        // 4e) Tenant-cancelled stay extension requests
-        $tenantCancelledStayExtensions = DB::table('stay_extension_requests')
-            ->where('status', 'Rejected')
-            ->whereNull('processed_by')
-            ->orderByDesc(DB::raw('COALESCE(processed_at, updated_at, created_at)'))
-            ->limit(10)
-            ->get();
-
-        foreach ($tenantCancelledStayExtensions as $se) {
-            $notifications[] = [
-                'id'          => 'se-cancel-' . $se->id,
-                'type'        => 'stay-extension',
-                'icon'        => 'fa-regular fa-circle-xmark',
-                'color'       => 'text-amber-600 bg-amber-50',
-                'title'       => 'Stay extension cancelled by tenant',
-                'description' => '+' . $se->extension_days . ' day(s) · ' . $se->reference_no,
-                'time'        => $se->processed_at ?? $se->updated_at ?? $se->created_at,
-                'unread'      => true,
-                'link'        => '/admin/services/stay-extension',
-            ];
-        }
-
-        // 5) Recently published announcements (last 7 days)
-        //    Excludes announcements authored by the current admin
-        $announcements = DB::table('announcements')
-            ->where('is_published', 1)
-            ->where('created_at', '>=', now()->subDays(7))
-            ->where(function ($q) use ($currentUserId) {
-                $q->whereNull('created_by')
-                    ->orWhere('created_by', '!=', $currentUserId);
-            })
-            ->orderByDesc('created_at')
-            ->limit(5)
-            ->get();
-
-        foreach ($announcements as $a) {
-            $notifications[] = [
-                'id'          => 'ann-' . $a->id,
-                'type'        => 'announcement',
-                'icon'        => 'fa-solid fa-bullhorn',
-                'color'       => 'text-purple-600 bg-purple-50',
-                'title'       => 'Announcement: ' . $a->title,
-                'description' => Str::limit(strip_tags($a->content), 60),
-                'time'        => $a->created_at,
-                'unread'      => false,
-                'link'        => '/admin/announcements',
-            ];
+        // 2) Everything else is event-based: reservations, payments,
+        //    maintenance, room changes and stay extensions done by TENANTS
+        //    (see CreateBellNotifications). An admin never sees their own
+        //    actions, and read state is stored per admin.
+        foreach (\App\Services\Notifier::feedFor($currentUserId) as $n) {
+            $notifications[] = $n;
         }
 
         // 🛡️ Defensive filter — never leak report/export items to the UI

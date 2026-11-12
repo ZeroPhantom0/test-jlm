@@ -51,7 +51,7 @@ class TenantHistoryController extends Controller
         }
 
         $items = collect()
-            ->merge($this->payments($tenant))
+            ->merge($this->payments($tenant, $user->id))
             ->merge($this->paidReservations($tenant, $user->id))
             ->merge($this->maintenance($tenant))
             ->merge($this->roomChanges($tenant))
@@ -102,7 +102,7 @@ class TenantHistoryController extends Controller
             $events = collect();
         } else {
             $events = collect()
-                ->merge($this->payments($tenant))
+                ->merge($this->payments($tenant, $user->id))
                 ->merge($this->paidReservations($tenant, $user->id))
                 ->merge($this->maintenance($tenant))
                 ->merge($this->roomChanges($tenant))
@@ -186,7 +186,7 @@ class TenantHistoryController extends Controller
         } else {
             // Fetch all payments
             $events = collect()
-                ->merge($this->payments($tenant))
+                ->merge($this->payments($tenant, $user->id))
                 ->merge($this->paidReservations($tenant, $user->id))
                 ->sortByDesc('timestamp')
                 ->values();
@@ -219,17 +219,56 @@ class TenantHistoryController extends Controller
     }
 
     // ============================================================
-    // PAYMENTS — only Paid and Rejected
+    // PAYMENTS — Paid, Partial (verified down payment) and Rejected
     // ============================================================
-    private function payments(Tenant $tenant)
+
+    /** Reference numbers (#RSV-…) of every reservation this user made. */
+    private function myReservationRefs(Tenant $tenant, int $userId): array
     {
-        return Invoice::where('tenant_id', $tenant->id)
-            ->whereIn('status', ['Paid', 'Rejected'])
+        return Reservation::where(function ($q) use ($tenant, $userId) {
+            $q->where('user_id', $userId)
+                ->orWhere('tenant_name', $tenant->user->name ?? '');
+        })->pluck('reference_no')->filter()->values()->all();
+    }
+
+    /**
+     * The tenant's verified invoices. Invoices created at booking time have no
+     * tenant_id yet (the tenant row is made on approval), so they're matched
+     * by the reservation reference in their description — exactly, so that
+     * #RSV-1 never picks up #RSV-11.
+     */
+    private function paymentInvoices(Tenant $tenant, int $userId)
+    {
+        $refs = $this->myReservationRefs($tenant, $userId);
+
+        return Invoice::query()
+            ->whereIn('status', ['Paid', 'Partial', 'Rejected'])
+            ->where(function ($q) use ($tenant, $refs) {
+                $q->where('tenant_id', $tenant->id);
+                foreach ($refs as $ref) {
+                    $q->orWhere(fn ($q2) => $q2->whereNull('tenant_id')
+                        ->where('description', 'like', '%' . $ref . '%'));
+                }
+            })
             ->latest()
             ->get()
+            ->filter(function (Invoice $inv) use ($tenant, $refs) {
+                if ((int) $inv->tenant_id === (int) $tenant->id) return true;
+                foreach ($refs as $ref) {
+                    if (preg_match('/' . preg_quote($ref, '/') . '(?!\d)/', (string) $inv->description)) return true;
+                }
+                return false;
+            })
+            ->values();
+    }
+
+    private function payments(Tenant $tenant, int $userId)
+    {
+        return $this->paymentInvoices($tenant, $userId)
             ->map(function (Invoice $inv) {
                 $statusMap = [
                     'Paid'     => ['paid',     'green'],
+                    'Partial'  => ['partial',  'yellow'],
                     'Rejected' => ['rejected', 'red'],
                 ];
 
@@ -239,9 +278,12 @@ class TenantHistoryController extends Controller
                 $paidAmount  = (float) $inv->amount_paid;
                 $amountLabel = "\u{20B1}" . number_format($paidAmount, 0);
 
-                $desc = $inv->status === 'Paid'
-                    ? 'Payment of ' . $amountLabel . ' via ' . strtolower($methodLabel)
-                    : 'Payment rejected — ' . ($inv->receipt_no ? 'ref ' . $inv->receipt_no : 'no reference');
+                $desc = match ($inv->status) {
+                    'Paid'    => 'Payment of ' . $amountLabel . ' via ' . strtolower($methodLabel),
+                    'Partial' => 'Down payment of ' . $amountLabel . ' received · balance '
+                        . "\u{20B1}" . number_format((float) $inv->balance, 0),
+                    default   => 'Payment rejected — ' . ($inv->receipt_no ? 'ref ' . $inv->receipt_no : 'no reference'),
+                };
 
                 return [
                     'key'           => 'pay-' . $inv->id,
@@ -254,7 +296,7 @@ class TenantHistoryController extends Controller
                         ?? $inv->updated_at?->format('M d, Y · h:i A')
                         ?? $inv->created_at?->format('M d, Y · h:i A'),
                     'timestamp'     => $inv->date_paid ?? $inv->updated_at ?? $inv->created_at,
-                    'amount'        => $inv->status === 'Paid' ? $amountLabel : null,
+                    'amount'        => in_array($inv->status, ['Paid', 'Partial'], true) ? $amountLabel : null,
                     'status'        => $historyStatus,
                     'payment_state' => $inv->status,
                     'details'       => [
@@ -286,14 +328,24 @@ class TenantHistoryController extends Controller
     // ============================================================
     private function paidReservations(Tenant $tenant, int $userId)
     {
+        // Skip reservations whose payment already shows as an invoice above,
+        // so the same down payment is never listed twice.
+        $invoiceText = $this->paymentInvoices($tenant, $userId)
+            ->where('status', '!=', 'Rejected')
+            ->pluck('description')
+            ->implode(' | ');
+
         return Reservation::where(function ($q) use ($tenant, $userId) {
             $q->where('user_id', $userId)
                 ->orWhere('tenant_name', $tenant->user->name ?? '');
         })
-            ->where('status', 'Approved')
+            // A paid down payment stays in history after the stay ends
+            ->whereIn('status', ['Approved', 'Expired', 'Cancelled'])
             ->whereNotNull('proof_of_payment')
             ->latest()
             ->get()
+            ->reject(fn (Reservation $r) => $r->reference_no
+                && preg_match('/' . preg_quote($r->reference_no, '/') . '(?!\d)/', $invoiceText))
             ->map(function (Reservation $r) {
                 $fee = (float) $r->reservation_fee;
                 $amountLabel = '₱' . number_format($fee, 0);
@@ -454,20 +506,22 @@ class TenantHistoryController extends Controller
             $q->where('user_id', $userId)
                 ->orWhere('tenant_name', $tenant->user->name ?? '');
         })
-            ->whereIn('status', ['Approved', 'Rejected', 'Expired'])
+            ->whereIn('status', ['Approved', 'Rejected', 'Expired', 'Cancelled'])
             ->latest()
             ->get()
             ->map(function (Reservation $r) {
                 $status = match ($r->status) {
-                    'Approved' => 'approved',
-                    'Rejected' => 'rejected',
-                    'Expired'  => 'expired',
+                    'Approved'  => 'approved',
+                    'Rejected'  => 'rejected',
+                    'Cancelled' => 'cancelled',
+                    'Expired'   => 'expired',
                     default     => 'expired',
                 };
                 $color = match ($status) {
-                    'approved' => 'blue',
-                    'rejected' => 'red',
-                    'expired'  => 'yellow',
+                    'approved'  => 'blue',
+                    'rejected'  => 'red',
+                    'cancelled' => 'gray',
+                    'expired'   => 'yellow',
                     default     => 'yellow',
                 };
 

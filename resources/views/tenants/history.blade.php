@@ -18,6 +18,7 @@
 
         $badges = [
             'paid' => ['bg-green-100 text-green-700', 'fa-regular fa-circle-check'],
+            'partial' => ['bg-amber-100 text-amber-700', 'fa-regular fa-circle-half-stroke'],
             'completed' => ['bg-green-100 text-green-700', 'fa-regular fa-circle-check'],
             'approved' => ['bg-blue-100 text-blue-600', 'fa-regular fa-circle-check'],
             'cancelled' => ['bg-slate-100 text-slate-600 border border-slate-200', 'fa-regular fa-circle-xmark'],
@@ -30,6 +31,7 @@
             'blue' => 'bg-blue-100 text-blue-500',
             'red' => 'bg-red-100 text-red-500',
             'yellow' => 'bg-amber-100 text-amber-600',
+            'gray' => 'bg-slate-100 text-slate-500',
         ];
 
         $itemsMap = collect($historyItems)->keyBy('key')->toArray();

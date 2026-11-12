@@ -65,6 +65,10 @@ class BalanceReminderService
             return;
         }
 
+        // The remaining balance is due at check-in — the same deadline the
+        // reminder and the payment-policy cancellation use.
+        $this->alignDueDate($reservation, $timeIn);
+
         // Time-in already passed → no reminder; the scheduler applies the policy.
         if ($timeIn->lessThanOrEqualTo(now())) {
             return;
@@ -91,6 +95,44 @@ class BalanceReminderService
             'cancelled' => $this->applyPaymentPolicy(),
             'notified'  => $this->sendDueCancellationNotices(),
         ];
+    }
+
+    /**
+     * One-off: enrol Approved reservations that were approved before this
+     * feature existed (or through a path that skipped handleApproval), so the
+     * payment policy applies to them too. Returns the references enrolled.
+     *
+     * @return string[]
+     */
+    public function enrollExisting(bool $dryRun = false): array
+    {
+        $enrolled = [];
+
+        $candidates = Reservation::query()
+            ->where('status', 'Approved')
+            ->whereNull('balance_tracked_at')
+            ->get();
+
+        foreach ($candidates as $reservation) {
+            if ($this->outstandingBalance($reservation) <= 0) {
+                continue;
+            }
+            $enrolled[] = $reservation->reference_no;
+            if (! $dryRun) {
+                $this->handleApproval($reservation);
+            }
+        }
+
+        return $enrolled;
+    }
+
+    /** Set the due date of the reservation's outstanding invoice(s) to check-in. */
+    private function alignDueDate(Reservation $reservation, Carbon $timeIn): void
+    {
+        $ids = $this->outstandingInvoices($reservation)->pluck('id');
+        if ($ids->isNotEmpty()) {
+            Invoice::whereIn('id', $ids)->update(['due_date' => $timeIn->toDateString()]);
+        }
     }
 
     // ============================================================
@@ -239,7 +281,7 @@ class BalanceReminderService
 
             // Release the tenant + room held by this reservation.
             Tenant::where('approved_reservation_id', $locked->id)
-                ->update(['status' => 'inactive']);
+                ->update(['status' => 'inactive', 'room_id' => null]);
 
             $locked->room?->syncStatus();
 

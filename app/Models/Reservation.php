@@ -115,6 +115,67 @@ class Reservation extends Model
         return '₱' . number_format((float) $this->reservation_fee, 0);
     }
 
+    /**
+     * The exact moment the stay ends: check-out date + check-out time
+     * (falls back to the configured default check-out time).
+     */
+    public function checkOutAt(): ?\Carbon\Carbon
+    {
+        if (! $this->check_out) {
+            return null;
+        }
+
+        $time = trim((string) ($this->check_out_time ?: config('services.balance_reminders.default_check_out_time', '12:00')));
+
+        try {
+            return \Carbon\Carbon::parse($this->check_out->toDateString() . ' ' . $time);
+        } catch (\Throwable $e) {
+            return $this->check_out->copy()->endOfDay();
+        }
+    }
+
+    /** True once an Approved stay has passed its check-out moment. */
+    public function isStayOver(): bool
+    {
+        $at = $this->checkOutAt();
+        return $at !== null && $at->isPast();
+    }
+
+    /** The exact moment the stay starts: check-in date + check-in time. */
+    public function checkInAt(): ?\Carbon\Carbon
+    {
+        if (! $this->check_in) {
+            return null;
+        }
+
+        $time = trim((string) ($this->check_in_time ?: config('services.balance_reminders.default_check_in_time', '14:00')));
+
+        try {
+            return \Carbon\Carbon::parse($this->check_in->toDateString() . ' ' . $time);
+        } catch (\Throwable $e) {
+            return $this->check_in->copy()->startOfDay();
+        }
+    }
+
+    /** Check-in moment reached (the guest is actually in the room now or was). */
+    public function hasStarted(): bool
+    {
+        $at = $this->checkInAt();
+        return $at === null || ! $at->isFuture();
+    }
+
+    /** Approved and in progress right now: checked in, not yet checked out. */
+    public function isCurrentStay(): bool
+    {
+        return $this->status === 'Approved' && $this->hasStarted() && ! $this->isStayOver();
+    }
+
+    /** Approved but the check-in moment is still ahead. */
+    public function isUpcomingStay(): bool
+    {
+        return $this->status === 'Approved' && ! $this->hasStarted();
+    }
+
     public function getStayPeriodAttribute(): string
     {
         $in  = $this->check_in?->format('M j, Y')  ?? '—';

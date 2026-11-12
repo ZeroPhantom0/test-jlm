@@ -184,9 +184,8 @@
                     <h3 class="text-[17px] font-bold text-slate-900 mb-1">Preferences</h3>
                     <p class="text-[13px] text-slate-500 mb-6">Customize your boarding house experience</p>
 
-                    <form action="#" method="POST">
-                        @csrf
-                        @foreach ([['id' => 'email', 'label' => 'Email Notifications', 'default' => true], ['id' => 'sms', 'label' => 'SMS Alerts', 'default' => false]] as $pref)
+                    <form id="tenant-preferences-form" data-settings-save data-url="{{ route('tenants.settings.preferences') }}">
+                        @foreach ([['id' => 'email', 'field' => 'email_notifications', 'label' => 'Email Notifications', 'default' => $user->email_notifications ?? true], ['id' => 'sms', 'field' => 'sms_notifications', 'label' => 'SMS Alerts', 'default' => $user->sms_notifications ?? true]] as $pref)
                             <div class="flex items-center justify-between py-4 border-b border-slate-50 last:border-0">
                                 <div class="flex items-start gap-3">
                                     <i class="fa-regular fa-bell text-base text-slate-900 mt-0.5"></i>
@@ -197,7 +196,8 @@
                                     </div>
                                 </div>
                                 <label class="relative inline-block w-11 h-6 cursor-pointer">
-                                    <input type="checkbox" name="preferences[{{ $pref['id'] }}]"
+                                    <input type="checkbox" name="{{ $pref['field'] }}"
+                                        data-status-target="{{ $pref['id'] }}-status"
                                         id="{{ $pref['id'] }}-toggle" @if ($pref['default']) checked @endif
                                         class="peer opacity-0 w-0 h-0">
                                     <span
@@ -208,10 +208,11 @@
                             </div>
                         @endforeach
 
-                        <div class="flex justify-end mt-7">
+                        <div class="flex items-center justify-end gap-3 mt-7">
+                            <span class="settings-save-status text-[12px]" aria-live="polite"></span>
                             <button type="submit"
-                                class="bg-[#02122c] hover:bg-[#091e42] text-white px-5 py-2.5 rounded-lg text-[13px] font-semibold inline-flex items-center gap-2 transition">
-                                <i class="fa-regular fa-floppy-disk"></i> Save Appearance
+                                class="bg-[#02122c] hover:bg-[#091e42] disabled:opacity-60 text-white px-5 py-2.5 rounded-lg text-[13px] font-semibold inline-flex items-center gap-2 transition">
+                                <i class="fa-regular fa-floppy-disk"></i> Save Preferences
                             </button>
                         </div>
                     </form>

@@ -152,6 +152,10 @@ Route::middleware(['auth', 'onboarding.complete', 'prevent.back.cache'])
 
         Route::get('/notifications/feed', [TenantNotificationController::class, 'index'])
             ->name('notifications.feed');
+        Route::post('/notifications/message-read', [TenantNotificationController::class, 'markMessageRead'])
+            ->name('notifications.message-read');
+        Route::post('/notifications/read',     [TenantNotificationController::class, 'markRead'])->name('notifications.read');
+        Route::post('/notifications/read-all', [TenantNotificationController::class, 'markAllRead'])->name('notifications.read-all');
 
         Route::post('/reservations/parse-receipt', [TenantReservationController::class, 'parseReceipt'])
             ->name('reservations.parse-receipt');
@@ -181,6 +185,7 @@ Route::middleware(['auth', 'onboarding.complete', 'prevent.back.cache'])
         // ---------- Settings ----------
         Route::get('/settings',         [TenantSettingsController::class, 'index'])->name('settings');
         Route::put('/settings/profile', [TenantSettingsController::class, 'updateProfile'])->name('settings.update');
+        Route::put('/settings/preferences', [TenantSettingsController::class, 'updatePreferences'])->name('settings.preferences');
 
         // Verification Routes for OTP flow
         Route::post('/settings/request-verification', [TenantSettingsController::class, 'requestVerification'])->name('settings.request-verification');
@@ -222,6 +227,8 @@ Route::middleware(['auth', 'admin', 'prevent.back.cache'])->prefix('admin')->nam
     // ---------- Notifications ----------
     Route::get('/notifications/feed',          [AdminNotificationController::class, 'index'])->name('notifications.feed');
     Route::post('/notifications/message-read', [AdminNotificationController::class, 'markMessageRead'])->name('notifications.message-read');
+    Route::post('/notifications/read',         [AdminNotificationController::class, 'markRead'])->name('notifications.read');
+    Route::post('/notifications/read-all',     [AdminNotificationController::class, 'markAllRead'])->name('notifications.read-all');
 
     // ---------- Rooms ----------
     Route::get('/rooms',           [RoomController::class, 'index'])->name('rooms');
@@ -291,6 +298,11 @@ Route::middleware(['auth', 'admin', 'prevent.back.cache'])->prefix('admin')->nam
     // ---------- Settings ----------
     Route::get('/settings',         [SettingsController::class, 'index'])->name('settings');
     Route::put('/settings/profile', [SettingsController::class, 'updateProfile'])->name('settings.profile');
+    Route::put('/settings/security',    [SettingsController::class, 'updateSecurity'])->name('settings.security');
+    Route::put('/settings/preferences', [SettingsController::class, 'updatePreferences'])->name('settings.preferences');
+
+    // Keeps the idle-timeout clock alive while the admin is actually using the page
+    Route::post('/session/heartbeat', fn () => response()->json(['ok' => true]))->name('session.heartbeat');
 
     // Verification Routes for OTP flow
     Route::post('/settings/request-verification', [SettingsController::class, 'requestVerification'])->name('settings.request-verification');

@@ -97,6 +97,69 @@ class SettingsController extends Controller
      * Update the admin's profile (Name and Profile Picture only).
      * Email and Phone are handled via OTP in requestVerification.
      */
+    /**
+     * Security Options → Session Timeout (idle minutes before auto-logout).
+     */
+    public function updateSecurity(Request $request)
+    {
+        $validated = $request->validate([
+            'session_timeout' => ['required', 'integer', \Illuminate\Validation\Rule::in(User::SESSION_TIMEOUTS)],
+        ]);
+
+        /** @var User $user */
+        $user = $request->user();
+        $user->update(['session_timeout' => (int) $validated['session_timeout']]);
+
+        // The new timeout counts from now
+        $request->session()->put(\App\Http\Middleware\EnforceSessionTimeout::SESSION_KEY, now()->timestamp);
+
+        AuditLogger::log([
+            'action'       => 'UPDATE',
+            'module'       => 'AUTHENTICATION',
+            'description'  => 'Changed session timeout to ' . $validated['session_timeout'] . ' minutes.',
+            'subject_type' => User::class,
+            'subject_id'   => $user->id,
+        ]);
+
+        return response()->json([
+            'success'         => true,
+            'message'         => 'Security options updated.',
+            'session_timeout' => $user->session_timeout,
+        ]);
+    }
+
+    /**
+     * Preferences → Email Notifications / SMS Alerts.
+     */
+    public function updatePreferences(Request $request)
+    {
+        $validated = $request->validate([
+            'email_notifications' => ['required', 'boolean'],
+            'sms_notifications'   => ['required', 'boolean'],
+        ]);
+
+        /** @var User $user */
+        $user = $request->user();
+        $user->update($validated);
+
+        AuditLogger::log([
+            'action'       => 'UPDATE',
+            'module'       => 'AUTHENTICATION',
+            'description'  => 'Updated notification preferences (email: '
+                . ($user->email_notifications ? 'on' : 'off') . ', SMS: '
+                . ($user->sms_notifications ? 'on' : 'off') . ').',
+            'subject_type' => User::class,
+            'subject_id'   => $user->id,
+        ]);
+
+        return response()->json([
+            'success'             => true,
+            'message'             => 'Preferences saved.',
+            'email_notifications' => $user->email_notifications,
+            'sms_notifications'   => $user->sms_notifications,
+        ]);
+    }
+
     public function updateProfile(Request $request)
     {
         /** @var User $user */

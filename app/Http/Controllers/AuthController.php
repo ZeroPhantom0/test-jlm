@@ -17,6 +17,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Password;
@@ -35,14 +36,60 @@ class AuthController extends Controller
         ]);
     }
 
+    // ============ LOGIN VALIDATION (shared by tenant + admin) ============
+
+    /** Same rules and wording as the inline validation on both login pages. */
+    private function validateLogin(Request $request): array
+    {
+        $request->merge(['email' => strtolower(trim((string) $request->input('email')))]);
+
+        return $request->validate([
+            'email'    => ['required', 'string', 'email', 'max:255'],
+            'password' => ['required', 'string', 'max:255'],
+        ], [
+            'email.required'    => 'Email address is required.',
+            'email.email'       => 'Enter a valid email address, e.g. name@example.com.',
+            'email.max'         => 'Email address must not exceed 255 characters.',
+            'password.required' => 'Password is required.',
+            'password.max'      => 'Password must not exceed 255 characters.',
+        ]);
+    }
+
+    /** 5 failed attempts per email + IP, then a 60-second lockout. */
+    private function loginThrottleKey(Request $request, string $portal): string
+    {
+        return 'login:' . $portal . ':' . sha1(strtolower((string) $request->input('email')) . '|' . $request->ip());
+    }
+
+    private function tooManyAttemptsResponse(string $key)
+    {
+        $seconds = RateLimiter::availableIn($key);
+
+        return back()->withErrors([
+            'credentials' => "Too many login attempts. Please try again in {$seconds} second" . ($seconds === 1 ? '' : 's') . '.',
+        ])->onlyInput('email');
+    }
+
+    private function invalidCredentialsResponse(string $key)
+    {
+        RateLimiter::hit($key, 60);
+        $left = max(0, 5 - RateLimiter::attempts($key));
+
+        return back()->withErrors([
+            // Generic on purpose: never reveal whether the email exists
+            'credentials' => 'Incorrect email or password. Please check your details and try again.'
+                . ($left > 0 && $left <= 2 ? " ({$left} attempt" . ($left === 1 ? '' : 's') . ' left)' : ''),
+        ])->onlyInput('email');
+    }
+
     public function login(Request $request)
     {
-        $credentials = $request->validate([
-            'email'    => ['required', 'email'],
-            'password' => ['required'],
-        ]);
+        $credentials = $this->validateLogin($request);
+        $throttleKey = $this->loginThrottleKey($request, 'tenant');
 
-        $remember = $request->boolean('remember');
+        if (RateLimiter::tooManyAttempts($throttleKey, 5)) {
+            return $this->tooManyAttemptsResponse($throttleKey);
+        }
 
         if (! Auth::validate($credentials)) {
             AuditLogger::log([
@@ -54,21 +101,22 @@ class AuthController extends Controller
                 'user_role'   => 'Unknown',
             ]);
 
-            return back()->withErrors([
-                'email' => 'The provided credentials do not match our records.',
-            ])->onlyInput('email');
+            return $this->invalidCredentialsResponse($throttleKey);
         }
+
+        RateLimiter::clear($throttleKey);
 
         $user = User::where('email', $credentials['email'])->firstOrFail();
 
         // 🛑 BLOCK ADMINS from using the tenant login
         if ($user->isAdmin()) {
             return back()->withErrors([
-                'email' => 'Administrators must use the admin login portal.',
+                'email' => 'This is an administrator account. Please sign in through the admin portal.',
             ])->onlyInput('email');
         }
 
-        return $this->beginVerification($user, $remember, 'password');
+        // "Remember me" was removed — sessions always end on logout / expiry
+        return $this->beginVerification($user, false, 'password');
     }
 
     // ============ ADMIN LOGIN (STEP 1) ============
@@ -83,10 +131,12 @@ class AuthController extends Controller
 
     public function adminLogin(Request $request)
     {
-        $credentials = $request->validate([
-            'email'    => ['required', 'email'],
-            'password' => ['required'],
-        ]);
+        $credentials = $this->validateLogin($request);
+        $throttleKey = $this->loginThrottleKey($request, 'admin');
+
+        if (RateLimiter::tooManyAttempts($throttleKey, 5)) {
+            return $this->tooManyAttemptsResponse($throttleKey);
+        }
 
         if (! Auth::validate($credentials)) {
             AuditLogger::log([
@@ -98,17 +148,17 @@ class AuthController extends Controller
                 'user_role'   => 'Unknown',
             ]);
 
-            return back()->withErrors([
-                'email' => 'The provided credentials do not match our records.',
-            ])->onlyInput('email');
+            return $this->invalidCredentialsResponse($throttleKey);
         }
+
+        RateLimiter::clear($throttleKey);
 
         $user = User::where('email', $credentials['email'])->firstOrFail();
 
         // 🛑 BLOCK NON-ADMINS from using the admin login
         if (! $user->isAdmin()) {
             return back()->withErrors([
-                'email' => 'You do not have administrator access.',
+                'email' => 'This account does not have administrator access. Tenants should sign in through the tenant portal.',
             ])->onlyInput('email');
         }
 
@@ -118,7 +168,8 @@ class AuthController extends Controller
     // ============ GOOGLE OAUTH ============
     public function redirectToGoogle(Request $request)
     {
-        $request->session()->put('google_remember', $request->boolean('remember'));
+        // "Remember me" was removed from login
+        $request->session()->forget('google_remember');
 
         try {
             return Socialite::driver('google')->redirect();
@@ -166,7 +217,7 @@ class AuthController extends Controller
             );
         }
 
-        $remember = (bool) $request->session()->pull('google_remember', false);
+        $remember = false; // "Remember me" was removed from login
 
         $user = User::where('email', $email)->first();
 
@@ -609,6 +660,8 @@ class AuthController extends Controller
             'phone'    => ['required', 'string', 'max:20'],
             'password' => ['required', 'confirmed', Password::min(8)],
             'terms'    => ['accepted'],
+        ], [
+            'terms.accepted' => 'Please agree to the Terms and Conditions to continue.',
         ]);
 
         $user = User::create([

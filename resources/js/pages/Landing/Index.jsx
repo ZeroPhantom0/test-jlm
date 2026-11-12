@@ -764,6 +764,34 @@ function RoomCard({ room }) {
                                 ? "Ready for Move-in"
                                 : room.status}
                         </strong>
+
+                        {/* Occupied: when the first current occupant checks out */}
+                        {room.status === "Occupied" && (
+                            <div className="availability-estimate">
+                                <small>
+                                    <i className="bi bi-clock-history" />{" "}
+                                    Estimated Availability
+                                </small>
+                                <span>
+                                    {room.est_available || "To be announced"}
+                                </span>
+                                {room.est_approx && (
+                                    <em>{room.est_approx}</em>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Reserved: free now, booked for upcoming dates */}
+                        {room.status === "Reserved" && room.next_booking && (
+                            <div className="availability-estimate">
+                                <small>
+                                    <i className="bi bi-calendar-event" />{" "}
+                                    Booked
+                                </small>
+                                <span>{room.next_booking}</span>
+                                <em>Other dates still available</em>
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>

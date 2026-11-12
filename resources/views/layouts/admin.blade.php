@@ -44,6 +44,9 @@
             isAdmin: {{ $user?->isAdmin() ? 'true' : 'false' }},
             csrf: @json(csrf_token()),
             broadcast: @json($broadcastConfig),
+            // Settings → Security → Session Timeout (idle minutes)
+            sessionTimeout: {{ $user?->isAdmin() ? (int) ($user->session_timeout ?: 120) : 'null' }},
+            heartbeatUrl: @json($user?->isAdmin() ? route('admin.session.heartbeat') : null),
         };
     </script>
 

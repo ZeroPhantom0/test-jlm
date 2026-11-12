@@ -182,6 +182,29 @@ class BillingController extends Controller
 
             DB::commit();
 
+            AuditLogger::log([
+                'action'       => 'APPROVE',
+                'module'       => 'BILLING',
+                'description'  => 'Approved payment of ₱' . number_format((float) $invoice->amount_paid, 2)
+                    . ' from ' . $invoice->tenant_name . ' — ' . $invoice->transaction_no
+                    . ' (' . $status . ($status === 'Partial' ? ', balance ₱' . number_format((float) $balance, 2) : '') . ')'
+                    . ($invoice->description ? ' · ' . $invoice->description : ''),
+                'status'       => 'success',
+                'subject_type' => Invoice::class,
+                'subject_id'   => $invoice->id,
+            ]);
+
+            // A reservation approved through Billing must follow the same
+            // payment policy (3-hour reminder / cancel at check-in) as one
+            // approved from the Reservations page.
+            if ($reservation && $reservation->fresh()?->status === 'Approved') {
+                try {
+                    app(\App\Services\BalanceReminderService::class)->handleApproval($reservation);
+                } catch (\Throwable $e) {
+                    report($e);
+                }
+            }
+
             $this->notifyTenant($invoice, 'verified');
 
             if ($status === 'Paid' || $status === 'Partial') {
@@ -216,7 +239,8 @@ class BillingController extends Controller
             return response()->json(['message' => 'Invoice is not pending verification.'], 422);
         }
 
-        $tenantEmail = $this->getTenantEmail($invoice) ?? $invoice->tenant_name;
+        $tenantEmail     = $this->getTenantEmail($invoice) ?? $invoice->tenant_name;
+        $submittedAmount = (float) $invoice->amount_paid; // before the rejection reverts it
 
         DB::beginTransaction();
         try {
@@ -257,7 +281,10 @@ class BillingController extends Controller
             AuditLogger::log([
                 'action'       => 'REJECT',
                 'module' => 'BILLING',
-                'description'  => 'Payment rejected for ' . $tenantEmail . ' — ' . $invoice->transaction_no . ' — ' . $validated['admin_notes'],
+                'description'  => 'Rejected payment of ₱' . number_format($submittedAmount, 2)
+                    . ' from ' . ($invoice->tenant_name ?: $tenantEmail) . ' — ' . $invoice->transaction_no
+                    . ($invoice->description ? ' · ' . $invoice->description : '')
+                    . ' — Reason: ' . $validated['admin_notes'],
                 'status'       => 'warning',
                 'subject_type' => Invoice::class,
                 'subject_id' => $invoice->id,

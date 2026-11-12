@@ -41,7 +41,7 @@ class TenantReservationController extends Controller
         $reservationCards = $this->buildReservationCards($pendingReservations);
 
         // PASS CURRENT ROOM ID TO PREVENT RESERVING IT AGAIN
-        $rooms = $this->buildRoomCards($allMyReservations, $tenant?->room_id);
+        $rooms = $this->buildRoomCards($allMyReservations, $this->currentRoomId($tenant));
 
         $myReservationsForReact = $allMyReservations->mapWithKeys(function ($r) {
             return [
@@ -80,7 +80,7 @@ class TenantReservationController extends Controller
         $reservationCards = $this->buildReservationCards($pendingReservations);
 
         // PASS CURRENT ROOM ID
-        $rooms = $this->buildRoomCards($allMyReservations, $tenant?->room_id);
+        $rooms = $this->buildRoomCards($allMyReservations, $this->currentRoomId($tenant));
 
         $myReservationsForReact = $allMyReservations->mapWithKeys(function ($r) {
             return [
@@ -133,6 +133,25 @@ class TenantReservationController extends Controller
         })->values();
     }
 
+    /**
+     * The tenant's room only counts as "Current Room" while they're active
+     * on an Approved stay that hasn't passed check-out yet. An expired /
+     * cancelled stay must not keep blocking (or labelling) the room.
+     */
+    private function currentRoomId(?Tenant $tenant): ?int
+    {
+        if (! $tenant || $tenant->status !== 'active' || ! $tenant->room_id) {
+            return null;
+        }
+
+        $stay = $tenant->approvedReservation;
+        if ($stay && ($stay->status !== 'Approved' || $stay->isStayOver())) {
+            return null;
+        }
+
+        return $tenant->room_id;
+    }
+
     private function buildRoomCards($myReservations, ?int $currentRoomId = null)
     {
         return Room::with([
@@ -160,12 +179,19 @@ class TenantReservationController extends Controller
 
                 // Check if user has an ACTIVE reservation for this room
                 $existingReservation = $myReservations->first(function ($res) use ($room) {
-                    return $res->room_id === $room->id && in_array($res->status, ['Pending', 'Approved']);
+                    return $res->room_id === $room->id
+                        && ($res->status === 'Pending'
+                            || ($res->status === 'Approved' && ! $res->isStayOver()));
                 });
 
                 $hasReserved = (bool) $existingReservation;
                 $isCurrentRoom = ($currentRoomId === $room->id);
-                $isBookable = ($emptyBeds > 0 && $room->status === 'Available') && !$hasReserved && !$isCurrentRoom;
+                // "Reserved" = free now but booked for later dates — other dates
+                // can still be booked (overlap is validated per date on submit).
+                $isBookable = ($emptyBeds > 0 && in_array($room->status, ['Available', 'Reserved'], true))
+                    && !$hasReserved && !$isCurrentRoom;
+
+                $availability = $room->availabilityInfo();
 
                 // FOR THE MODAL: Build the tenants list
                 $tenantsList = $room->tenants->map(function ($tenant) {
@@ -201,8 +227,10 @@ class TenantReservationController extends Controller
                     'bath'        => '1 bath',
                     'floor'       => $room->floor,
                     'desc'        => $room->description ?? 'Cozy room with modern finishes.',
-                    'estDate'     => null,
-                    'estApprox'   => null,
+                    // Occupied → nearest check-out among current occupants
+                    'estDate'     => $availability['est_date'],
+                    'estApprox'   => $availability['est_approx'],
+                    'nextBooking' => $availability['next_booking'],
                     'tourId'      => $room->virtualTour?->id,
                     'bed_slots'   => $bedSlots,
                     'is_female_only' => str_contains($room->room_type, 'All Girls'),
@@ -439,8 +467,26 @@ class TenantReservationController extends Controller
                 }
                 // ── BARKADA VALIDATION ──
                 else if ($isBarkadaType) {
-                    // No bed slot required. Optionally validate occupant count.
+                    // No bed slot required — the group books the whole room,
+                    // so no other booking may overlap these dates.
                     $validated['room_bed_id'] = null;
+
+                    $overlap = Reservation::where('room_id', $room->id)
+                        ->whereIn('status', ['Pending', 'Approved'])
+                        ->where(function ($q) use ($in, $out) {
+                            $q->whereDate('check_in', '<', $out->toDateString())
+                                ->where(function ($q2) use ($in) {
+                                    $q2->whereDate('check_out', '>', $in->toDateString())
+                                        ->orWhereNull('check_out');
+                                });
+                        })
+                        ->exists();
+
+                    if ($overlap) {
+                        throw new \RuntimeException(
+                            'This room is already reserved for the selected dates. Please pick another room or dates.'
+                        );
+                    }
                 }
                 // ── STANDARD ROOM VALIDATION ──
                 else {
@@ -471,7 +517,11 @@ class TenantReservationController extends Controller
                     $fixedBeds = min($occupants, $room->total_beds);
                     $extraBeds = max(0, $occupants - $room->total_beds);
 
-                    $nightlyRate = ($fixedBeds * $roomRate) + ($extraBeds * 150);
+                    // Barkada: the daily rent is a flat rate for the whole room
+                    // (good for total_beds people); each person beyond that
+                    // adds ₱150 per night.
+                    //   e.g. ₱1,000 × 5 nights + (1 extra × ₱150 × 5) = ₱5,750
+                    $nightlyRate = $roomRate + ($extraBeds * 150);
                     $totalCharges = $nightlyRate * $days;
                 } else {
                     $companionFee = ($validated['has_companion'] ?? false) ? 150 : 0;
@@ -483,7 +533,11 @@ class TenantReservationController extends Controller
                     : $totalCharges;
                 $remaining = $totalCharges - $payNow;
 
-                $dueDate = $this->computeDueDate($in, $out);
+                // A remaining balance (down payment) is due at check-in — the
+                // payment-policy deadline. Full payments keep the usual rule.
+                $dueDate = $remaining > 0.005
+                    ? $in->copy()
+                    : $this->computeDueDate($in, $out);
 
                 $avatar = Reservation::makeAvatar($user->name);
 

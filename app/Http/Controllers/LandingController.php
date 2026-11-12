@@ -48,8 +48,14 @@ class LandingController extends Controller
             ->map(function ($room) {
                 // Since we filtered, we know virtualTour is guaranteed to be Published here
                 $publishedTour = $room->virtualTour;
+                $availability  = $room->availabilityInfo();
 
                 return [
+                    // Occupied → nearest check-out of current occupants;
+                    // Reserved → dates of the upcoming booking
+                    'est_available' => $availability['est_date'],
+                    'est_approx'    => $availability['est_approx'],
+                    'next_booking'  => $availability['next_booking'],
                     'id'          => $room->id,
                     'room_number' => $room->room_number,
                     'floor'       => $room->floor,

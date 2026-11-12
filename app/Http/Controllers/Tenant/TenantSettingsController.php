@@ -26,6 +26,38 @@ class TenantSettingsController extends Controller
         return view('tenants.settings', compact('user', 'personalInfo'));
     }
 
+    /**
+     * Preferences → Email Notifications / SMS Alerts.
+     */
+    public function updatePreferences(Request $request)
+    {
+        $validated = $request->validate([
+            'email_notifications' => ['required', 'boolean'],
+            'sms_notifications'   => ['required', 'boolean'],
+        ]);
+
+        /** @var \App\Models\User $user */
+        $user = $request->user();
+        $user->update($validated);
+
+        AuditLogger::log([
+            'action'       => 'UPDATE',
+            'module'       => 'TENANTS',
+            'description'  => 'Updated notification preferences (email: '
+                . ($user->email_notifications ? 'on' : 'off') . ', SMS: '
+                . ($user->sms_notifications ? 'on' : 'off') . ').',
+            'subject_type' => \App\Models\User::class,
+            'subject_id'   => $user->id,
+        ]);
+
+        return response()->json([
+            'success'             => true,
+            'message'             => 'Preferences saved.',
+            'email_notifications' => $user->email_notifications,
+            'sms_notifications'   => $user->sms_notifications,
+        ]);
+    }
+
     public function updateProfile(Request $request)
     {
         /** @var \App\Models\User $user */

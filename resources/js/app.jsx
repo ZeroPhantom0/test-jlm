@@ -56,6 +56,8 @@ import SettingsModals from "./pages/Settings/SettingsModals";
 // Client-side table pagination
 import initTablePagers from "./utils/tablePager";
 import initLivePages from "./utils/livePage";
+import initSettingsForms from "./utils/settingsForms";
+import initSessionTimeout from "./utils/sessionTimeout";
 
 import AdminSidebar from "./components/AdminSidebar";
 import Sidebar from "./components/Sidebar";
@@ -292,6 +294,12 @@ function mountReact() {
 
     // Real-time (Pusher) refresh for every [data-live-page]
     initLivePages();
+
+    // Settings → Security Options / Preferences save buttons
+    initSettingsForms();
+
+    // Admin idle-session timeout (no-op unless the admin layout enables it)
+    initSessionTimeout();
 }
 
 if (document.readyState === "loading") {

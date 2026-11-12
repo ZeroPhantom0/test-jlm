@@ -957,6 +957,26 @@ body:has(.landing-page) {
     font-size: 12.5px;
 }
 
+/* Estimated availability (Occupied) / upcoming booking (Reserved) */
+.availability-estimate {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px dashed currentColor;
+    border-top-color: rgba(0, 0, 0, 0.12);
+}
+.availability-estimate span {
+    display: block;
+    font-size: 12.5px;
+    font-weight: 700;
+}
+.availability-estimate em {
+    display: block;
+    margin-top: 1px;
+    font-size: 11px;
+    font-style: normal;
+    opacity: 0.8;
+}
+
 .occupied-box {
     border: 1px solid #ffb6c7;
     background: #fff1f4;

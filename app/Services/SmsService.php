@@ -34,8 +34,42 @@ class SmsService
         return '63' . $digits;
     }
 
+    /**
+     * False only when the number belongs to a user who switched SMS Alerts
+     * off. Numbers are compared by their last 10 digits so 0917…, 63917…
+     * and +63 917… all match the same account.
+     */
+    public static function recipientAllowsSms(?string $phone): bool
+    {
+        $digits = preg_replace('/[^0-9]/', '', (string) $phone);
+        if (strlen($digits) < 10) {
+            return true;
+        }
+        $last10 = substr($digits, -10);
+
+        try {
+            $optedOut = \App\Models\User::query()
+                ->where('sms_notifications', false)
+                ->whereNotNull('phone')
+                ->get(['phone'])
+                ->contains(fn ($u) => substr(preg_replace('/[^0-9]/', '', (string) $u->phone), -10) === $last10);
+        } catch (\Throwable $e) {
+            return true; // never block on a lookup failure
+        }
+
+        return ! $optedOut;
+    }
+
     public static function send(string $phoneNumber, string $message): bool
     {
+        // Respect the recipient's "SMS Alerts" preference. Every SMS this app
+        // sends is a notification (verification codes go by email), so the
+        // gate lives here and covers all callers.
+        if (! self::recipientAllowsSms($phoneNumber)) {
+            Log::info('SMS skipped — recipient turned off SMS Alerts: ' . $phoneNumber);
+            return false;
+        }
+
         $apiToken = config('services.iprog_sms.token'); // We'll add this to config/services.php
 
         if (empty($apiToken)) {

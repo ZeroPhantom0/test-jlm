@@ -203,6 +203,22 @@
                                     {{ $room['beds'] }}</span>
                             </div>
 
+                            @if ($displayStatus === 'Occupied')
+                                <div class="bg-rose-50 border border-rose-100 rounded-lg px-3 py-2 text-[11px] text-rose-700">
+                                    <i class="fa-regular fa-clock mr-1"></i> Estimated availability:
+                                    <strong>{{ $room['estDate'] ?? 'To be announced' }}</strong>
+                                    @if ($room['estApprox'])
+                                        <span class="text-rose-500">· {{ $room['estApprox'] }}</span>
+                                    @endif
+                                </div>
+                            @elseif ($displayStatus === 'Reserved' && $room['nextBooking'])
+                                <div class="bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 text-[11px] text-amber-700">
+                                    <i class="fa-regular fa-calendar mr-1"></i> Booked:
+                                    <strong>{{ $room['nextBooking'] }}</strong>
+                                    <span class="text-amber-600">· other dates available</span>
+                                </div>
+                            @endif
+
                             <div class="grid grid-cols-2 gap-2.5 mt-1.5">
                                 <button type="button"
                                     class="open-room-details-btn bg-white border border-slate-200 rounded-lg py-2 text-xs font-semibold inline-flex items-center justify-center gap-1.5 hover:bg-slate-50 transition"
@@ -465,6 +481,17 @@
                             <span class="flex items-center gap-1"><i class="fa-solid fa-users"></i> ${room.pax}</span>
                             <span class="flex items-center gap-1"><i class="fa-solid fa-bed"></i> ${room.beds}</span>
                         </div>
+                        ${room.status === 'Occupied' ? `
+                        <div class="bg-rose-50 border border-rose-100 rounded-lg px-3 py-2 text-[11px] text-rose-700">
+                            <i class="fa-regular fa-clock mr-1"></i> Estimated availability:
+                            <strong>${room.estDate || 'To be announced'}</strong>
+                            ${room.estApprox ? `<span class="text-rose-500">· ${room.estApprox}</span>` : ''}
+                        </div>` : (room.status === 'Reserved' && room.nextBooking ? `
+                        <div class="bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 text-[11px] text-amber-700">
+                            <i class="fa-regular fa-calendar mr-1"></i> Booked:
+                            <strong>${room.nextBooking}</strong>
+                            <span class="text-amber-600">· other dates available</span>
+                        </div>` : '')}
                         <div class="grid grid-cols-2 gap-2.5 mt-1.5">
                             <button type="button" class="open-room-details-btn bg-white border border-slate-200 rounded-lg py-2 text-xs font-semibold inline-flex items-center justify-center gap-1.5 hover:bg-slate-50 transition" data-room='${JSON.stringify(roomData)}'>
                                 <i class="fa-regular fa-eye"></i> Details

@@ -1,7 +1,9 @@
 // resources/js/pages/Auth/Modals/PrivacyModal.jsx
 import React, { useState } from 'react';
 
-export default function PrivacyModal({ isOpen, onClose }) {
+// `onConfirm` is optional: when given, the footer shows Cancel + "I Agree"
+// (used as the last step of Sign Up); otherwise just a Close button.
+export default function PrivacyModal({ isOpen, onClose, onConfirm, confirmLabel = 'I Agree', processing = false }) {
     const [expanded, setExpanded] = useState(null);
 
     if (!isOpen) return null;
@@ -21,7 +23,11 @@ export default function PrivacyModal({ isOpen, onClose }) {
                     </button>
                 </div>
                 <div className="modal-body">
-                    <p className="text-sm text-slate-500 mb-4">Learn how your personal information is collected, used, and protected.</p>
+                    <p className="text-sm text-slate-500 mb-4">
+                        {onConfirm
+                            ? 'Please review how your personal information is collected, used, and protected. Click "I Agree" to create your account.'
+                            : 'Learn how your personal information is collected, used, and protected.'}
+                    </p>
                     
                     <div className="flex flex-col gap-3">
                         {/* 1. Personal Information Collected */}
@@ -206,9 +212,26 @@ export default function PrivacyModal({ isOpen, onClose }) {
                         </div>
                     </div>
                 </div>
-                <div className="modal-footer">
-                    <button className="btn-secondary" onClick={onClose}>Close</button>
-                </div>
+                {onConfirm ? (
+                    <div className="modal-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <button type="button" className="btn-secondary" onClick={onClose} disabled={processing}>
+                            Cancel
+                        </button>
+                        <button
+                            type="button"
+                            className="btn-primary bg-emerald-500 hover:bg-emerald-600 text-white"
+                            onClick={onConfirm}
+                            disabled={processing}
+                            style={{ opacity: processing ? 0.7 : 1 }}
+                        >
+                            {processing ? 'Creating account…' : confirmLabel}
+                        </button>
+                    </div>
+                ) : (
+                    <div className="modal-footer">
+                        <button className="btn-secondary" onClick={onClose}>Close</button>
+                    </div>
+                )}
             </div>
         </div>
     );

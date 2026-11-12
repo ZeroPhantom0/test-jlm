@@ -193,7 +193,7 @@ export default function GoogleTerms({ name, email }) {
                                     cursor: processing || !canAccept ? 'not-allowed' : 'pointer',
                                 }}
                             >
-                                {processing ? 'Saving…' : 'I Agree & Sign Up'}
+                                {processing ? 'Saving…' : 'I Agree'}
                             </button>
                         </div>
                     </div>

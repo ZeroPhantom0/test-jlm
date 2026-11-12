@@ -85,10 +85,116 @@ class Room extends Model
     // OCCUPANCY & BED SLOTS
     // ============================================================
 
+    // ------------------------------------------------------------
+    // "Who is in the room right now" — a booking only occupies the
+    // room once its check-in moment has arrived. An approved booking
+    // for a future date (e.g. Dec 25 while today is Nov 13) does NOT
+    // make the room Occupied; it makes it Reserved (see syncStatus).
+    // ------------------------------------------------------------
+
+    /** Approved reservations of this room that haven't ended yet. */
+    private function liveApprovedReservations()
+    {
+        return Reservation::where('room_id', $this->id)
+            ->where('status', 'Approved')
+            ->where(function ($q) {
+                $q->whereNull('check_out')
+                    ->orWhereDate('check_out', '>=', now()->toDateString());
+            })
+            ->get()
+            ->reject(fn (Reservation $r) => $r->isStayOver())
+            ->values();
+    }
+
+    /** Approved stays in progress right now (checked in, not checked out). */
+    public function currentStays()
+    {
+        return $this->liveApprovedReservations()
+            ->filter(fn (Reservation $r) => $r->hasStarted())
+            ->values();
+    }
+
+    /** Approved bookings whose check-in is still ahead. */
+    public function upcomingStays()
+    {
+        return $this->liveApprovedReservations()
+            ->reject(fn (Reservation $r) => $r->hasStarted())
+            ->sortBy(fn (Reservation $r) => $r->checkInAt())
+            ->values();
+    }
+
+    /**
+     * Active tenants physically in the room now: their approved stay has
+     * started (tenants with no linked reservation — manual assignments —
+     * count as present).
+     */
+    private function currentTenants()
+    {
+        return Tenant::where('room_id', $this->id)
+            ->where('status', 'active')
+            ->with('user', 'approvedReservation')
+            ->get()
+            ->filter(function (Tenant $t) {
+                $stay = $t->approvedReservation;
+                return ! $stay || ($stay->hasStarted() && ! $stay->isStayOver());
+            })
+            ->values();
+    }
+
+    /**
+     * When the room (Solo / Barkada) or the first bed (Bedspace) is
+     * expected to free up: the earliest check-out among the stays in
+     * progress. Null when nobody is in the room or check-out is open-ended.
+     */
+    public function nextAvailableAt(): ?\Carbon\Carbon
+    {
+        return $this->currentStays()
+            ->map(fn (Reservation $r) => $r->checkOutAt())
+            ->filter()
+            ->sort()
+            ->first();
+    }
+
+    /**
+     * What to tell visitors about availability:
+     *  - Occupied → estimated availability = nearest check-out of the
+     *               people in the room now (first to leave).
+     *  - Reserved → when the upcoming booking starts.
+     *
+     * @return array{est_date: ?string, est_approx: ?string, next_booking: ?string}
+     */
+    public function availabilityInfo(): array
+    {
+        $info = ['est_date' => null, 'est_approx' => null, 'next_booking' => null];
+
+        if ($this->status === 'Occupied') {
+            $at = $this->nextAvailableAt();
+            if ($at) {
+                $info['est_date']   = $at->format('M j, Y · g:i A');
+                $info['est_approx'] = $at->isToday()
+                    ? 'Later today'
+                    : 'In approx. ' . max(1, (int) ceil(now()->diffInHours($at) / 24)) . ' day'
+                        . ((int) ceil(now()->diffInHours($at) / 24) > 1 ? 's' : '');
+            } else {
+                $info['est_approx'] = 'Open-ended stay';
+            }
+        }
+
+        $next = $this->upcomingStays()->first();
+        if ($next) {
+            $in  = $next->checkInAt();
+            $out = $next->checkOutAt();
+            $info['next_booking'] = $in?->format('M j, Y')
+                . ($out ? ' – ' . $out->format('M j, Y') : '');
+        }
+
+        return $info;
+    }
+
     public function getBedSlotsAttribute(): array
     {
         if ($this->room_type === 'Solo Room') {
-            $isOccupied = $this->tenants()->where('status', 'active')->exists();
+            $isOccupied = $this->currentTenants()->isNotEmpty() || $this->currentStays()->isNotEmpty();
             return [[
                 'id' => 'SOLO',
                 'label' => 'Whole Room',
@@ -99,26 +205,15 @@ class Room extends Model
         $totalBeds = (int) $this->total_beds;
         if ($totalBeds <= 0) return [];
 
-        $activeTenants = Tenant::where('room_id', $this->id)
-            ->where('status', 'active')
-            ->with('approvedReservation')
-            ->get();
-
         $heldByTenants = [];
-        foreach ($activeTenants as $tenant) {
+        foreach ($this->currentTenants() as $tenant) {
             $bedId = $tenant->approvedReservation?->room_bed_id;
             if ($this->isValidBedId($bedId)) {
                 $heldByTenants[$bedId] = true;
             }
         }
 
-        $heldByReservations = \App\Models\Reservation::where('room_id', $this->id)
-            ->where('status', 'Approved')
-            ->whereNotNull('room_bed_id')
-            ->where(function ($q) {
-                $q->whereNull('check_out')
-                    ->orWhereDate('check_out', '>=', now()->toDateString());
-            })
+        $heldByReservations = $this->currentStays()
             ->pluck('room_bed_id')
             ->filter(fn($id) => $this->isValidBedId($id))
             ->all();
@@ -147,21 +242,16 @@ class Room extends Model
 
     public function getOccupiedCountAttribute(): int
     {
+        // Only stays that have actually started fill the room. Pending
+        // requests and future bookings don't.
         if ($this->room_type === 'Solo Room') {
-            return $this->tenants()->where('status', 'active')->exists() ? 1 : 0;
+            return ($this->currentTenants()->isNotEmpty() || $this->currentStays()->isNotEmpty()) ? 1 : 0;
         }
 
         if ($this->room_type === 'Barkada Room') {
-            $hasActiveTenant = $this->tenants()->where('status', 'active')->exists();
-            $hasApprovedReservation = \App\Models\Reservation::where('room_id', $this->id)
-                ->whereIn('status', ['Approved', 'Pending'])
-                ->where(function ($q) {
-                    $q->whereNull('check_out')
-                        ->orWhereDate('check_out', '>=', now()->toDateString());
-                })
-                ->exists();
+            $inUse = $this->currentTenants()->isNotEmpty() || $this->currentStays()->isNotEmpty();
 
-            return ($hasActiveTenant || $hasApprovedReservation) ? $this->total_beds : 0;
+            return $inUse ? (int) $this->total_beds : 0;
         }
 
         // Bedspace — count via the occupant list to avoid duplicate counting
@@ -208,23 +298,15 @@ class Room extends Model
 
         $isFull = ($total > 0 && $occupied >= $total);
 
-        // 1. Determine Base Status
+        // 1. Occupied only when the stays in progress RIGHT NOW fill it.
         $newStatus = $isFull ? 'Occupied' : 'Available';
 
-        // 2. Partial Payment Rule (Solo / Barkada only)
-        if ($this->isReservedEligibleType()) {
-            $hasUnpaidBalance = Reservation::where('room_id', $this->id)
-                ->where('status', 'Approved')
-                ->where('remaining', '>', 0.005)
-                ->where(function ($q) {
-                    $q->whereNull('check_out')
-                        ->orWhereDate('check_out', '>=', now()->toDateString());
-                })
-                ->exists();
-
-            if ($hasUnpaidBalance) {
-                $newStatus = 'Reserved'; // Overrides 'Occupied' if they still owe money
-            }
+        // 2. Reserved (Solo / Barkada): not occupied yet, but an approved
+        //    booking is coming up — e.g. booked for Dec 25 while today is
+        //    Nov 13. Other dates can still be booked (overlap is checked
+        //    per date at booking time).
+        if (! $isFull && $this->isReservedEligibleType() && $this->upcomingStays()->isNotEmpty()) {
+            $newStatus = 'Reserved';
         }
 
         // 3. Update Tenant Name
@@ -250,24 +332,14 @@ class Room extends Model
             return collect();
         }
 
-        $tenantOccupants = $this->tenants()
-            ->where('status', 'active')
-            ->with('user', 'approvedReservation')
-            ->get()
+        $tenantOccupants = $this->currentTenants()
             ->filter(fn($t) => $this->isValidBedId($t->approvedReservation?->room_bed_id))
             ->map(fn($t) => [
                 'name'   => $t->user->name ?? 'Unknown',
                 'bed_id' => $t->approvedReservation->room_bed_id,
             ]);
 
-        $reservationOccupants = \App\Models\Reservation::where('room_id', $this->id)
-            ->where('status', 'Approved')
-            ->whereNotNull('room_bed_id')
-            ->where(function ($q) {
-                $q->whereNull('check_out')
-                    ->orWhereDate('check_out', '>=', now()->toDateString());
-            })
-            ->get()
+        $reservationOccupants = $this->currentStays()
             ->filter(fn($r) => $this->isValidBedId($r->room_bed_id))
             ->map(fn($r) => [
                 'name'   => $r->tenant_name,

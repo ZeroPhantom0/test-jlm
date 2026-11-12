@@ -384,12 +384,14 @@ class TenantDashboardController extends Controller
             ->latest()
             ->get()
             ->map(function (Reservation $r) {
-                $isPast = $r->status === 'Approved' && $r->check_out && $r->check_out->isPast();
+                // Same rule as the expiry job: check-out date + time
+                $isPast = $r->status === 'Approved' && $r->isStayOver();
 
                 $status = match (true) {
                     $r->status === 'Approved' && $isPast => 'expired',
                     $r->status === 'Approved'            => 'approved',
                     $r->status === 'Rejected'            => 'rejected',
+                    $r->status === 'Cancelled'           => 'cancelled',
                     $r->status === 'Expired'             => 'expired',
                     default                              => 'pending',
                 };

@@ -81,7 +81,7 @@ export default function Signup() {
 
         // Terms — required
         if (!data.terms) {
-            e.terms = 'Please accept the Privacy Policy to continue.';
+            e.terms = 'Please agree to the Terms and Conditions to continue.';
         }
 
         return e;
@@ -130,12 +130,23 @@ export default function Signup() {
             return;
         }
 
-        setShowTermsModal(true);
+        // Terms already accepted (checkbox) → last step: review the
+        // Privacy Policy, whose "I Agree" creates the account.
+        setShowPrivacyModal(true);
     };
 
-    const confirmTermsAndSubmit = () => {
+    // Terms & Conditions → "I Agree" ticks the checkbox for them
+    const agreeToTerms = () => {
+        setData('terms', true);
+        setTouched((t) => ({ ...t, terms: true }));
         setShowTermsModal(false);
+    };
+
+    // Privacy Policy → "I Agree" submits the sign-up
+    const confirmPrivacyAndSubmit = () => {
         post('/signup', {
+            onSuccess: () => setShowPrivacyModal(false),
+            onError: () => setShowPrivacyModal(false), // show field errors on the form
             onFinish: () => reset('password', 'password_confirmation'),
         });
     };
@@ -325,10 +336,14 @@ export default function Signup() {
                                 I agree to the{' '}
                                 <button
                                     type="button"
-                                    onClick={() => setShowPrivacyModal(true)}
+                                    onClick={(e) => {
+                                        // Open the Terms without toggling the checkbox
+                                        e.preventDefault();
+                                        setShowTermsModal(true);
+                                    }}
                                     className="text-link"
                                 >
-                                    Privacy Policy
+                                    Terms and Conditions
                                 </button>
                             </span>
                         </label>
@@ -362,11 +377,20 @@ export default function Signup() {
             </div>
 
             {/* Modals */}
-            <PrivacyModal isOpen={showPrivacyModal} onClose={() => setShowPrivacyModal(false)} />
+            {/* Terms: opened from the checkbox link — "I Agree" ticks the box */}
             <TermsModal
                 isOpen={showTermsModal}
                 onClose={() => setShowTermsModal(false)}
-                onConfirm={confirmTermsAndSubmit}
+                onConfirm={agreeToTerms}
+            />
+
+            {/* Privacy Policy: shown on Sign Up — "I Agree" creates the account */}
+            <PrivacyModal
+                isOpen={showPrivacyModal}
+                onClose={() => !processing && setShowPrivacyModal(false)}
+                onConfirm={confirmPrivacyAndSubmit}
+                confirmLabel="I Agree & Sign Up"
+                processing={processing}
             />
         </div>
     );

@@ -20,6 +20,8 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware) {
         $middleware->web(append: [
             \App\Http\Middleware\HandleInertiaRequests::class,
+            \App\Http\Middleware\ExpireStaleReservations::class,
+            \App\Http\Middleware\EnforceSessionTimeout::class,
         ]);
 
         // Register middleware aliases
@@ -32,7 +34,8 @@ return Application::configure(basePath: dirname(__DIR__))
     })
     ->withSchedule(function (Schedule $schedule) {
         // Removed billing:flag-overdue
-        $schedule->command('reservations:expire-past')->daily();
+        // Every 5 minutes so a stay ends at its actual check-out time
+        $schedule->command('reservations:expire-past')->everyFiveMinutes()->withoutOverlapping();
 
         // Remaining-balance SMS reminders / payment-policy cancellations
         $schedule->command('billing:balance-reminders')->everyMinute()->withoutOverlapping();

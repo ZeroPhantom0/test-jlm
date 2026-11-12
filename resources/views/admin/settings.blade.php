@@ -223,15 +223,28 @@
                         <h3 class="text-base font-bold text-slate-900 mb-1">Security Options</h3>
                         <p class="text-[12.5px] text-slate-500 mb-5">Manage advanced security features</p>
 
-                        <div class="mb-4 md:w-1/2">
-                            <label class="block text-[12.5px] font-medium text-slate-800 mb-1.5">Session Timeout</label>
-                            <select
-                                class="w-full border border-slate-200 rounded-lg px-3.5 py-2.5 text-[13px] outline-none focus:border-slate-400 bg-white">
-                                <option>30 minutes</option>
-                                <option>1 hour</option>
-                                <option>2 hours</option>
-                            </select>
-                        </div>
+                        <form id="security-options-form" data-settings-save data-url="{{ route('admin.settings.security') }}">
+                            <div class="mb-4 md:w-1/2">
+                                <label for="session-timeout" class="block text-[12.5px] font-medium text-slate-800 mb-1.5">Session Timeout</label>
+                                <select id="session-timeout" name="session_timeout"
+                                    class="w-full border border-slate-200 rounded-lg px-3.5 py-2.5 text-[13px] outline-none focus:border-slate-400 bg-white">
+                                    @foreach ([30 => '30 minutes', 60 => '1 hour', 120 => '2 hours'] as $mins => $label)
+                                        <option value="{{ $mins }}" @selected((int) ($user->session_timeout ?? 120) === $mins)>{{ $label }}</option>
+                                    @endforeach
+                                </select>
+                                <p class="text-[11.5px] text-slate-500 mt-1.5">
+                                    You'll be logged out automatically after this long without activity.
+                                </p>
+                            </div>
+
+                            <div class="flex items-center justify-end gap-3 pt-2">
+                                <span class="settings-save-status text-[12px]" aria-live="polite"></span>
+                                <button type="submit"
+                                    class="bg-[#02122b] hover:bg-[#092042] disabled:opacity-60 text-white px-5 py-2.5 rounded-lg text-[13px] font-semibold inline-flex items-center gap-2 transition">
+                                    <i class="fa-regular fa-floppy-disk"></i> Update
+                                </button>
+                            </div>
+                        </form>
                     </div>
                 </div>
 
@@ -241,7 +254,8 @@
                         <h3 class="text-base font-bold text-slate-900 mb-1">Preferences</h3>
                         <p class="text-[12.5px] text-slate-500 mb-5">Customize your boarding house experience</p>
 
-                        @foreach ([['id' => 'email-notif', 'label' => 'Email Notifications', 'desc' => 'Receive updates via email', 'icon' => 'fa-regular fa-envelope', 'default' => true], ['id' => 'sms-alerts', 'label' => 'SMS Alerts', 'desc' => 'Get text message updates', 'icon' => 'fa-regular fa-comment-dots', 'default' => false]] as $pref)
+                        <form id="preferences-form" data-settings-save data-url="{{ route('admin.settings.preferences') }}">
+                        @foreach ([['id' => 'email_notifications', 'label' => 'Email Notifications', 'desc' => 'Receive updates via email', 'icon' => 'fa-regular fa-envelope', 'default' => $user->email_notifications ?? true], ['id' => 'sms_notifications', 'label' => 'SMS Alerts', 'desc' => 'Get text message updates', 'icon' => 'fa-regular fa-comment-dots', 'default' => $user->sms_notifications ?? true]] as $pref)
                             <div
                                 class="flex items-center justify-between gap-3 py-3 border-b border-slate-100 last:border-b-0">
                                 <div class="flex items-start gap-3 min-w-0">
@@ -252,7 +266,7 @@
                                     </div>
                                 </div>
                                 <label class="relative inline-flex items-center w-11 h-6 cursor-pointer shrink-0">
-                                    <input type="checkbox" @if ($pref['default']) checked @endif
+                                    <input type="checkbox" name="{{ $pref['id'] }}" @if ($pref['default']) checked @endif
                                         class="peer sr-only">
                                     <span
                                         class="absolute inset-0 bg-slate-200 rounded-full transition peer-checked:bg-emerald-500"></span>
@@ -261,6 +275,15 @@
                                 </label>
                             </div>
                         @endforeach
+
+                            <div class="flex items-center justify-end gap-3 pt-5">
+                                <span class="settings-save-status text-[12px]" aria-live="polite"></span>
+                                <button type="submit"
+                                    class="bg-[#02122b] hover:bg-[#092042] disabled:opacity-60 text-white px-5 py-2.5 rounded-lg text-[13px] font-semibold inline-flex items-center gap-2 transition">
+                                    <i class="fa-regular fa-floppy-disk"></i> Save Preferences
+                                </button>
+                            </div>
+                        </form>
                     </div>
                 </div>
 

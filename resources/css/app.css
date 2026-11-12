@@ -145,7 +145,7 @@ input::-webkit-strong-password-auto-fill-button {
 
     /* Global error banner */
     .login-global-error {
-        display: flex; align-items: center; gap: 6px;
+        display: flex; align-items: flex-start; gap: 8px; line-height: 1.4;
         background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c;
         padding: 10px 14px; border-radius: 10px;
         font-size: 13px; margin-bottom: 18px;
@@ -177,9 +177,29 @@ input::-webkit-strong-password-auto-fill-button {
     }
     .password-toggle:hover { color: #FF8904; }
 
+    /* Inline validation — invalid state lives on the input itself */
+    .login-input-wrapper.is-invalid input {
+        border-color: #e11d48; background: #fff7f8;
+    }
+    .login-input-wrapper.is-invalid input:focus {
+        border-color: #e11d48; box-shadow: 0 0 0 3px rgba(225, 29, 72, 0.14);
+    }
+    .login-input-wrapper.is-invalid .login-input-icon { color: #e11d48; }
+    .login-field-error {
+        display: flex; align-items: flex-start; gap: 6px;
+        margin: 7px 0 0; color: #be123c;
+        font-size: 12.5px; font-weight: 500; line-height: 1.35;
+        animation: login-error-in 0.16s ease-out;
+    }
+    .login-field-error i { font-size: 13px; margin-top: 1px; flex-shrink: 0; }
+    @keyframes login-error-in {
+        from { opacity: 0; transform: translateY(-3px); }
+        to   { opacity: 1; transform: translateY(0); }
+    }
+    .login-global-error i { flex-shrink: 0; }
+
     .login-options { display: flex; align-items: center; justify-content: space-between; margin-top: -2px; margin-bottom: 22px; }
-    .remember-me { display: flex; align-items: center; gap: 8px; color: #52637D; font-size: 13px; cursor: pointer; }
-    .remember-me input { width: 15px; height: 15px; accent-color: #001D4C; cursor: pointer; border-radius: 4px; }
+    .login-options-end { justify-content: flex-end; }
     .login-options > a { color: #FF8904; font-size: 13px; font-weight: 600; text-decoration: none; }
     .login-options > a:hover { text-decoration: underline; }
 

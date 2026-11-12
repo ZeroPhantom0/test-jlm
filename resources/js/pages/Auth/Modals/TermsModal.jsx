@@ -127,7 +127,7 @@ export default function TermsModal({ isOpen, onClose, onConfirm }) {
                 <div className="modal-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <button className="btn-secondary" onClick={onClose}>Cancel</button>
                     <button className="btn-primary bg-emerald-500 hover:bg-emerald-600 text-white" onClick={onConfirm}>
-                        I Agree & Sign Up
+                        I Agree
                     </button>
                 </div>
             </div>

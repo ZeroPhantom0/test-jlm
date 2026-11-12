@@ -183,22 +183,39 @@ export default function TopHeader({
         return () => document.removeEventListener("mousedown", handleClickOutside);
     }, []);
 
-    // This will mark it read locally and save to sessionStorage so it disappears
+    // Read state is stored on the server (per user), so it survives reloads
+    // and other devices. Update the list optimistically, then persist.
+    const postJson = (url, body = {}) =>
+        fetch(url, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                Accept: "application/json",
+                "X-Requested-With": "XMLHttpRequest",
+                "X-CSRF-TOKEN": csrfToken(),
+            },
+            credentials: "same-origin",
+            body: JSON.stringify(body),
+        }).catch(console.error);
+
+    const setLocallyRead = (ids) =>
+        setRawNotifications((list) =>
+            list.map((n) => (ids === "all" || ids.includes(n.id) ? { ...n, unread: false } : n)),
+        );
+
     const markAsRead = (id) => {
-        const next = new Set(dismissed);
-        next.add(id);
-        saveDismissed(next);
-        setDismissed(next);
+        setLocallyRead([id]);
+        if (String(id).startsWith("n-")) postJson("/tenants/notifications/read", { id });
     };
 
     const markAllAsRead = () => {
-        const next = new Set(dismissed);
-        processedNotifications.forEach((n) => next.add(n.id));
-        saveDismissed(next);
-        setDismissed(next);
+        setLocallyRead("all");
+        postJson("/tenants/notifications/read-all");
     };
 
+    // Clear = mark everything read and hide it from the dropdown
     const clearAll = () => {
+        markAllAsRead();
         const next = new Set(dismissed);
         processedNotifications.forEach((n) => next.add(n.id));
         saveDismissed(next);
@@ -206,7 +223,6 @@ export default function TopHeader({
     };
 
     const handleClickNotification = (n) => {
-        // This will remove it from the list immediately
         markAsRead(n.id);
         setNotifOpen(false);
 
