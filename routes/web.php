@@ -192,7 +192,7 @@ Route::middleware(['auth', 'onboarding.complete', 'prevent.back.cache'])
         Route::post('/settings/confirm-verification', [TenantSettingsController::class, 'confirmVerification'])->name('settings.confirm-verification');
 
         // ---------- Services ----------
-        Route::prefix('services')->name('services.')->group(function () {
+        Route::prefix('services')->name('services.')->middleware('balance.settled')->group(function () {
 
             // Maintenance
             Route::get('/maintenance/data',                         [TenantMaintenanceController::class, 'data'])->name('maintenance.data');

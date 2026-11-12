@@ -83,6 +83,49 @@ class Tenant extends Model
             ->exists();
     }
 
+    /**
+     * Does the user still owe money in Billing (an Unpaid / Partial /
+     * Pending / Overdue invoice with a balance left)?
+     *
+     * Invoices of cancelled / rejected reservations are ignored: those
+     * balances are forfeited and Billing no longer collects them.
+     * Used to lock the Services pages until the balance is settled.
+     */
+    public static function hasUnsettledBalance(?int $userId = null): bool
+    {
+        $userId ??= Auth::id();
+        if (! $userId) {
+            return false;
+        }
+
+        $tenantId = static::where('user_id', $userId)->value('id');
+        if (! $tenantId) {
+            return false;
+        }
+
+        $invoices = \App\Models\Invoice::where('tenant_id', $tenantId)
+            ->whereIn('status', ['Unpaid', 'Partial', 'Pending', 'Overdue'])
+            ->where('balance', '>', 0.005)
+            ->get(['id', 'description']);
+
+        if ($invoices->isEmpty()) {
+            return false;
+        }
+
+        $closedRefs = \App\Models\Reservation::where('user_id', $userId)
+            ->whereIn('status', ['Cancelled', 'Rejected'])
+            ->pluck('reference_no')->filter()->all();
+
+        return $invoices->contains(function ($inv) use ($closedRefs) {
+            foreach ($closedRefs as $ref) {
+                if (preg_match('/' . preg_quote($ref, '/') . '(?!\d)/', (string) $inv->description)) {
+                    return false; // forfeited balance of a closed reservation
+                }
+            }
+            return true;
+        });
+    }
+
     // ============================================================
     // NEW: Ensure a Tenant row exists for any tenant user
     // ============================================================

@@ -30,6 +30,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'onboarding.complete'=> EnsureOnboardingComplete::class,
             'onboarding.step'    => EnsureOnboardingStep::class,
             'prevent.back.cache' => PreventBackButtonCache::class,
+            'balance.settled'    => \App\Http\Middleware\EnsureBalanceSettled::class,
         ]);
     })
     ->withSchedule(function (Schedule $schedule) {

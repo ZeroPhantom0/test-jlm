@@ -93,6 +93,7 @@ export default function Sidebar({
     userRole = "Tenant",
     avatar = null, // Strictly null by default
     isTenant = false,
+    servicesLocked = false, // remaining balance in Billing → no Services
 }) {
     const [collapsed, setCollapsed] = useState(false);
     const [mobileOpen, setMobileOpen] = useState(false);
@@ -117,7 +118,9 @@ export default function Sidebar({
     const isServicesActive = active.startsWith("services");
 
     const visibleItems = NAV_ITEMS.filter(
-        (item) => !item.requiresTenant || isTenant,
+        (item) =>
+            (!item.requiresTenant || isTenant) &&
+            !(item.key === "services" && servicesLocked),
     );
 
     return (

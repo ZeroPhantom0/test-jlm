@@ -42,6 +42,8 @@
         'userRole'             => $isTenant ? 'Tenant' : 'New Tenant',
         'avatar'               => $avatarUrl,
         'isTenant'             => $isTenant,
+        // Services nav is hidden while there's a remaining balance in Billing
+        'servicesLocked'       => $isTenant && \App\Models\Tenant::hasUnsettledBalance($user?->id),
         'hasActiveReservation' => ($hasPendingReservation || $hasUnpaidInvoice),
         'hasPastReservations'  => $isTenant ? true : false,
     ]);
@@ -93,6 +95,12 @@
         <div data-react="top-header" data-props='{!! $headerProps !!}' class="sticky top-0 z-[100]"></div>
 
         <main class="flex-1">
+            @if (session('error'))
+                <div class="mx-4 md:mx-6 mt-4 flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-[13px] text-amber-800" role="alert">
+                    <i class="fa-solid fa-circle-exclamation mt-0.5"></i>
+                    <span>{{ session('error') }}</span>
+                </div>
+            @endif
             @yield('content')
         </main>
     </div>
