@@ -27,7 +27,7 @@
     <div class="bg-white border border-slate-200 rounded-2xl px-5 py-4 flex flex-col md:flex-row gap-3 items-stretch md:items-center">
         <div class="flex-1 bg-slate-50 border border-slate-200 rounded-[10px] px-4 py-1.5 flex items-center gap-2.5">
             <i class="fa-solid fa-magnifying-glass text-slate-400 text-sm"></i>
-            <input id="audit-search" type="text" value="{{ request('q') }}"
+            <input maxlength="{{ \App\Support\InputRules::SEARCH }}" id="audit-search" type="text" value="{{ request('q') }}"
                    placeholder="Search by user, action, or description..."
                    class="w-full text-[13px] outline-none bg-transparent">
         </div>

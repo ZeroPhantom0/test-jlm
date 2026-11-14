@@ -135,7 +135,7 @@
 
                             <div class="mb-4">
                                 <label class="block text-[12.5px] font-medium text-slate-800 mb-1.5">Full Name</label>
-                                <input type="text" name="name" value="{{ old('name', $user->name) }}"
+                                <input type="text" maxlength="{{ \App\Support\InputRules::NAME }}" name="name" value="{{ old('name', $user->name) }}"
                                     class="w-full border border-slate-200 rounded-lg px-3.5 py-2.5 text-[13px] outline-none focus:border-slate-400">
                             </div>
 

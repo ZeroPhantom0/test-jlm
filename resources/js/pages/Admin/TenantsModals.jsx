@@ -1,6 +1,7 @@
 // resources/js/pages/Admin/TenantsModals.jsx
 import React, { useState, useEffect } from 'react';
 import Modal from '../../components/Modal';
+import { LIMITS } from "../../utils/inputLimits";
 
 // ---------- helpers ----------
 
@@ -373,7 +374,7 @@ export default function TenantsModals() {
                             <label className="block text-xs font-semibold text-slate-700 mb-1.5">Tenant Full Name</label>
                             <input
                                 type="text"
-                                value={form.name}
+                                maxLength={LIMITS.NAME} value={form.name}
                                 onChange={set('name')}
                                 className="w-full border border-slate-300 rounded-lg px-3.5 py-2.5 text-[13px] outline-none"
                             />
@@ -384,7 +385,7 @@ export default function TenantsModals() {
                                 <label className="block text-xs font-semibold text-slate-700 mb-1.5">Email Address</label>
                                 <input
                                     type="email"
-                                    value={form.email}
+                                    maxLength={LIMITS.EMAIL} value={form.email}
                                     onChange={set('email')}
                                     className="w-full border border-slate-300 rounded-lg px-3.5 py-2.5 text-[13px] outline-none"
                                 />
@@ -393,7 +394,7 @@ export default function TenantsModals() {
                                 <label className="block text-xs font-semibold text-slate-700 mb-1.5">Mobile Number</label>
                                 <input
                                     type="text"
-                                    value={form.phone}
+                                    maxLength={LIMITS.PHONE} value={form.phone}
                                     onChange={set('phone')}
                                     className="w-full border border-slate-300 rounded-lg px-3.5 py-2.5 text-[13px] outline-none"
                                 />
@@ -450,7 +451,7 @@ export default function TenantsModals() {
                                     type="number"
                                     min="0"
                                     step="0.01"
-                                    value={form.rent_rate}
+                                    max={LIMITS.RENT_MAX} value={form.rent_rate}
                                     onChange={set('rent_rate')}
                                     className="w-full border border-slate-300 rounded-lg px-3.5 py-2.5 text-[13px] outline-none"
                                 />

@@ -92,7 +92,9 @@
     <div class="flex-1 flex flex-col min-w-0 h-full overflow-y-auto relative">
 
         {{-- TOP HEADER (React) --}}
-        <div data-react="top-header" data-props='{!! $headerProps !!}' class="sticky top-0 z-[100]"></div>
+        <div id="tenant-header-root" data-react="top-header" data-props='{!! $headerProps !!}' class="sticky top-0 z-[100]"></div>
+
+        @include('layouts.partials.shell-restore', ['ids' => ['tenant-sidebar-root', 'tenant-header-root']])
 
         <main class="flex-1">
             @if (session('error'))

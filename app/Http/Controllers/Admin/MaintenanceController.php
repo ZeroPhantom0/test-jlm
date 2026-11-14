@@ -3,6 +3,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Support\InputRules;
 use App\Events\MaintenanceUpdated;
 use App\Http\Controllers\Controller;
 use App\Models\MaintenanceRequest;
@@ -36,14 +37,14 @@ class MaintenanceController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'title'          => ['required', 'string', 'max:255'],
-            'description'    => ['required', 'string'],
-            'category'       => ['required', 'string', 'max:100'],
+            'title'          => InputRules::text(InputRules::TITLE),
+            'description'    => InputRules::text(InputRules::LONG_TEXT),
+            'category'       => InputRules::text(InputRules::CATEGORY),
             'priority'       => ['required', Rule::in(['Low', 'Medium', 'High', 'Critical'])],
-            'preferred_date' => ['nullable', 'date'],
-            'preferred_time' => ['nullable', 'string', 'max:50'],
-            'room_id'        => ['nullable', 'exists:rooms,id'],
-            'tenant_id'      => ['nullable', 'exists:tenants,id'],
+            'preferred_date' => ['nullable', 'date', 'before:+1 year'],
+            'preferred_time' => InputRules::text(InputRules::TIME_WINDOW, false),
+            'room_id'        => ['nullable', 'integer', 'exists:rooms,id'],
+            'tenant_id'      => ['nullable', 'integer', 'exists:tenants,id'],
         ]);
 
         $maintenanceRequest = MaintenanceRequest::create([
@@ -80,15 +81,15 @@ class MaintenanceController extends Controller
     public function update(Request $request, MaintenanceRequest $maintenanceRequest)
     {
         $validated = $request->validate([
-            'title'          => ['sometimes', 'string', 'max:255'],
-            'description'    => ['sometimes', 'string'],
-            'category'       => ['sometimes', 'string', 'max:100'],
+            'title'          => InputRules::optionalText(InputRules::TITLE),
+            'description'    => InputRules::optionalText(InputRules::LONG_TEXT),
+            'category'       => InputRules::optionalText(InputRules::CATEGORY),
             'priority'       => ['sometimes', Rule::in(['Low', 'Medium', 'High', 'Critical'])],
             'status'         => ['sometimes', Rule::in(['Pending', 'In Progress', 'Completed', 'Cancelled'])],
-            'assigned_staff' => ['nullable', 'string', 'max:255'],
-            'scheduled_date' => ['nullable', 'date'],
-            'preferred_date' => ['nullable', 'date'],
-            'preferred_time' => ['nullable', 'string', 'max:50'],
+            'assigned_staff' => InputRules::text(InputRules::NAME, false),
+            'scheduled_date' => ['nullable', 'date', 'before:+1 year'],
+            'preferred_date' => ['nullable', 'date', 'before:+1 year'],
+            'preferred_time' => InputRules::text(InputRules::TIME_WINDOW, false),
         ]);
 
         // Auto-set completed_at when status becomes Completed

@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { LIMITS } from "../../utils/inputLimits";
 import Modal from "../../components/Modal"; // Adjust path if your Modal component is elsewhere
 
 export default function SettingsModals() {
@@ -146,7 +147,7 @@ export default function SettingsModals() {
                             {actionType === 'email' && (
                                 <div>
                                     <label className="block text-[13px] font-semibold text-slate-700 mb-2">New Email Address</label>
-                                    <input type="email" required value={email} onChange={e => setEmail(e.target.value)}
+                                    <input type="email" required maxLength={LIMITS.EMAIL} value={email} onChange={e => setEmail(e.target.value)}
                                         className="w-full border border-slate-200 rounded-lg px-3.5 py-2.5 text-[13.5px] outline-none focus:border-slate-400" />
                                 </div>
                             )}
@@ -154,7 +155,7 @@ export default function SettingsModals() {
                             {actionType === 'phone' && (
                                 <div>
                                     <label className="block text-[13px] font-semibold text-slate-700 mb-2">New Phone Number</label>
-                                    <input type="text" required value={phone} onChange={e => setPhone(e.target.value)}
+                                    <input type="text" required maxLength={LIMITS.PHONE} inputMode="tel" value={phone} onChange={e => setPhone(e.target.value)}
                                         className="w-full border border-slate-200 rounded-lg px-3.5 py-2.5 text-[13.5px] outline-none focus:border-slate-400" />
                                 </div>
                             )}
@@ -163,17 +164,17 @@ export default function SettingsModals() {
                                 <>
                                     <div>
                                         <label className="block text-[13px] font-semibold text-slate-700 mb-2">Current Password</label>
-                                        <input type="password" required value={currentPassword} onChange={e => setCurrentPassword(e.target.value)}
+                                        <input type="password" required maxLength={LIMITS.SHORT_TEXT} value={currentPassword} onChange={e => setCurrentPassword(e.target.value)}
                                             className="w-full border border-slate-200 rounded-lg px-3.5 py-2.5 text-[13.5px] outline-none focus:border-slate-400" />
                                     </div>
                                     <div>
                                         <label className="block text-[13px] font-semibold text-slate-700 mb-2">New Password</label>
-                                        <input type="password" required value={newPassword} onChange={e => setNewPassword(e.target.value)}
+                                        <input type="password" required minLength={LIMITS.PASSWORD_MIN} maxLength={LIMITS.PASSWORD_MAX} value={newPassword} onChange={e => setNewPassword(e.target.value)}
                                             className="w-full border border-slate-200 rounded-lg px-3.5 py-2.5 text-[13.5px] outline-none focus:border-slate-400" />
                                     </div>
                                     <div>
                                         <label className="block text-[13px] font-semibold text-slate-700 mb-2">Confirm New Password</label>
-                                        <input type="password" required value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)}
+                                        <input type="password" required maxLength={LIMITS.PASSWORD_MAX} value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)}
                                             className="w-full border border-slate-200 rounded-lg px-3.5 py-2.5 text-[13.5px] outline-none focus:border-slate-400" />
                                     </div>
                                 </>
@@ -198,7 +199,7 @@ export default function SettingsModals() {
                             </div>
                             
                             <div>
-                                <input type="text" required maxLength="6" value={otp} onChange={e => setOtp(e.target.value)}
+                                <input type="text" required maxLength="6" inputMode="numeric" pattern="\d{6}" value={otp} onChange={e => setOtp(e.target.value)}
                                     className="w-full border border-slate-200 rounded-lg px-3.5 py-3 text-center text-2xl tracking-[0.5em] font-mono outline-none focus:border-slate-400" 
                                     placeholder="000000" />
                             </div>

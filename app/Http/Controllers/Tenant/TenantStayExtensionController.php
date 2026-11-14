@@ -3,6 +3,7 @@
 
 namespace App\Http\Controllers\Tenant;
 
+use App\Support\InputRules;
 use App\Events\ServiceRequestUpdated;
 use App\Http\Controllers\Controller;
 use App\Models\StayExtensionRequest;
@@ -140,10 +141,11 @@ class TenantStayExtensionController extends Controller
                 'required',
                 'date',
                 'after:' . $currentCheckOut->toDateString(),
+                'before:' . $currentCheckOut->copy()->addYears(2)->toDateString(),
             ],
-            'reason'              => ['required', 'string'],
-            'reference_no'        => ['required', 'string', 'max:100'],
-            'receipt'             => ['required', 'file', 'mimes:png,jpg,jpeg,webp', 'max:10240'],
+            'reason'              => InputRules::text(InputRules::LONG_TEXT),
+            'reference_no'        => InputRules::reference(),
+            'receipt'             => InputRules::image(true),
         ], [
             'requested_lease_end.after' =>
             'The requested lease end must be after your current check-out date ('

@@ -1,11 +1,12 @@
 // resources/js/utils/logout.js
+import { clearShellCache } from "./shellCache";
 
 /**
- * Which login page should we redirect to after logout?
+ * Where should we send the user after logout?
  * - Admin  → /admin/login
- * - Tenant → /login
+ * - Tenant → /  (landing page)
  */
-function getLoginRedirectUrl() {
+function getLogoutRedirectUrl() {
     const role = window.__appConfig?.role || 'tenant';
     const isAdmin =
         role === 'admin' ||
@@ -13,7 +14,7 @@ function getLoginRedirectUrl() {
         role === 'manager' ||
         window.location.pathname.startsWith('/admin');
 
-    return isAdmin ? '/admin/login' : '/login';
+    return isAdmin ? '/admin/login' : '/';
 }
 
 export function logout(e) {
@@ -26,7 +27,10 @@ export function confirmLogout() {
         document.querySelector('meta[name="csrf-token"]')?.content ||
         window.__appConfig?.csrf ||
         '';
-    const redirectTo = getLoginRedirectUrl();
+    const redirectTo = getLogoutRedirectUrl();
+
+    // Don't keep the signed-in sidebar/header snapshots around after logout
+    clearShellCache();
 
     fetch('/logout', {
         method: 'POST',
@@ -36,14 +40,14 @@ export function confirmLogout() {
             'Accept': 'application/json',
         },
     })
-        .then((res) => {
+        .then(() => {
             // Do NOT trust res.url — always go to the role-aware target.
-            // This way admin → /admin/login, tenant → /login.
+            // Admin → /admin/login, tenant → landing page.
             window.location.href = redirectTo;
         })
         .catch((err) => {
             console.error('Logout failed:', err);
-            // Even on failure, take the user to the correct login page
+            // Even on failure, take the user to the correct page
             window.location.href = redirectTo;
         });
 }

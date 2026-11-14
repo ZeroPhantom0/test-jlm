@@ -62,14 +62,14 @@
 
                     <div>
                         <label class="block text-[12.5px] font-semibold text-slate-700 mb-1.5">Scene Title *</label>
-                        <input type="text" name="title" required
+                        <input type="text" maxlength="{{ \App\Support\InputRules::TITLE }}" name="title" required
                                placeholder="e.g. Master Bedroom"
                                class="w-full border border-slate-200 rounded-lg px-3.5 py-2.5 text-[13px] outline-none focus:border-slate-400">
                     </div>
 
                     <div>
                         <label class="block text-[12.5px] font-semibold text-slate-700 mb-1.5">Description</label>
-                        <textarea name="description" rows="2"
+                        <textarea maxlength="{{ \App\Support\InputRules::LONG_TEXT }}" name="description" rows="2"
                                   placeholder="Short description of the scene..."
                                   class="w-full border border-slate-200 rounded-lg px-3.5 py-2.5 text-[13px] outline-none focus:border-slate-400 resize-none"></textarea>
                     </div>
@@ -77,19 +77,19 @@
                     <div class="grid grid-cols-2 gap-3">
                         <div>
                             <label class="block text-[12.5px] font-semibold text-slate-700 mb-1.5">Default Yaw</label>
-                            <input type="number" step="any" name="default_yaw" value="0"
+                            <input type="number" step="any" min="-360" max="360" name="default_yaw" value="0"
                                    class="w-full border border-slate-200 rounded-lg px-3.5 py-2.5 text-[13px] outline-none focus:border-slate-400">
                         </div>
                         <div>
                             <label class="block text-[12.5px] font-semibold text-slate-700 mb-1.5">Default Pitch</label>
-                            <input type="number" step="any" name="default_pitch" value="0"
+                            <input type="number" step="any" min="-90" max="90" name="default_pitch" value="0"
                                    class="w-full border border-slate-200 rounded-lg px-3.5 py-2.5 text-[13px] outline-none focus:border-slate-400">
                         </div>
                     </div>
 
                     <div>
                         <label class="block text-[12.5px] font-semibold text-slate-700 mb-1.5">Auto-Play Audio Text</label>
-                        <textarea name="auto_audio_text" rows="2"
+                        <textarea maxlength="{{ \App\Support\InputRules::LONG_TEXT }}" name="auto_audio_text" rows="2"
                                   placeholder="Text to speak automatically when scene loads..."
                                   class="w-full border border-slate-200 rounded-lg px-3.5 py-2.5 text-[13px] outline-none focus:border-slate-400 resize-none"></textarea>
                         <p class="text-[11px] text-slate-400 mt-1">Leave empty for no automatic audio.</p>

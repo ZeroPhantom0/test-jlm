@@ -3,6 +3,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Support\InputRules;
 use App\Http\Controllers\Controller;
 use App\Services\HistoryService;
 use Illuminate\Http\Request;
@@ -19,6 +20,10 @@ class HistoryController extends Controller
      */
     public function index(Request $request)
     {
+        $request->validate([
+            'search'   => InputRules::search(),
+            'category' => ['nullable', 'string', 'max:30'],
+        ]);
         $filters = $request->only(['search', 'category']);
 
         // Load every event; category / search filtering + pagination run client-side
@@ -35,6 +40,10 @@ class HistoryController extends Controller
     public function export(Request $request): StreamedResponse
     {
         // Get the exact same filters the user selected on the UI
+        $request->validate([
+            'search'   => InputRules::search(),
+            'category' => ['nullable', 'string', 'max:30'],
+        ]);
         $filters = $request->only(['search', 'category']);
 
         // Fetch the filtered events

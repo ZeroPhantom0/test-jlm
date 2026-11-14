@@ -3,6 +3,7 @@
 
 namespace App\Http\Controllers\Tenant;
 
+use App\Support\InputRules;
 use App\Events\MessageSent;
 use App\Http\Controllers\Controller;
 use App\Models\Conversation;
@@ -79,10 +80,9 @@ class TenantMessageController extends Controller
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'subject'       => ['required', 'string', 'max:255'],
-            'body'          => ['nullable', 'string'],
-            'attachments'   => ['nullable', 'array', 'max:5'],
-            'attachments.*' => ['file', 'max:10240'],
+            'subject'       => InputRules::text(InputRules::SUBJECT),
+            'body'          => InputRules::text(InputRules::MESSAGE_BODY, false),
+            ...InputRules::attachments(),
         ]);
 
         if (empty(trim((string) ($validated['body'] ?? ''))) && empty($validated['attachments'])) {
@@ -151,9 +151,8 @@ class TenantMessageController extends Controller
     public function reply(Request $request, int $id): JsonResponse
     {
         $validated = $request->validate([
-            'body'          => ['nullable', 'string'],
-            'attachments'   => ['nullable', 'array', 'max:5'],
-            'attachments.*' => ['file', 'max:10240'],
+            'body'          => InputRules::text(InputRules::MESSAGE_BODY, false),
+            ...InputRules::attachments(),
         ]);
 
         if (empty(trim((string) ($validated['body'] ?? ''))) && empty($validated['attachments'])) {
@@ -242,7 +241,7 @@ class TenantMessageController extends Controller
     public function react(Request $request, int $messageId): JsonResponse
     {
         $validated = $request->validate([
-            'reaction' => ['required', 'string', 'max:16'],
+            'reaction' => InputRules::text(16),
         ]);
 
         $message = Message::findOrFail($messageId);

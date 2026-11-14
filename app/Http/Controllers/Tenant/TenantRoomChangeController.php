@@ -3,6 +3,7 @@
 
 namespace App\Http\Controllers\Tenant;
 
+use App\Support\InputRules;
 use App\Events\ServiceRequestUpdated;
 use App\Http\Controllers\Controller;
 use App\Models\Room;
@@ -181,11 +182,11 @@ class TenantRoomChangeController extends Controller
 
         // 1. Validate the incoming request (now including receipt and reference_no)
         $validated = $request->validate([
-            'requested_room' => ['required', 'string', 'max:50'],
-            'room_bed_id'    => ['nullable', 'string', 'max:50'],
-            'reason'         => ['required', 'string'],
-            'reference_no'   => ['required', 'string', 'max:100'],
-            'receipt'        => ['required', 'file', 'mimes:png,jpg,jpeg,webp', 'max:10240'],
+            'requested_room' => InputRules::text(InputRules::ROOM_LABEL),
+            'room_bed_id'    => InputRules::text(InputRules::ROOM_LABEL, false),
+            'reason'         => InputRules::text(InputRules::LONG_TEXT),
+            'reference_no'   => InputRules::reference(),
+            'receipt'        => InputRules::image(true),
         ]);
 
         $requestedRoomId = null;

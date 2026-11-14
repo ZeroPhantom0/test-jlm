@@ -125,7 +125,7 @@
                         <label class="field-label">Hotspot Name</label>
                         <input
                             type="text"
-                            id="hs-name-input"
+                            maxlength="{{ \App\Support\InputRules::TITLE }}" id="hs-name-input"
                             class="input-box"
                             placeholder="e.g. Go to Bedroom or Level 2"
                         />
@@ -153,7 +153,7 @@
 
                     <div class="form-field-group" id="content-text-group" style="display:none;">
                         <label class="field-label">Info Content</label>
-                        <textarea id="hs-content-text" class="textarea-box" rows="3"
+                        <textarea maxlength="{{ \App\Support\InputRules::LONG_TEXT }}" id="hs-content-text" class="textarea-box" rows="3"
                                   placeholder="Text shown when the info hotspot is clicked..."></textarea>
                     </div>
 

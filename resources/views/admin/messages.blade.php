@@ -40,7 +40,7 @@
             <div class="px-5 py-4 border-b border-slate-100">
                 <div class="bg-white border border-slate-200 rounded-xl px-3.5 py-2.5 flex items-center gap-2.5">
                     <i class="fa-solid fa-magnifying-glass text-slate-400 text-sm"></i>
-                    <input type="text" id="admin-conv-search" placeholder="Search by tenant name or subject..."
+                    <input type="text" maxlength="{{ \App\Support\InputRules::SEARCH }}" id="admin-conv-search" placeholder="Search by tenant name or subject..."
                         class="w-full text-[13px] outline-none bg-transparent">
                 </div>
             </div>
@@ -130,12 +130,12 @@
                     </div>
                     <div class="flex flex-col gap-2">
                         <label class="text-xs font-bold text-slate-700">Subject *</label>
-                        <input type="text" id="admin-new-subject" required placeholder="Enter message subject..."
+                        <input type="text" maxlength="{{ \App\Support\InputRules::SUBJECT }}" id="admin-new-subject" required placeholder="Enter message subject..."
                             class="bg-white border border-slate-200 rounded-xl px-4 py-3 text-[13px] outline-none">
                     </div>
                     <div class="flex flex-col gap-2">
                         <label class="text-xs font-bold text-slate-700">Message</label>
-                        <textarea id="admin-new-body" placeholder="Type your message (optional if you attach a file)..."
+                        <textarea maxlength="{{ \App\Support\InputRules::MESSAGE_BODY }}" id="admin-new-body" placeholder="Type your message (optional if you attach a file)..."
                             class="bg-white border border-slate-200 rounded-xl px-4 py-3 text-[13px] outline-none resize-y min-h-[180px]"></textarea>
                     </div>
 
@@ -191,7 +191,7 @@
 
                     <div class="flex items-end gap-3">
                         <div class="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3">
-                            <textarea id="admin-reply-textarea" placeholder="Type your reply..."
+                            <textarea maxlength="{{ \App\Support\InputRules::MESSAGE_BODY }}" id="admin-reply-textarea" placeholder="Type your reply..."
                                 class="w-full bg-transparent border-none outline-none text-[13px] resize-none h-12 text-slate-900"></textarea>
                         </div>
                         <button type="button" id="admin-reply-attach-btn"

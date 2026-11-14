@@ -1,6 +1,7 @@
 // resources/js/pages/Services/RoomChangeModals.jsx
 import React, { useState, useEffect, useRef } from 'react';
 import Modal from '../../components/Modal';
+import { LIMITS } from "../../utils/inputLimits";
 
 const csrf = () =>
     document.querySelector('meta[name="csrf-token"]')?.content ||
@@ -439,7 +440,7 @@ export default function RoomChangeModals() {
                                     Reason <span className="text-rose-500">*</span>
                                 </label>
                                 <textarea
-                                    value={form.reason}
+                                    maxLength={LIMITS.LONG_TEXT} value={form.reason}
                                     onChange={(e) => updateField('reason', e.target.value)}
                                     placeholder="Explain why you need to change rooms..."
                                     className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5 text-[13px] outline-none resize-none h-[90px] focus:border-slate-400"
@@ -542,7 +543,7 @@ export default function RoomChangeModals() {
                                         </label>
                                         <input
                                             type="text"
-                                            value={referenceNo}
+                                            maxLength={LIMITS.REFERENCE_NO} value={referenceNo}
                                             onChange={(e) => setReferenceNo(e.target.value)}
                                             placeholder="e.g. GC-20260401-12345"
                                             className="w-full bg-white border border-amber-200 rounded-lg px-3 py-2.5 text-[13px] outline-none focus:border-amber-400"

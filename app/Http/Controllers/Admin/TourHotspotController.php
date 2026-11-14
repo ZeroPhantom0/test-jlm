@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Support\InputRules;
 use App\Http\Controllers\Controller;
 use App\Models\TourHotspot;
 use App\Models\TourScene;
@@ -17,6 +18,7 @@ class TourHotspotController extends Controller
      */
     public function getTourData(Request $request, VirtualTour $virtualTour)
     {
+        $request->validate(['scene_id' => ['required', 'integer']]);
         $sceneId = $request->query('scene_id');
 
         $scene = TourScene::where('tour_id', $virtualTour->id)
@@ -37,17 +39,19 @@ class TourHotspotController extends Controller
     public function store(Request $request, VirtualTour $virtualTour)
     {
         $validated = $request->validate([
-            'scene_id'        => 'required|exists:tour_scenes,id',
+            'scene_id'        => ['required', 'integer', 'exists:tour_scenes,id'],
             'type'            => 'required|in:navigation,info,audio,image,video,link',
-            'tooltip'         => 'nullable|string|max:255',
-            'pitch'           => 'required|numeric',
-            'yaw'             => 'required|numeric',
-            'target_scene_id' => 'nullable|exists:tour_scenes,id',
-            'content_text'    => 'nullable|string',
-            'media_url'       => 'nullable|string',
-            'nav_audio'       => 'nullable|string',
-            'description'     => 'nullable|string',
-            'icon'            => 'nullable|string',
+            'tooltip'         => InputRules::text(InputRules::TITLE, false),
+            // Panorama coordinates in degrees
+            'pitch'           => ['required', 'numeric', 'between:-90,90'],
+            'yaw'             => ['required', 'numeric', 'between:-360,360'],
+            'target_scene_id' => ['nullable', 'integer', 'exists:tour_scenes,id'],
+            'content_text'    => InputRules::text(InputRules::LONG_TEXT, false),
+            'media_url'       => InputRules::url(),
+            'nav_audio'       => InputRules::text(InputRules::LONG_TEXT, false),
+            'description'     => InputRules::text(InputRules::LONG_TEXT, false),
+            // Font Awesome class, e.g. "fa-solid fa-door-open"
+            'icon'            => ['nullable', 'string', 'max:100', 'regex:/^[a-z0-9\- ]+$/'],
         ]);
 
         // Handle fields that may not exist in your current schema.
@@ -85,15 +89,17 @@ class TourHotspotController extends Controller
     {
         $validated = $request->validate([
             'type'            => 'required|in:navigation,info,audio,image,video,link',
-            'tooltip'         => 'nullable|string|max:255',
-            'pitch'           => 'required|numeric',
-            'yaw'             => 'required|numeric',
-            'target_scene_id' => 'nullable|exists:tour_scenes,id',
-            'content_text'    => 'nullable|string',
-            'media_url'       => 'nullable|string',
-            'nav_audio'       => 'nullable|string',
-            'description'     => 'nullable|string',
-            'icon'            => 'nullable|string',
+            'tooltip'         => InputRules::text(InputRules::TITLE, false),
+            // Panorama coordinates in degrees
+            'pitch'           => ['required', 'numeric', 'between:-90,90'],
+            'yaw'             => ['required', 'numeric', 'between:-360,360'],
+            'target_scene_id' => ['nullable', 'integer', 'exists:tour_scenes,id'],
+            'content_text'    => InputRules::text(InputRules::LONG_TEXT, false),
+            'media_url'       => InputRules::url(),
+            'nav_audio'       => InputRules::text(InputRules::LONG_TEXT, false),
+            'description'     => InputRules::text(InputRules::LONG_TEXT, false),
+            // Font Awesome class, e.g. "fa-solid fa-door-open"
+            'icon'            => ['nullable', 'string', 'max:100', 'regex:/^[a-z0-9\- ]+$/'],
         ]);
 
         $payload = [

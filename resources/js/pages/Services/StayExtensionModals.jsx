@@ -1,6 +1,7 @@
 // resources/js/pages/Services/StayExtensionModals.jsx
 import React, { useState, useEffect } from "react";
 import Modal from "../../components/Modal";
+import { LIMITS } from "../../utils/inputLimits";
 
 const csrf = () =>
     document.querySelector('meta[name="csrf-token"]')?.content ||
@@ -518,7 +519,7 @@ export default function StayExtensionModals() {
                                             </label>
                                             <input
                                                 type="text"
-                                                value={referenceNo}
+                                                maxLength={LIMITS.REFERENCE_NO} value={referenceNo}
                                                 onChange={(e) => setReferenceNo(e.target.value)}
                                                 placeholder="e.g. GC-20260401-12345"
                                                 className="w-full bg-white border border-amber-200 rounded-lg px-3 py-2.5 text-[13px] outline-none focus:border-amber-400"
@@ -551,7 +552,7 @@ export default function StayExtensionModals() {
                                         <span className="text-rose-500">*</span>
                                     </label>
                                     <textarea
-                                        value={form.reason}
+                                        maxLength={LIMITS.LONG_TEXT} value={form.reason}
                                         onChange={(e) =>
                                             updateField(
                                                 "reason",

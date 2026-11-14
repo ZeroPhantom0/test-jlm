@@ -184,6 +184,43 @@ class BillingService
     }
 
     // ============================================================
+    // SUBMITTED (UNVERIFIED) PAYMENTS
+    // ============================================================
+
+    /**
+     * Amount the tenant submitted on a Pending invoice that is waiting for
+     * verification. A remaining-balance payment is kept in pending_amount;
+     * older flows (reservation down payment, service requests) put the
+     * submitted amount straight into amount_paid.
+     */
+    public static function submittedAmount(Invoice $invoice): float
+    {
+        return (float) $invoice->pending_amount > 0
+            ? (float) $invoice->pending_amount
+            : (float) $invoice->amount_paid;
+    }
+
+    /**
+     * Fields that undo a submission (tenant cancelled / admin rejected):
+     * back to Partial if something was already verified, otherwise Unpaid.
+     */
+    public static function revertSubmission(Invoice $invoice): array
+    {
+        if ((float) $invoice->pending_amount > 0) {
+            $paid = (float) $invoice->amount_paid;
+        } else {
+            // Old-style submission where amount_paid already included it
+            $paid = max(0, (float) $invoice->amount_paid - (float) $invoice->balance);
+        }
+
+        return [
+            'status'         => $paid > 0 ? 'Partial' : 'Unpaid',
+            'amount_paid'    => $paid,
+            'pending_amount' => 0,
+        ];
+    }
+
+    // ============================================================
     // RECEIPT ARCHIVING (soft-delete support)
     // ============================================================
 

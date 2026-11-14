@@ -3,6 +3,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Support\InputRules;
 use App\Events\InvoiceUpdated;
 use App\Events\ReservationUpdated;
 use App\Http\Controllers\Controller;
@@ -26,6 +27,10 @@ class ReservationController extends Controller
 {
     public function index(Request $request)
     {
+        $request->validate([
+            'search' => InputRules::search(),
+            'status' => ['nullable', 'string', 'max:30'],
+        ]);
         $filters = $request->only(['search', 'status']);
 
         $reservations = Reservation::filter($filters)
@@ -55,6 +60,10 @@ class ReservationController extends Controller
 
     public function data(Request $request)
     {
+        $request->validate([
+            'search' => InputRules::search(),
+            'status' => ['nullable', 'string', 'max:30'],
+        ]);
         $filters = $request->only(['search', 'status']);
 
         $reservations = Reservation::filter($filters)
@@ -104,22 +113,23 @@ class ReservationController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'user_id'          => ['nullable', 'exists:users,id'],
-            'room_id'          => ['nullable', 'exists:rooms,id'],
-            'tenant_name'      => ['required', 'string', 'max:120'],
-            'email'            => ['required', 'email', 'max:120'],
-            'phone'            => ['required', 'string', 'max:20'],
-            'desired_room'     => ['required', 'string', 'max:120'],
-            'room_bed_id'      => ['nullable', 'string', 'max:50'],
-            'check_in'         => ['required', 'date'],
-            'check_out'        => ['nullable', 'date', 'after:check_in'],
-            'move_in'          => ['nullable', 'date'],
-            'total_charges'    => ['required', 'numeric', 'min:0'],
-            'reservation_fee'  => ['nullable', 'numeric', 'min:0'],
+            'user_id'          => ['nullable', 'integer', 'exists:users,id'],
+            'room_id'          => ['nullable', 'integer', 'exists:rooms,id'],
+            'tenant_name'      => InputRules::name(),
+            // reservations.email column is varchar(120)
+            'email'            => InputRules::email(true, 120),
+            'phone'            => InputRules::phone(),
+            'desired_room'     => InputRules::text(120),
+            'room_bed_id'      => InputRules::text(InputRules::ROOM_LABEL, false),
+            'check_in'         => ['required', 'date', 'before:+2 years'],
+            'check_out'        => ['nullable', 'date', 'after:check_in', 'before:+3 years'],
+            'move_in'          => ['nullable', 'date', 'before:+2 years'],
+            'total_charges'    => InputRules::money(),
+            'reservation_fee'  => [...InputRules::money(false), 'lte:total_charges'],
             'payment_option'   => ['nullable', Rule::in(['Down Payment', 'Full Payment'])],
             'payment_method'   => ['nullable', Rule::in(['Not Set', 'GCash', 'Over The Counter', 'Bank Transfer'])],
-            'remaining'        => ['nullable', 'numeric', 'min:0'],
-            'request_details'  => ['nullable', 'string'],
+            'remaining'        => [...InputRules::money(false), 'lte:total_charges'],
+            'request_details'  => InputRules::text(InputRules::NOTES, false),
         ]);
 
         $avatar = Reservation::makeAvatar($validated['tenant_name']);
@@ -167,7 +177,7 @@ class ReservationController extends Controller
     public function update(Request $request, Reservation $reservation)
     {
         $validated = $request->validate([
-            'admin_notes' => ['nullable', 'string'],
+            'admin_notes' => InputRules::text(InputRules::NOTES, false),
             'status'      => ['sometimes', Rule::in(['Pending', 'Approved', 'Rejected', 'Expired'])],
         ]);
 
@@ -206,7 +216,7 @@ class ReservationController extends Controller
         }
 
         $validated = $request->validate([
-            'admin_notes' => ['nullable', 'string'],
+            'admin_notes' => InputRules::text(InputRules::NOTES, false),
         ]);
 
         if (
@@ -341,7 +351,7 @@ class ReservationController extends Controller
     public function reject(Request $request, Reservation $reservation)
     {
         $validated = $request->validate([
-            'admin_notes' => ['nullable', 'string'],
+            'admin_notes' => InputRules::text(InputRules::NOTES, false),
         ]);
 
         $deletedInvoiceIds = [];

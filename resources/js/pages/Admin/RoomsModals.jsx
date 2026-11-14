@@ -1,6 +1,7 @@
 // resources/js/pages/Admin/RoomsModals.jsx
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Modal from '../../components/Modal';
+import { LIMITS } from "../../utils/inputLimits";
 
 const csrf = () =>
     document.querySelector('meta[name="csrf-token"]')?.content ||
@@ -306,7 +307,7 @@ export default function RoomsModals() {
                                 <label className="block text-xs font-semibold text-slate-600 mb-1.5">Room Number</label>
                                 <input
                                     type="text"
-                                    value={form.room_number}
+                                    maxLength={LIMITS.ROOM_NUMBER} value={form.room_number}
                                     onChange={(e) => updateField('room_number', digitsOnly(e.target.value))}
                                     placeholder="e.g. 101"
                                     inputMode="numeric"
@@ -341,7 +342,7 @@ export default function RoomsModals() {
                         <div className="mb-4">
                             <label className="block text-xs font-semibold text-slate-600 mb-1.5">Room Description</label>
                             <textarea
-                                value={form.description}
+                                maxLength={LIMITS.LONG_TEXT} value={form.description}
                                 onChange={(e) => updateField('description', e.target.value)}
                                 placeholder="Describe room here.."
                                 className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-[13px] outline-none resize-y min-h-[80px]"
@@ -369,7 +370,7 @@ export default function RoomsModals() {
                                     type="text"
                                     inputMode="numeric"
                                     pattern="[0-9]*"
-                                    value={form.upper_deck}
+                                    maxLength={2} value={form.upper_deck}
                                     onChange={(e) => updateDeck('upper_deck', e.target.value)}
                                     placeholder="0"
                                     className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-[13px] outline-none focus:border-blue-400"
@@ -381,7 +382,7 @@ export default function RoomsModals() {
                                     type="text"
                                     inputMode="numeric"
                                     pattern="[0-9]*"
-                                    value={form.lower_deck}
+                                    maxLength={2} value={form.lower_deck}
                                     onChange={(e) => updateDeck('lower_deck', e.target.value)}
                                     placeholder="0"
                                     className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-[13px] outline-none focus:border-blue-400"
@@ -393,7 +394,7 @@ export default function RoomsModals() {
                                 <input
                                     type="text"
                                     inputMode="decimal"
-                                    value={form.daily_rent}
+                                    maxLength={9} value={form.daily_rent}
                                     onChange={(e) => updateField('daily_rent', e.target.value.replace(/[^\d.]/g, ''))}
                                     placeholder="Enter Amount"
                                     className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-[13px] outline-none focus:border-blue-400"
@@ -555,7 +556,7 @@ export default function RoomsModals() {
                                 <label className="block text-xs font-semibold text-slate-600 mb-1.5">Room Number</label>
                                 <input
                                     type="text"
-                                    value={form.room_number ?? ''}
+                                    maxLength={LIMITS.ROOM_NUMBER} value={form.room_number ?? ''}
                                     onChange={(e) => updateField('room_number', digitsOnly(e.target.value))}
                                     inputMode="numeric"
                                     className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-[13px] outline-none"
@@ -590,7 +591,7 @@ export default function RoomsModals() {
                                 <input
                                     type="text"
                                     inputMode="numeric"
-                                    value={form.upper_deck ?? ''}
+                                    maxLength={2} value={form.upper_deck ?? ''}
                                     onChange={(e) => updateDeck('upper_deck', e.target.value)}
                                     placeholder="0"
                                     className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-[13px] outline-none"
@@ -601,7 +602,7 @@ export default function RoomsModals() {
                                 <input
                                     type="text"
                                     inputMode="numeric"
-                                    value={form.lower_deck ?? ''}
+                                    maxLength={2} value={form.lower_deck ?? ''}
                                     onChange={(e) => updateDeck('lower_deck', e.target.value)}
                                     placeholder="0"
                                     className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-[13px] outline-none"
@@ -626,7 +627,7 @@ export default function RoomsModals() {
                                 <input
                                     type="text"
                                     inputMode="decimal"
-                                    value={form.daily_rent ?? ''}
+                                    maxLength={9} value={form.daily_rent ?? ''}
                                     onChange={(e) => updateField('daily_rent', e.target.value.replace(/[^\d.]/g, ''))}
                                     className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-[13px] outline-none"
                                 />
@@ -662,7 +663,7 @@ export default function RoomsModals() {
                         <div>
                             <label className="block text-xs font-semibold text-slate-600 mb-1.5">Description</label>
                             <textarea
-                                value={form.description ?? ''}
+                                maxLength={LIMITS.LONG_TEXT} value={form.description ?? ''}
                                 onChange={(e) => updateField('description', e.target.value)}
                                 className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-[13px] outline-none resize-y min-h-[80px]"
                             ></textarea>

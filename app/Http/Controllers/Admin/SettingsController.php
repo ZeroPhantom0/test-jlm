@@ -3,6 +3,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Support\InputRules;
 use App\Http\Controllers\Controller;
 use App\Mail\SettingsVerificationCodeMail;
 use App\Models\Announcement;
@@ -21,7 +22,6 @@ use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
 
 class SettingsController extends Controller
@@ -166,8 +166,8 @@ class SettingsController extends Controller
         $user = Auth::user();
 
         $validated = $request->validate([
-            'name'            => ['required', 'string', 'max:255'],
-            'profile_picture' => ['nullable', 'image', 'mimes:jpeg,png,jpg,webp', 'max:10240'],
+            'name'            => InputRules::name(),
+            'profile_picture' => InputRules::image(false, InputRules::AVATAR_KB),
         ]);
 
         $user->update(['name' => $validated['name']]);
@@ -215,16 +215,17 @@ class SettingsController extends Controller
     {
         /** @var User $user */
         $user = Auth::user();
+        $request->validate(['action_type' => ['required', \Illuminate\Validation\Rule::in(['email', 'phone', 'password'])]]);
         $actionType = $request->input('action_type'); // email, phone, password
 
         $rules = [];
         if ($actionType === 'email') {
-            $rules['email'] = ['required', 'email', 'max:255', 'unique:users,email,' . $user->id];
+            $rules['email'] = [...InputRules::email(), 'unique:users,email,' . $user->id];
         } elseif ($actionType === 'phone') {
-            $rules['phone'] = ['required', 'string', 'max:20'];
+            $rules['phone'] = InputRules::phone();
         } elseif ($actionType === 'password') {
-            $rules['current_password'] = ['required', 'current_password'];
-            $rules['password'] = ['required', 'confirmed', Password::min(8)];
+            $rules['current_password'] = ['required', 'string', 'max:255', 'current_password'];
+            $rules['password'] = InputRules::newPassword();
         } else {
             abort(400);
         }
@@ -264,7 +265,7 @@ class SettingsController extends Controller
      */
     public function confirmVerification(Request $request)
     {
-        $request->validate(['code' => ['required', 'string', 'size:6']]);
+        $request->validate(['code' => InputRules::otp()]);
         
         /** @var User $user */
         $user = Auth::user();
@@ -529,6 +530,10 @@ class SettingsController extends Controller
      */
     public function archiveRecords(Request $request)
     {
+        $request->validate([
+            'types'   => ['nullable', 'array', 'max:10'],
+            'types.*' => ['string', 'max:30'],
+        ]);
         $types = $request->input('types', []);
 
         if (empty($types)) {

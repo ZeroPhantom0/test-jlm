@@ -3,6 +3,7 @@
 
 namespace App\Http\Controllers\Auth;
 
+use App\Support\InputRules;
 use App\Http\Controllers\Controller;
 use App\Models\PersonalInformation;
 use App\Models\Tenant;
@@ -17,10 +18,10 @@ class RegisterController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'name'     => ['required', 'string', 'max:255'],
-            'email'    => ['required', 'string', 'email', 'max:255', 'unique:users'],
-            'phone'    => ['nullable', 'string', 'max:20'],
-            'password' => ['required', 'string', 'min:8', 'confirmed'],
+            'name'     => InputRules::name(),
+            'email'    => [...InputRules::email(), 'unique:users'],
+            'phone'    => InputRules::phone(false),
+            'password' => InputRules::newPassword(),
         ]);
 
         $user = DB::transaction(function () use ($validated) {

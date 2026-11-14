@@ -1,6 +1,7 @@
 // resources/js/pages/Admin/ServicesModals.jsx
 import React, { useState, useEffect } from "react";
 import Modal from "../../components/Modal";
+import { LIMITS } from "../../utils/inputLimits";
 
 const csrf = () =>
     document.querySelector('meta[name="csrf-token"]')?.content ||
@@ -310,7 +311,7 @@ export default function ServicesModals() {
                             </label>
                             <input
                                 type="text"
-                                value={newForm.title}
+                                maxLength={LIMITS.TITLE} value={newForm.title}
                                 onChange={(e) =>
                                     updateNewField("title", e.target.value)
                                 }
@@ -327,7 +328,7 @@ export default function ServicesModals() {
                                 </label>
                                 <input
                                     type="text"
-                                    value={newForm.category}
+                                    maxLength={LIMITS.CATEGORY} value={newForm.category}
                                     onChange={(e) =>
                                         updateNewField(
                                             "category",
@@ -368,7 +369,7 @@ export default function ServicesModals() {
                                 <span className="text-rose-500">*</span>
                             </label>
                             <textarea
-                                value={newForm.description}
+                                maxLength={LIMITS.LONG_TEXT} value={newForm.description}
                                 onChange={(e) =>
                                     updateNewField(
                                         "description",
@@ -403,7 +404,7 @@ export default function ServicesModals() {
                                 </label>
                                 <input
                                     type="text"
-                                    value={newForm.preferred_time}
+                                    maxLength={LIMITS.TIME_WINDOW} value={newForm.preferred_time}
                                     onChange={(e) =>
                                         updateNewField(
                                             "preferred_time",
@@ -587,7 +588,7 @@ export default function ServicesModals() {
                             </label>
                             <input
                                 type="text"
-                                value={form.assigned_staff}
+                                maxLength={LIMITS.NAME} value={form.assigned_staff}
                                 onChange={(e) =>
                                     updateField(
                                         "assigned_staff",

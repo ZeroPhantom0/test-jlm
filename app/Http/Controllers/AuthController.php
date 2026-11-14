@@ -20,6 +20,7 @@ use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
+use App\Support\InputRules;
 use Illuminate\Validation\Rules\Password;
 use Inertia\Inertia;
 use Laravel\Socialite\Facades\Socialite;
@@ -44,12 +45,13 @@ class AuthController extends Controller
         $request->merge(['email' => strtolower(trim((string) $request->input('email')))]);
 
         return $request->validate([
-            'email'    => ['required', 'string', 'email', 'max:255'],
+            'email'    => InputRules::email(),
+            // Generous cap so accounts created before the 64-char limit can still sign in
             'password' => ['required', 'string', 'max:255'],
         ], [
             'email.required'    => 'Email address is required.',
             'email.email'       => 'Enter a valid email address, e.g. name@example.com.',
-            'email.max'         => 'Email address must not exceed 255 characters.',
+            'email.max'         => 'Email address must not exceed ' . InputRules::EMAIL . ' characters.',
             'password.required' => 'Password is required.',
             'password.max'      => 'Password must not exceed 255 characters.',
         ]);
@@ -419,7 +421,7 @@ class AuthController extends Controller
         }
 
         $validated = $request->validate([
-            'code' => ['required', 'string', 'size:6'],
+            'code' => InputRules::otp(),
         ]);
 
         $verification = LoginVerificationCode::where('token', $pending['token'])
@@ -542,7 +544,7 @@ class AuthController extends Controller
         }
 
         $validated = $request->validate([
-            'code' => ['required', 'string', 'size:6'],
+            'code' => InputRules::otp(),
         ]);
 
         $verification = LoginVerificationCode::where('token', $pending['token'])
@@ -655,10 +657,10 @@ class AuthController extends Controller
     public function signup(Request $request)
     {
         $validated = $request->validate([
-            'fullname' => ['required', 'string', 'max:255'],
-            'email'    => ['required', 'email', 'max:255', 'unique:users,email'],
-            'phone'    => ['required', 'string', 'max:20'],
-            'password' => ['required', 'confirmed', Password::min(8)],
+            'fullname' => InputRules::name(),
+            'email'    => [...InputRules::email(), 'unique:users,email'],
+            'phone'    => InputRules::phone(),
+            'password' => InputRules::newPassword(),
             'terms'    => ['accepted'],
         ], [
             'terms.accepted' => 'Please agree to the Terms and Conditions to continue.',
@@ -718,7 +720,7 @@ class AuthController extends Controller
 
         $redirectTo = $wasAdmin
             ? route('admin.login')
-            : route('login');
+            : route('landing');
 
         $antiCache = [
             'Cache-Control' => 'no-store, no-cache, must-revalidate, max-age=0',
@@ -750,7 +752,7 @@ class AuthController extends Controller
     public function sendPasswordResetLink(Request $request)
     {
         $validated = $request->validate([
-            'email' => ['required', 'email'],
+            'email' => InputRules::email(),
         ]);
 
         $user = User::where('email', $validated['email'])->first();
@@ -813,9 +815,9 @@ class AuthController extends Controller
     public function resetPassword(Request $request)
     {
         $validated = $request->validate([
-            'email'    => ['required', 'email'],
-            'token'    => ['required', 'string'],
-            'password' => ['required', 'confirmed', Password::min(8)],
+            'email'    => InputRules::email(),
+            'token'    => ['required', 'string', 'max:255'],
+            'password' => InputRules::newPassword(),
         ]);
 
         $record = DB::table('password_reset_tokens')
@@ -881,13 +883,13 @@ class AuthController extends Controller
     public function storePersonalInformation(Request $request)
     {
         $validated = $request->validate([
-            'fullname'         => ['required', 'string', 'max:255'],
-            'email'            => ['required', 'email'],
-            'contact_number'   => ['required', 'string', 'max:20'],
-            'current_address'  => ['nullable', 'string'],
-            'emergency_name'   => ['required', 'string', 'max:255'],
-            'emergency_number' => ['required', 'string', 'max:20'],
-            'profile_picture'  => ['nullable', 'file', 'mimes:png,jpg,jpeg,webp', 'max:10240'],
+            'fullname'         => InputRules::name(),
+            'email'            => InputRules::email(),
+            'contact_number'   => InputRules::phone(),
+            'current_address'  => InputRules::text(InputRules::ADDRESS, false),
+            'emergency_name'   => InputRules::name(),
+            'emergency_number' => InputRules::phone(),
+            'profile_picture'  => InputRules::image(false, InputRules::AVATAR_KB),
         ]);
 
         /** @var User $user */
@@ -972,9 +974,9 @@ class AuthController extends Controller
         $existing = $user->identityVerification;
 
         $validated = $request->validate([
-            'id_type'                => ['required', 'string'],
-            'id_front'               => [$existing?->id_front ? 'nullable' : 'required', 'file', 'mimes:png,jpg,jpeg,webp', 'max:10240'],
-            'id_back'                => ['nullable', 'file', 'mimes:png,jpg,jpeg,webp', 'max:10240'],
+            'id_type'                => InputRules::text(InputRules::ID_TYPE),
+            'id_front'               => InputRules::image(! $existing?->id_front),
+            'id_back'                => InputRules::image(false),
             'verification_agreement' => ['accepted'],
         ]);
 

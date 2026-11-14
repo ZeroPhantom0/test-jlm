@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Support\InputRules;
 use App\Http\Controllers\Controller;
 use App\Models\TourScene;
 use App\Models\VirtualTour;
@@ -25,12 +26,12 @@ class TourSceneController extends Controller
     public function store(Request $request, VirtualTour $virtualTour)
     {
         $validated = $request->validate([
-            'title'           => 'required|string|max:255',
-            'description'     => 'nullable|string',
-            'default_yaw'     => 'nullable|numeric',
-            'default_pitch'   => 'nullable|numeric',
-            'auto_audio_text' => 'nullable|string',
-            'scene_image'     => 'required|image|mimes:jpeg,png,jpg,webp|max:20480',
+            'title'           => InputRules::text(InputRules::TITLE),
+            'description'     => InputRules::text(InputRules::LONG_TEXT, false),
+            'default_yaw'     => ['nullable', 'numeric', 'between:-360,360'],
+            'default_pitch'   => ['nullable', 'numeric', 'between:-90,90'],
+            'auto_audio_text' => InputRules::text(InputRules::LONG_TEXT, false),
+            'scene_image'     => InputRules::image(true, InputRules::PANORAMA_KB),
         ]);
 
         // Handle file upload
@@ -62,12 +63,12 @@ class TourSceneController extends Controller
     public function update(Request $request, VirtualTour $virtualTour, TourScene $scene)
     {
         $validated = $request->validate([
-            'title'           => 'required|string|max:255',
-            'description'     => 'nullable|string',
-            'default_yaw'     => 'nullable|numeric',
-            'default_pitch'   => 'nullable|numeric',
-            'auto_audio_text' => 'nullable|string',
-            'scene_image'     => 'nullable|image|mimes:jpeg,png,jpg,webp|max:20480',
+            'title'           => InputRules::text(InputRules::TITLE),
+            'description'     => InputRules::text(InputRules::LONG_TEXT, false),
+            'default_yaw'     => ['nullable', 'numeric', 'between:-360,360'],
+            'default_pitch'   => ['nullable', 'numeric', 'between:-90,90'],
+            'auto_audio_text' => InputRules::text(InputRules::LONG_TEXT, false),
+            'scene_image'     => InputRules::image(false, InputRules::PANORAMA_KB),
         ]);
 
         $payload = [

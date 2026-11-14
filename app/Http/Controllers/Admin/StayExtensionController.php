@@ -3,6 +3,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Support\InputRules;
 use App\Events\InvoiceUpdated;
 use App\Events\ReservationUpdated;
 use App\Events\ServiceRequestUpdated;
@@ -33,11 +34,11 @@ class StayExtensionController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'tenant_id'           => ['required', 'exists:tenants,id'],
-            'room_id'             => ['nullable', 'exists:rooms,id'],
+            'tenant_id'           => ['required', 'integer', 'exists:tenants,id'],
+            'room_id'             => ['nullable', 'integer', 'exists:rooms,id'],
             'current_lease_end'   => ['required', 'date'],
-            'requested_lease_end' => ['required', 'date', 'after:current_lease_end'],
-            'reason'              => ['required', 'string'],
+            'requested_lease_end' => ['required', 'date', 'after:current_lease_end', 'before:+3 years'],
+            'reason'              => InputRules::text(InputRules::LONG_TEXT),
         ]);
 
         $extensionDays = StayExtensionRequest::calculateExtensionDays(
@@ -74,7 +75,7 @@ class StayExtensionController extends Controller
     public function update(Request $request, StayExtensionRequest $stayExtensionRequest)
     {
         $validated = $request->validate([
-            'admin_notes' => ['nullable', 'string'],
+            'admin_notes' => InputRules::text(InputRules::NOTES, false),
             'status'      => ['sometimes', Rule::in(['Pending', 'Approved', 'Rejected'])],
         ]);
 
@@ -97,7 +98,7 @@ class StayExtensionController extends Controller
     public function approve(Request $request, StayExtensionRequest $stayExtensionRequest)
     {
         $validated = $request->validate([
-            'admin_notes' => ['nullable', 'string'],
+            'admin_notes' => InputRules::text(InputRules::NOTES, false),
         ]);
 
         if ($stayExtensionRequest->status !== 'Pending') {
@@ -153,7 +154,7 @@ class StayExtensionController extends Controller
     public function reject(Request $request, StayExtensionRequest $stayExtensionRequest)
     {
         $validated = $request->validate([
-            'admin_notes' => ['nullable', 'string'],
+            'admin_notes' => InputRules::text(InputRules::NOTES, false),
         ]);
 
         $voidedInvoiceIds = DB::transaction(function () use ($stayExtensionRequest, $validated, $request) {

@@ -3,6 +3,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Support\InputRules;
 use App\Events\InvoiceUpdated;
 use App\Events\ReservationUpdated;
 use App\Events\ServiceRequestUpdated;
@@ -42,12 +43,12 @@ class RoomChangeController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'tenant_id'         => ['required', 'exists:tenants,id'],
-            'current_room_id'   => ['nullable', 'exists:rooms,id'],
-            'requested_room_id' => ['nullable', 'exists:rooms,id'],
-            'current_room'      => ['required', 'string', 'max:50'],
-            'requested_room'    => ['required', 'string', 'max:50'],
-            'reason'            => ['required', 'string'],
+            'tenant_id'         => ['required', 'integer', 'exists:tenants,id'],
+            'current_room_id'   => ['nullable', 'integer', 'exists:rooms,id'],
+            'requested_room_id' => ['nullable', 'integer', 'exists:rooms,id'],
+            'current_room'      => InputRules::text(InputRules::ROOM_LABEL),
+            'requested_room'    => InputRules::text(InputRules::ROOM_LABEL),
+            'reason'            => InputRules::text(InputRules::LONG_TEXT),
         ]);
 
         $availability = 'AVAILABLE';
@@ -91,7 +92,7 @@ class RoomChangeController extends Controller
     public function update(Request $request, RoomChangeRequest $roomChangeRequest)
     {
         $validated = $request->validate([
-            'admin_notes' => ['nullable', 'string'],
+            'admin_notes' => InputRules::text(InputRules::NOTES, false),
             'status'      => ['sometimes', Rule::in(['Pending', 'Approved', 'Rejected'])],
         ]);
 
@@ -114,7 +115,7 @@ class RoomChangeController extends Controller
     public function approve(Request $request, RoomChangeRequest $roomChangeRequest)
     {
         $validated = $request->validate([
-            'admin_notes' => ['nullable', 'string'],
+            'admin_notes' => InputRules::text(InputRules::NOTES, false),
         ]);
 
         if ($roomChangeRequest->tenant && $roomChangeRequest->requested_room_id) {
@@ -247,7 +248,7 @@ class RoomChangeController extends Controller
     public function reject(Request $request, RoomChangeRequest $roomChangeRequest)
     {
         $validated = $request->validate([
-            'admin_notes' => ['nullable', 'string'],
+            'admin_notes' => InputRules::text(InputRules::NOTES, false),
         ]);
 
         $voidedInvoiceIds = DB::transaction(function () use ($roomChangeRequest, $validated, $request) {

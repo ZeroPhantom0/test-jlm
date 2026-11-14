@@ -1,6 +1,7 @@
 // resources/js/pages/Reservations/ReservationsModal.jsx
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import Modal from "../../components/Modal";
+import { LIMITS } from "../../utils/inputLimits";
 
 const csrf = () =>
     document.querySelector('meta[name="csrf-token"]')?.content ||
@@ -1128,7 +1129,7 @@ export default function ReservationsModal() {
                                         <input
                                             type="text"
                                             placeholder="Enter companion full name"
-                                            value={name}
+                                            maxLength={LIMITS.NAME} value={name}
                                             onChange={(e) =>
                                                 handleCompanionNameChange(
                                                     idx,
@@ -1254,7 +1255,7 @@ export default function ReservationsModal() {
                                 Additional Notes
                             </label>
                             <textarea
-                                value={form.notes}
+                                maxLength={LIMITS.NOTES} value={form.notes}
                                 onChange={(e) =>
                                     updateField("notes", e.target.value)
                                 }
@@ -1555,7 +1556,7 @@ export default function ReservationsModal() {
                                 </label>
                                 <input
                                     type="text"
-                                    value={form.reference_no}
+                                    maxLength={LIMITS.REFERENCE_NO} value={form.reference_no}
                                     onChange={(e) =>
                                         updateField(
                                             "reference_no",

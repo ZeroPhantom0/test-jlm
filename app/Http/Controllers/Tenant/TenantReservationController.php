@@ -3,6 +3,7 @@
 
 namespace App\Http\Controllers\Tenant;
 
+use App\Support\InputRules;
 use App\Events\InvoiceUpdated;
 use App\Events\ReservationUpdated;
 use App\Http\Controllers\Controller;
@@ -322,20 +323,20 @@ class TenantReservationController extends Controller
         $mark('start');
 
         $validated = $request->validate([
-            'room_id'         => ['required', 'exists:rooms,id'],
-            'check_in_date'   => ['required', 'date'],
-            'check_in_time'   => ['nullable', 'string', 'max:20'],
-            'check_out_date'  => ['required', 'date', 'after:check_in_date'],
-            'check_out_time'  => ['nullable', 'string', 'max:20'],
+            'room_id'         => ['required', 'integer', 'exists:rooms,id'],
+            'check_in_date'   => ['required', 'date', 'after_or_equal:today', 'before:+1 year'],
+            'check_in_time'   => InputRules::time(),
+            'check_out_date'  => ['required', 'date', 'after:check_in_date', 'before:+3 years'],
+            'check_out_time'  => InputRules::time(),
             'has_companion'   => ['nullable', 'boolean'],
-            'notes'           => ['nullable', 'string'],
+            'notes'           => InputRules::text(InputRules::NOTES, false),
             'payment_option'  => ['required', 'in:half,full'],
-            'reference_no'    => ['required', 'string', 'max:100'],
-            'receipt'         => ['required', 'file', 'mimes:png,jpg,jpeg,webp', 'max:10240'],
-            'room_bed_id'     => ['nullable', 'string', 'max:50'],
+            'reference_no'    => InputRules::reference(),
+            'receipt'         => InputRules::image(true),
+            'room_bed_id'     => InputRules::text(InputRules::ROOM_LABEL, false),
             'agreed_to_terms' => ['accepted'],
-            'num_occupants'   => ['nullable', 'integer', 'min:1'],
-            'companion_names' => ['nullable', 'string'],
+            'num_occupants'   => ['nullable', 'integer', 'min:1', 'max:' . InputRules::MAX_OCCUPANTS],
+            'companion_names' => InputRules::text(InputRules::COMPANIONS, false),
         ]);
         $lap('validate', 'start');
 
@@ -726,7 +727,7 @@ class TenantReservationController extends Controller
     public function parseReceipt(Request $request)
     {
         $request->validate([
-            'receipt' => 'required|image|max:5120',
+            'receipt' => InputRules::image(true),
         ]);
 
         try {

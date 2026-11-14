@@ -3,6 +3,7 @@
 
 namespace App\Http\Controllers\Tenant;
 
+use App\Support\InputRules;
 use App\Events\MaintenanceUpdated;
 use App\Http\Controllers\Controller;
 use App\Models\MaintenanceRequest;
@@ -76,9 +77,9 @@ class TenantMaintenanceController extends Controller
         }
 
         $validated = $request->validate([
-            'title'       => ['required', 'string', 'max:255'],
-            'description' => ['required', 'string'],
-            'category'    => ['required', 'string', 'max:100'],
+            'title'       => InputRules::text(InputRules::TITLE),
+            'description' => InputRules::text(InputRules::LONG_TEXT),
+            'category'    => InputRules::text(InputRules::CATEGORY),
             'priority'    => ['required', Rule::in(['Low', 'Medium', 'High', 'Critical'])],
         ]);
 

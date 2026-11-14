@@ -3,6 +3,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Support\InputRules;
 use App\Http\Controllers\Controller;
 use App\Models\Tenant;
 use Illuminate\Http\Request;
@@ -129,17 +130,17 @@ class TenantController extends Controller
     public function update(Request $request, Tenant $tenant)
     {
         $validated = $request->validate([
-            'name'          => ['required', 'string', 'max:255'],
+            'name'          => InputRules::name(),
             'email'         => [
-                'required', 'email', 'max:255',
+                ...InputRules::email(),
                 Rule::unique('users', 'email')->ignore($tenant->user_id),
             ],
-            'phone'         => ['nullable', 'string', 'max:20'],
-            'check_in'      => ['nullable', 'date'],
-            'check_in_time' => ['nullable', 'string', 'max:20'],
-            'check_out'     => ['nullable', 'date'],
-            'check_out_time'=> ['nullable', 'string', 'max:20'],
-            'rent_rate'     => ['nullable', 'numeric', 'min:0'],
+            'phone'         => InputRules::phone(false),
+            'check_in'      => ['nullable', 'date', 'before:+2 years'],
+            'check_in_time' => InputRules::time(),
+            'check_out'     => ['nullable', 'date', 'before:+3 years'],
+            'check_out_time'=> InputRules::time(),
+            'rent_rate'     => InputRules::money(false, 100000),
             'status'        => ['required', Rule::in(['active', 'inactive'])],
         ]);
 

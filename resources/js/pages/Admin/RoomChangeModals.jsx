@@ -1,6 +1,7 @@
 // resources/js/pages/Admin/RoomChangeModals.jsx
 import React, { useState, useEffect } from "react";
 import Modal from "../../components/Modal";
+import { LIMITS } from "../../utils/inputLimits";
 
 const csrf = () =>
     document.querySelector('meta[name="csrf-token"]')?.content ||
@@ -460,7 +461,7 @@ export default function RoomChangeModals() {
                                 Admin Notes
                             </div>
                             <textarea
-                                value={adminNotes}
+                                maxLength={LIMITS.NOTES} value={adminNotes}
                                 onChange={(e) => setAdminNotes(e.target.value)}
                                 placeholder="Add internal notes here..."
                                 className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-[13px] outline-none resize-y min-h-[70px] focus:border-slate-400"
@@ -719,7 +720,7 @@ function RejectRoomChangeModal({
                         <span className="text-rose-500">*</span>
                     </label>
                     <textarea
-                        value={notes}
+                        maxLength={LIMITS.NOTES} value={notes}
                         onChange={(e) => onNotesChange(e.target.value)}
                         placeholder="Explain why this room change is being rejected..."
                         className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-[13px] outline-none resize-y min-h-[90px] focus:border-slate-400"

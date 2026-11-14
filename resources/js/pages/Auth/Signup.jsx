@@ -3,6 +3,7 @@ import React, { useState, useMemo } from 'react';
 import { Head, Link, useForm, router } from '@inertiajs/react';
 import PrivacyModal from './Modals/PrivacyModal';
 import TermsModal from './Modals/TermsModal';
+import { LIMITS } from "../../utils/inputLimits";
 
 export default function Signup() {
     const [showPw, setShowPw]           = useState(false);
@@ -199,7 +200,7 @@ export default function Signup() {
                                     id="signupFullName"
                                     name="fullname"
                                     placeholder="Juan Dela Cruz"
-                                    value={data.fullname}
+                                    maxLength={LIMITS.NAME} value={data.fullname}
                                     onChange={(e) => setData('fullname', e.target.value)}
                                     onBlur={() => handleBlur('fullname')}
                                     autoFocus
@@ -227,7 +228,7 @@ export default function Signup() {
                                         id="signupEmail"
                                         name="email"
                                         placeholder="name@example.com"
-                                        value={data.email}
+                                        maxLength={LIMITS.EMAIL} value={data.email}
                                         onChange={(e) => setData('email', e.target.value)}
                                         onBlur={() => handleBlur('email')}
                                         autoComplete="email"
@@ -246,7 +247,7 @@ export default function Signup() {
                                         id="signupPhone"
                                         name="phone"
                                         placeholder="+63 912 345 6789"
-                                        value={data.phone}
+                                        maxLength={LIMITS.PHONE} value={data.phone}
                                         onChange={(e) => setData('phone', e.target.value)}
                                         onBlur={() => handleBlur('phone')}
                                         autoComplete="tel"
@@ -269,7 +270,7 @@ export default function Signup() {
                                         id="signupPassword"
                                         name="password"
                                         placeholder="Create password"
-                                        value={data.password}
+                                        maxLength={LIMITS.PASSWORD_MAX} value={data.password}
                                         onChange={(e) => setData('password', e.target.value)}
                                         onBlur={() => handleBlur('password')}
                                         autoComplete="new-password"
@@ -296,7 +297,7 @@ export default function Signup() {
                                         id="signupConfirmPassword"
                                         name="password_confirmation"
                                         placeholder="Confirm password"
-                                        value={data.password_confirmation}
+                                        maxLength={LIMITS.PASSWORD_MAX} value={data.password_confirmation}
                                         onChange={(e) => setData('password_confirmation', e.target.value)}
                                         onBlur={() => handleBlur('password_confirmation')}
                                         autoComplete="new-password"

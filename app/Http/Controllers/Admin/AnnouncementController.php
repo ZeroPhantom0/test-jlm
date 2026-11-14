@@ -3,6 +3,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Support\InputRules;
 use App\Events\AnnouncementUpdated;
 use App\Http\Controllers\Controller;
 use App\Models\Announcement;
@@ -23,6 +24,10 @@ class AnnouncementController extends Controller
 
     private function buildPayload(Request $request): array
     {
+        $request->validate([
+            'search'   => InputRules::search(),
+            'priority' => ['nullable', 'string', 'max:20'],
+        ]);
         $filters = $request->only(['search', 'priority']);
 
         $announcements = Announcement::with('author')
@@ -69,8 +74,8 @@ class AnnouncementController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'title'        => ['required', 'string', 'max:255'],
-            'content'      => ['required', 'string'],
+            'title'        => InputRules::text(InputRules::TITLE),
+            'content'      => InputRules::text(InputRules::CONTENT),
             'priority'     => ['nullable', Rule::in(['Normal', 'Important', 'Urgent'])],
             'is_pinned'    => ['nullable', 'boolean'],
             'is_published' => ['nullable', 'boolean'],
@@ -105,8 +110,8 @@ class AnnouncementController extends Controller
     public function update(Request $request, Announcement $announcement)
     {
         $validated = $request->validate([
-            'title'        => ['sometimes', 'string', 'max:255'],
-            'content'      => ['sometimes', 'string'],
+            'title'        => InputRules::optionalText(InputRules::TITLE),
+            'content'      => InputRules::optionalText(InputRules::CONTENT),
             'priority'     => ['sometimes', Rule::in(['Normal', 'Important', 'Urgent'])],
             'is_pinned'    => ['sometimes', 'boolean'],
             'is_published' => ['sometimes', 'boolean'],

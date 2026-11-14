@@ -48,7 +48,7 @@
 
     {{-- Filters --}}
     <div class="flex flex-col md:flex-row gap-4">
-        <input type="text" id="tour-search" placeholder="Search virtual tours..."
+        <input type="text" maxlength="{{ \App\Support\InputRules::SEARCH }}" id="tour-search" placeholder="Search virtual tours..."
                class="flex-1 bg-white border border-slate-200 rounded-[10px] px-4 py-3 text-[13px] outline-none"
                value="{{ request('search') }}">
         <select id="tour-status-filter"

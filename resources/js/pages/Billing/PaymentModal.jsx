@@ -1,6 +1,7 @@
 // resources/js/pages/Billing/PaymentModal.jsx
 import React, { useState, useEffect, useRef } from "react";
 import Modal from "../../components/Modal";
+import { LIMITS } from "../../utils/inputLimits";
 
 const csrf = () =>
     document.querySelector('meta[name="csrf-token"]')?.content ||
@@ -428,7 +429,7 @@ export default function PaymentModal() {
                                         id="reference-number"
                                         name="reference_number"
                                         type="text"
-                                        value={referenceNumber}
+                                        maxLength={LIMITS.REFERENCE_NO} value={referenceNumber}
                                         onChange={(e) => setReferenceNumber(e.target.value)}
                                         placeholder={method === "gcash" ? "e.g. GC-20260323-12345" : "e.g. BT-20260323-78901"}
                                         className="w-full border border-slate-200 rounded-lg px-3.5 py-2.5 text-[13px] outline-none focus:border-blue-400"

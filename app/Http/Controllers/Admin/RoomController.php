@@ -3,6 +3,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Support\InputRules;
 use App\Events\ReservationUpdated;
 use App\Http\Controllers\Controller;
 use App\Models\Room;
@@ -133,17 +134,17 @@ class RoomController extends Controller
     protected function validated(Request $request, ?int $ignoreId = null): array
     {
         return $request->validate([
-            'room_number' => ['required', 'string', 'max:20'],
-            'floor'       => ['required', 'integer', 'min:1'],
+            'room_number' => ['required', 'string', 'max:' . InputRules::ROOM_NUMBER, 'regex:/^[A-Za-z0-9][A-Za-z0-9\- ]*$/'],
+            'floor'       => ['required', 'integer', 'min:1', 'max:' . InputRules::MAX_FLOORS],
             'room_type'   => ['required', Rule::in(['Solo Room', 'Bedspace', 'Barkada Room'])],
-            'description' => ['nullable', 'string'],
-            'total_beds'  => ['required', 'integer', 'min:0'],
-            'upper_deck'  => ['nullable', 'integer', 'min:0'],
-            'lower_deck'  => ['nullable', 'integer', 'min:0'],
-            'daily_rent'  => ['required', 'numeric', 'min:0'],
+            'description' => InputRules::text(InputRules::LONG_TEXT, false),
+            'total_beds'  => ['required', 'integer', 'min:0', 'max:' . InputRules::MAX_BEDS],
+            'upper_deck'  => ['nullable', 'integer', 'min:0', 'max:' . InputRules::MAX_BEDS],
+            'lower_deck'  => ['nullable', 'integer', 'min:0', 'max:' . InputRules::MAX_BEDS],
+            'daily_rent'  => InputRules::money(true, 100000),
             'status'      => ['required', Rule::in(['Available', 'Occupied', 'Reserved'])],
-            'room_bed_id' => ['nullable', 'string', 'max:50'],
-            'tenant_name' => ['nullable', 'string', 'max:120'],
+            'room_bed_id' => InputRules::text(InputRules::ROOM_LABEL, false),
+            'tenant_name' => InputRules::text(120, false),
         ]);
     }
 }

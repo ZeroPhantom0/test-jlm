@@ -1,6 +1,7 @@
 // resources/js/pages/Auth/ForgotPassword.jsx
 import React from 'react';
 import { Head, Link, useForm, usePage } from '@inertiajs/react';
+import { LIMITS } from "../../utils/inputLimits";
 
 export default function ForgotPassword() {
     const { props } = usePage();
@@ -87,7 +88,7 @@ export default function ForgotPassword() {
                                 <input
                                     type="email"
                                     placeholder="name@example.com"
-                                    value={data.email}
+                                    maxLength={LIMITS.EMAIL} value={data.email}
                                     onChange={(e) => setData('email', e.target.value)}
                                     autoComplete="email"
                                     autoFocus

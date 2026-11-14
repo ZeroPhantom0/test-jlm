@@ -108,7 +108,7 @@
                 <div class="relative flex-1">
                     <i
                         class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-[12px] pointer-events-none"></i>
-                    <input id="history-search" type="text" placeholder="Search history..."
+                    <input maxlength="{{ \App\Support\InputRules::SEARCH }}" id="history-search" type="text" placeholder="Search history..."
                         class="w-full h-9 pl-8 pr-3 rounded-lg border border-slate-200 bg-slate-50/60 text-[12.5px] text-slate-800 placeholder-slate-400 outline-none transition focus:border-emerald-400 focus:bg-white focus:ring-2 focus:ring-emerald-100">
                 </div>
                 <select id="history-sort"

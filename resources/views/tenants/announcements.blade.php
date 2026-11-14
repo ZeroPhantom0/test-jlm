@@ -27,7 +27,7 @@
             <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-[12px]"></i>
             <input
                 type="text"
-                id="searchInput"
+                maxlength="{{ \App\Support\InputRules::SEARCH }}" id="searchInput"
                 placeholder="Search announcements..."
                 class="w-full h-9 bg-slate-50 border border-slate-200 py-0 pl-8 pr-3 rounded-lg text-[12.5px] text-slate-800 placeholder-slate-400 outline-none transition focus:border-blue-300 focus:bg-white focus:ring-2 focus:ring-blue-100"
             />

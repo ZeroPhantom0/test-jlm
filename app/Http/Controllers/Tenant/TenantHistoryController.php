@@ -3,6 +3,7 @@
 
 namespace App\Http\Controllers\Tenant;
 
+use App\Support\InputRules;
 use App\Http\Controllers\Controller;
 use App\Models\Invoice;
 use App\Models\MaintenanceRequest;
@@ -92,6 +93,10 @@ class TenantHistoryController extends Controller
         /** @var \App\Models\User $user */
         $user = Auth::user();
 
+        $request->validate([
+            'search'   => InputRules::search(),
+            'category' => ['nullable', 'string', 'max:30'],
+        ]);
         $filters = $request->only(['search', 'category']);
 
         $tenant = Tenant::with(['room', 'approvedReservation'])
@@ -175,6 +180,10 @@ class TenantHistoryController extends Controller
         /** @var \App\Models\User $user */
         $user = Auth::user();
 
+        $request->validate([
+            'search'   => InputRules::search(),
+            'category' => ['nullable', 'string', 'max:30'],
+        ]);
         $filters = $request->only(['search', 'category']);
 
         $tenant = Tenant::with(['room', 'approvedReservation'])

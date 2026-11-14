@@ -48,7 +48,7 @@
                 <div class="relative flex-1">
                     <i
                         class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-[11px] pointer-events-none"></i>
-                    <input type="text" id="res-search" placeholder="Search by name, email, or room..."
+                    <input type="text" maxlength="{{ \App\Support\InputRules::SEARCH }}" id="res-search" placeholder="Search by name, email, or room..."
                         class="w-full h-9 pl-8 pr-3 rounded-lg border border-slate-200 bg-slate-50/60 text-[12.5px] text-slate-800 placeholder-slate-400 outline-none transition focus:border-teal-400 focus:bg-white focus:ring-2 focus:ring-teal-100">
                 </div>
             </div>

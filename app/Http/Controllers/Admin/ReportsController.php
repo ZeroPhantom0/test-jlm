@@ -16,8 +16,17 @@ class ReportsController extends Controller
         protected ReportsService $reports
     ) {}
 
+    private function validateRange(Request $request): void
+    {
+        $request->validate([
+            'range'   => ['nullable', 'in:daily,weekly,monthly,yearly'],
+            'section' => ['nullable', 'in:revenue,occupancy,service,payments,all'],
+        ]);
+    }
+
     public function index(Request $request)
     {
+        $this->validateRange($request);
         $range = $request->query('range', 'monthly');
 
         $summary = $this->reports->summaryMetrics($range);
@@ -54,6 +63,7 @@ class ReportsController extends Controller
      */
     public function exportPdf(Request $request)
     {
+        $this->validateRange($request);
         $range = $request->query('range', 'monthly');
 
         $summary = $this->reports->summaryMetrics($range);
@@ -87,6 +97,7 @@ class ReportsController extends Controller
      */
     public function export(Request $request): StreamedResponse
     {
+        $this->validateRange($request);
         $range   = $request->query('range', 'monthly');
         $section = $request->query('section', 'occupancy');
 

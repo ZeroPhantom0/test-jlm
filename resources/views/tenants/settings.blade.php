@@ -112,7 +112,7 @@
 
                         <div class="mb-5">
                             <label class="block text-[13px] font-semibold text-slate-700 mb-2">Full Name</label>
-                            <input name="name"
+                            <input maxlength="{{ \App\Support\InputRules::NAME }}" name="name"
                                 class="w-full border border-slate-100 bg-slate-50 rounded-lg px-3.5 py-2.5 text-[13.5px] outline-none focus:border-slate-300 focus:bg-white"
                                 value="{{ old('name', $user->name) }}">
                         </div>

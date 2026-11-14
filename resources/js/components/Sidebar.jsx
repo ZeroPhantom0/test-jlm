@@ -1,6 +1,8 @@
 // resources/js/components/Sidebar.jsx
 import React, { useState, useEffect } from "react";
+import { flushSync } from "react-dom";
 import { logout } from "../utils/logout";
+import { readCollapsed, writeCollapsed } from "../utils/shellCache";
 
 const NAV_ITEMS = [
     {
@@ -88,14 +90,16 @@ function SidebarAvatar({ src, name = "User", size = 22 }) {
 }
 
 export default function Sidebar({
-    active = "dashboard",
+    active: activeProp = "dashboard",
     userName = "Tenant",
     userRole = "Tenant",
     avatar = null, // Strictly null by default
     isTenant = false,
     servicesLocked = false, // remaining balance in Billing → no Services
 }) {
-    const [collapsed, setCollapsed] = useState(false);
+    // Highlight the clicked item immediately (the page load follows)
+    const [active, setActive] = useState(activeProp);
+    const [collapsed, setCollapsed] = useState(readCollapsed);
     const [mobileOpen, setMobileOpen] = useState(false);
     const [servicesOpen, setServicesOpen] = useState(
         active.startsWith("services"),
@@ -114,6 +118,43 @@ export default function Sidebar({
     useEffect(() => {
         document.body.style.overflow = mobileOpen ? "hidden" : "";
     }, [mobileOpen]);
+
+    // Remember collapse state across pages so the shell snapshot matches
+    useEffect(() => {
+        writeCollapsed(collapsed);
+    }, [collapsed]);
+
+    // Back/forward cache restore: undo the optimistic highlight from the click
+    useEffect(() => {
+        const onShow = (e) => {
+            if (e.persisted) setActive(activeProp);
+        };
+        window.addEventListener("pageshow", onShow);
+        return () => window.removeEventListener("pageshow", onShow);
+    }, [activeProp]);
+
+    // Close the mobile drawer before the shell is snapshotted on page leave
+    useEffect(() => {
+        const close = () => flushSync(() => setMobileOpen(false));
+        window.addEventListener("shell:before-snapshot", close);
+        return () => window.removeEventListener("shell:before-snapshot", close);
+    }, []);
+
+    // Optimistically mark the clicked nav item active and close the mobile
+    // drawer, so the UI responds instantly while the next page loads.
+    const handleNavClick = (e) => {
+        if (e.defaultPrevented || e.button !== 0) return;
+        if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+        const link = e.target.closest("a[href]");
+        if (!link) return;
+        const href = link.getAttribute("href");
+        const key =
+            SERVICES_SUB.find((s) => s.href === href)?.key ??
+            NAV_ITEMS.find((i) => i.href === href)?.key;
+        if (!key) return;
+        setActive(key);
+        setMobileOpen(false);
+    };
 
     const isServicesActive = active.startsWith("services");
 
@@ -222,7 +263,7 @@ export default function Sidebar({
                 </div>
 
                 {/* Nav */}
-                <ul className="flex-1 overflow-y-auto px-3 space-y-0.75 scrollbar-thin scrollbar-thumb-white/20">
+                <ul onClick={handleNavClick} className="flex-1 overflow-y-auto px-3 space-y-0.75 scrollbar-thin scrollbar-thumb-white/20">
                     {visibleItems.map((item) => {
                         const isActive =
                             active === item.key ||

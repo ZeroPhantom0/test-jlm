@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import Modal from '../../components/Modal';
+import { LIMITS } from "../../utils/inputLimits";
 
 const csrf = () => 
     document.querySelector('#admin-scenes-modals')?.dataset?.csrf || 
@@ -182,7 +183,7 @@ export default function ScenesModals() {
                                 <label className="block text-[12.5px] font-semibold text-slate-700 mb-1.5">Scene Title *</label>
                                 <input
                                     type="text"
-                                    value={form.title}
+                                    maxLength={LIMITS.TITLE} value={form.title}
                                     onChange={(e) => setForm(f => ({...f, title: e.target.value}))}
                                     className="w-full border border-slate-200 rounded-lg px-3.5 py-2.5 text-[13px] outline-none focus:border-slate-400"
                                 />
@@ -191,7 +192,7 @@ export default function ScenesModals() {
                             <div>
                                 <label className="block text-[12.5px] font-semibold text-slate-700 mb-1.5">Description</label>
                                 <textarea
-                                    value={form.description}
+                                    maxLength={LIMITS.LONG_TEXT} value={form.description}
                                     onChange={(e) => setForm(f => ({...f, description: e.target.value}))}
                                     rows={2}
                                     className="w-full border border-slate-200 rounded-lg px-3.5 py-2.5 text-[13px] outline-none focus:border-slate-400 resize-none"
@@ -204,7 +205,7 @@ export default function ScenesModals() {
                                     <input
                                         type="number"
                                         step="any"
-                                        value={form.default_yaw}
+                                        min={-360} max={360} value={form.default_yaw}
                                         onChange={(e) => setForm(f => ({...f, default_yaw: e.target.value}))}
                                         className="w-full border border-slate-200 rounded-lg px-3.5 py-2.5 text-[13px] outline-none focus:border-slate-400"
                                     />
@@ -214,7 +215,7 @@ export default function ScenesModals() {
                                     <input
                                         type="number"
                                         step="any"
-                                        value={form.default_pitch}
+                                        min={-90} max={90} value={form.default_pitch}
                                         onChange={(e) => setForm(f => ({...f, default_pitch: e.target.value}))}
                                         className="w-full border border-slate-200 rounded-lg px-3.5 py-2.5 text-[13px] outline-none focus:border-slate-400"
                                     />
@@ -224,7 +225,7 @@ export default function ScenesModals() {
                             <div>
                                 <label className="block text-[12.5px] font-semibold text-slate-700 mb-1.5">Auto-Play Audio Text</label>
                                 <textarea
-                                    value={form.auto_audio_text}
+                                    maxLength={LIMITS.LONG_TEXT} value={form.auto_audio_text}
                                     onChange={(e) => setForm(f => ({...f, auto_audio_text: e.target.value}))}
                                     rows={3}
                                     className="w-full border border-slate-200 rounded-lg px-3.5 py-2.5 text-[13px] outline-none focus:border-slate-400 resize-none"

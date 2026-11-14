@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Support\InputRules;
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use Illuminate\Http\Request;
@@ -14,8 +15,22 @@ class AuditLogController extends Controller
      * but we also pass the first page server-side for instant paint /
      * no-JS fallback.
      */
+    /** Search / filter query params shared by every endpoint below. */
+    private function validateFilters(Request $request): void
+    {
+        $request->validate([
+            'q'      => InputRules::search(),
+            'status' => ['nullable', 'string', 'max:30'],
+            'module' => ['nullable', 'string', 'max:50'],
+            'from'   => ['nullable', 'date'],
+            'to'     => ['nullable', 'date', 'after_or_equal:from'],
+            'order'  => ['nullable', 'in:newest,oldest'],
+        ]);
+    }
+
     public function index(Request $request)
     {
+        $this->validateFilters($request);
         $order = $request->input('order', 'newest');
 
         $logs = AuditLog::query()
@@ -42,6 +57,7 @@ class AuditLogController extends Controller
      */
     public function data(Request $request)
     {
+        $this->validateFilters($request);
         $order = $request->input('order', 'newest');
 
         $query = AuditLog::query()
@@ -72,6 +88,7 @@ class AuditLogController extends Controller
 
     public function export(Request $request): StreamedResponse
     {
+        $this->validateFilters($request);
         $query = AuditLog::query()
             ->search($request->input('q'))
             ->status($request->input('status'))

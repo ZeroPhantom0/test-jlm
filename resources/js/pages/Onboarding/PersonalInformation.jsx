@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Head, Link, useForm } from '@inertiajs/react';
 import CameraCaptureModal from '../../components/CameraCaptureModal';
+import { LIMITS } from "../../utils/inputLimits";
 
 const DRAFT_KEY = 'jlm_onboarding_personal_draft';
 
@@ -229,7 +230,7 @@ export default function PersonalInformation({ user, personalInfo }) {
                                     id="fullName"
                                     name="fullname"
                                     placeholder="Juan Dela Cruz"
-                                    value={data.fullname}
+                                    maxLength={LIMITS.NAME} value={data.fullname}
                                     onChange={(e) => setData('fullname', e.target.value)}
                                 />
                             </div>
@@ -247,7 +248,7 @@ export default function PersonalInformation({ user, personalInfo }) {
                                         id="email"
                                         name="email"
                                         placeholder="juan@example.com"
-                                        value={data.email}
+                                        maxLength={LIMITS.EMAIL} value={data.email}
                                         onChange={(e) => setData('email', e.target.value)}
                                     />
                                 </div>
@@ -262,7 +263,7 @@ export default function PersonalInformation({ user, personalInfo }) {
                                         id="contactNumber"
                                         name="contact_number"
                                         placeholder="+63 912 345 6789"
-                                        value={data.contact_number}
+                                        maxLength={LIMITS.PHONE} value={data.contact_number}
                                         onChange={(e) => setData('contact_number', e.target.value)}
                                     />
                                 </div>
@@ -279,7 +280,7 @@ export default function PersonalInformation({ user, personalInfo }) {
                                     id="currentAddress"
                                     name="current_address"
                                     placeholder="123 Street Name, Barangay, City, Province"
-                                    value={data.current_address}
+                                    maxLength={LIMITS.ADDRESS} value={data.current_address}
                                     onChange={(e) => setData('current_address', e.target.value)}
                                 />
                             </div>
@@ -297,7 +298,7 @@ export default function PersonalInformation({ user, personalInfo }) {
                                             id="emergencyName"
                                             name="emergency_name"
                                             placeholder="Maria Dela Cruz"
-                                            value={data.emergency_name}
+                                            maxLength={LIMITS.NAME} value={data.emergency_name}
                                             onChange={(e) => setData('emergency_name', e.target.value)}
                                         />
                                     </div>
@@ -311,7 +312,7 @@ export default function PersonalInformation({ user, personalInfo }) {
                                             id="emergencyNumber"
                                             name="emergency_number"
                                             placeholder="+63 998 765 4321"
-                                            value={data.emergency_number}
+                                            maxLength={LIMITS.PHONE} value={data.emergency_number}
                                             onChange={(e) => setData('emergency_number', e.target.value)}
                                         />
                                     </div>

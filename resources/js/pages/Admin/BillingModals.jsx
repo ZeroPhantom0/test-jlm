@@ -1,6 +1,7 @@
 // resources/js/pages/Admin/BillingModals.jsx
 import React, { useState, useEffect } from "react";
 import Modal from "../../components/Modal";
+import { LIMITS } from "../../utils/inputLimits";
 
 const csrf = () =>
     document.querySelector('meta[name="csrf-token"]')?.content ||
@@ -36,7 +37,7 @@ const parseMoney = (str) => {
 const willBePartial = (invoice) => {
     if (!invoice) return false;
     const total = parseMoney(invoice.total);
-    const paid = parseMoney(invoice.paid);
+    const paid = parseMoney(invoice.paid_after ?? invoice.paid);
     if (total <= 0) return false;
     return paid + 0.005 < total;
 };
@@ -44,7 +45,7 @@ const willBePartial = (invoice) => {
 const projectedRemaining = (invoice) => {
     if (!invoice) return 0;
     const total = parseMoney(invoice.total);
-    const paid = parseMoney(invoice.paid);
+    const paid = parseMoney(invoice.paid_after ?? invoice.paid);
     return Math.max(0, total - paid);
 };
 
@@ -480,10 +481,12 @@ export default function BillingModals() {
                                 </div>
                                 <div className="flex justify-between text-xs">
                                     <span className="text-slate-500">
-                                        Amount Paid
+                                        {data.submitted
+                                            ? "Amount Submitted"
+                                            : "Amount Paid"}
                                     </span>
                                     <span className="text-slate-900 font-bold">
-                                        {data.paid}
+                                        {data.submitted || data.paid}
                                     </span>
                                 </div>
                                 <div className="flex justify-between text-xs">
@@ -599,12 +602,24 @@ export default function BillingModals() {
                             </div>
                             <div className="flex justify-between text-xs">
                                 <span className="text-slate-500">
-                                    Amount Paid
+                                    Amount Submitted
                                 </span>
                                 <span className="font-bold text-emerald-600">
-                                    {invoice.paid}
+                                    {invoice.submitted || invoice.paid}
                                 </span>
                             </div>
+                            {invoice.paid_after &&
+                                invoice.paid_after !==
+                                    (invoice.submitted || invoice.paid) && (
+                                    <div className="flex justify-between text-xs">
+                                        <span className="text-slate-500">
+                                            Total Paid After Verification
+                                        </span>
+                                        <span className="font-bold text-slate-900">
+                                            {invoice.paid_after}
+                                        </span>
+                                    </div>
+                                )}
                             {verifyWillBePartial && (
                                 <div className="flex justify-between text-xs border-t border-slate-200 pt-2 mt-1">
                                     <span className="text-slate-500">
@@ -709,7 +724,7 @@ export default function BillingModals() {
                             <div className="flex justify-between text-xs">
                                 <span className="text-slate-500">Amount</span>
                                 <span className="font-bold text-slate-900">
-                                    {invoice.paid}
+                                    {invoice.submitted || invoice.paid}
                                 </span>
                             </div>
                         </div>
@@ -718,7 +733,7 @@ export default function BillingModals() {
                             <span className="text-rose-500">*</span>
                         </label>
                         <textarea
-                            value={rejectNotes}
+                            maxLength={LIMITS.NOTES} value={rejectNotes}
                             onChange={(e) => setRejectNotes(e.target.value)}
                             placeholder="Explain why this payment proof is being rejected..."
                             className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-[13px] outline-none resize-y min-h-[90px] focus:border-slate-400"
@@ -831,7 +846,7 @@ function EditInvoiceModal({ data, onClose, onSave, saving }) {
                             </label>
                             <input
                                 type={type}
-                                value={form[key] ?? ""}
+                                maxLength={key === "tenant_name" ? 120 : LIMITS.ROOM_LABEL} value={form[key] ?? ""}
                                 onChange={(e) =>
                                     updateField(key, e.target.value)
                                 }
@@ -845,7 +860,7 @@ function EditInvoiceModal({ data, onClose, onSave, saving }) {
                         </label>
                         <input
                             type="text"
-                            value={form.description}
+                            maxLength={LIMITS.SHORT_TEXT} value={form.description}
                             onChange={(e) =>
                                 updateField("description", e.target.value)
                             }
@@ -858,7 +873,7 @@ function EditInvoiceModal({ data, onClose, onSave, saving }) {
                         </label>
                         <input
                             type="text"
-                            value={form.rate_per_day}
+                            maxLength={9} value={form.rate_per_day}
                             onChange={(e) =>
                                 updateField(
                                     "rate_per_day",
@@ -874,7 +889,7 @@ function EditInvoiceModal({ data, onClose, onSave, saving }) {
                         </label>
                         <input
                             type="text"
-                            value={form.days}
+                            maxLength={4} value={form.days}
                             onChange={(e) =>
                                 updateField(
                                     "days",
@@ -895,7 +910,7 @@ function EditInvoiceModal({ data, onClose, onSave, saving }) {
                         </label>
                         <input
                             type="text"
-                            value={form.amount_paid}
+                            maxLength={10} value={form.amount_paid}
                             disabled={isPending}
                             onChange={(e) =>
                                 updateField(

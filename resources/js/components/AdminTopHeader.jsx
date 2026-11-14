@@ -1,6 +1,8 @@
 // resources/js/components/AdminTopHeader.jsx
 import React, { useState, useEffect, useRef } from "react";
+import { flushSync } from "react-dom";
 import { logout } from "../utils/logout";
+import { readShellCache, writeShellCache } from "../utils/shellCache";
 
 const STORAGE_KEY = "admin.dismissedNotifications";
 const MAX_VISIBLE = 5;
@@ -94,7 +96,10 @@ export default function AdminTopHeader({
     const [notifOpen, setNotifOpen] = useState(false);
 
     // Store all fetched notifications from the server
-    const [rawNotifications, setRawNotifications] = useState([]);
+    // Seeded from the last page so the bell badge doesn't blink on navigation
+    const [rawNotifications, setRawNotifications] = useState(() =>
+        readShellCache("notifications", []),
+    );
 
     // Keep track of locally read IDs and dismissed IDs
     const [locallyRead, setLocallyRead] = useState(new Set());
@@ -124,6 +129,18 @@ export default function AdminTopHeader({
 
     const fetchingRef = useRef(false);
 
+    // Close menus right before the shell is snapshotted on page leave,
+    // so they don't flash open on the next page.
+    useEffect(() => {
+        const close = () =>
+            flushSync(() => {
+                setNotifOpen(false);
+                setDropdownOpen(false);
+            });
+        window.addEventListener("shell:before-snapshot", close);
+        return () => window.removeEventListener("shell:before-snapshot", close);
+    }, []);
+
     const fetchNotifications = async () => {
         if (fetchingRef.current) return; // skip if already in flight
         fetchingRef.current = true;
@@ -144,6 +161,7 @@ export default function AdminTopHeader({
                 (n) => !isHiddenNotification(n),
             );
             setRawNotifications(filtered);
+            writeShellCache("notifications", filtered);
         } catch (err) {
             console.error(err);
         } finally {
@@ -313,7 +331,7 @@ export default function AdminTopHeader({
                         <i className="fa-solid fa-bars"></i>
                     </button>
                 )}
-                <h1 className="text-[20px] md:text-[22px] font-bold text-slate-900">
+                <h1 data-shell-title className="text-[20px] md:text-[22px] font-bold text-slate-900">
                     {title}
                 </h1>
             </div>

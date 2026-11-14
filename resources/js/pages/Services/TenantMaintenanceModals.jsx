@@ -1,6 +1,7 @@
 // resources/js/pages/Services/TenantMaintenanceModals.jsx
 import React, { useState, useEffect } from 'react';
 import Modal from '../../components/Modal';
+import { LIMITS } from "../../utils/inputLimits";
 
 const csrf = () =>
     document.querySelector('meta[name="csrf-token"]')?.content ||
@@ -214,7 +215,7 @@ export default function TenantMaintenanceModals() {
                             </label>
                             <input
                                 type="text"
-                                value={form.title}
+                                maxLength={LIMITS.TITLE} value={form.title}
                                 onChange={(e) => updateField('title', e.target.value)}
                                 placeholder="e.g. Leaky Faucet in Kitchen"
                                 className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-[13px] outline-none focus:border-blue-400"
@@ -255,7 +256,7 @@ export default function TenantMaintenanceModals() {
                                 Description <span className="text-rose-500">*</span>
                             </label>
                             <textarea
-                                value={form.description}
+                                maxLength={LIMITS.LONG_TEXT} value={form.description}
                                 onChange={(e) => updateField('description', e.target.value)}
                                 placeholder="Describe the problem in detail..."
                                 className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-[13px] outline-none resize-y min-h-[80px]"

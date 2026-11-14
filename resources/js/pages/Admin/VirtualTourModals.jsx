@@ -1,6 +1,7 @@
 // resources/js/pages/Admin/VirtualTourModals.jsx
 import React, { useState, useEffect, useRef } from "react";
 import Modal from "../../components/Modal";
+import { LIMITS } from "../../utils/inputLimits";
 
 const csrf = () =>
     document.querySelector('meta[name="csrf-token"]')?.content || "";
@@ -383,7 +384,7 @@ export default function VirtualTourModals() {
                                 </label>
                                 <input
                                     type="text"
-                                    value={form.title}
+                                    maxLength={LIMITS.TITLE} value={form.title}
                                     onChange={(e) => updateField("title", e.target.value)}
                                     placeholder="e.g. Standard Solo Room"
                                     className={`w-full border rounded-lg px-3 py-2.5 text-[13px] outline-none ${
@@ -402,7 +403,7 @@ export default function VirtualTourModals() {
                                     Description
                                 </label>
                                 <textarea
-                                    value={form.description}
+                                    maxLength={LIMITS.LONG_TEXT} value={form.description}
                                     onChange={(e) => updateField("description", e.target.value)}
                                     rows={3}
                                     placeholder="Brief details about this virtual tour..."

@@ -3,6 +3,7 @@
 
 namespace App\Http\Controllers\Tenant;
 
+use App\Support\InputRules;
 use App\Http\Controllers\Controller;
 use App\Models\Announcement;
 use App\Models\Invoice;
@@ -73,10 +74,10 @@ class TenantDashboardController extends Controller
         session()->save();
 
         $validated = $request->validate([
-            'invoice_ref'      => ['required', 'string'],
+            'invoice_ref'      => InputRules::reference(),
             'payment_method'   => ['required', 'in:gcash,bank,counter,GCash,Bank Transfer,Over The Counter'],
-            'reference_number' => ['nullable', 'string', 'max:100'],
-            'receipt'          => ['nullable', 'file', 'image', 'mimes:jpg,jpeg,png,webp,gif,bmp', 'max:10240'],
+            'reference_number' => InputRules::reference(false),
+            'receipt'          => InputRules::image(false),
         ]);
 
         $user   = Auth::user();
@@ -118,14 +119,15 @@ class TenantDashboardController extends Controller
             }
 
             if ($invoice) {
-                $newAmountPaid = (float) $invoice->amount_paid + (float) $invoice->balance;
-
+                // The tenant pays the remaining balance. It stays in
+                // pending_amount until the admin verifies it — amount_paid
+                // only ever holds verified money (no double counting).
                 $invoice->update([
                     'payment_method' => $method,
                     'receipt_no'     => $validated['reference_number'] ?? $invoice->receipt_no,
                     'receipt_path'   => $receiptPath ?? $invoice->receipt_path,
                     'status'         => 'Pending',
-                    'amount_paid'    => $newAmountPaid,
+                    'pending_amount' => (float) $invoice->balance,
                 ]);
             } else {
                 $invoice = Invoice::create([
@@ -137,6 +139,7 @@ class TenantDashboardController extends Controller
                     'description'    => 'Reservation balance – ' . $reservation->reference_no,
                     'total_amount'   => $reservation->remaining,
                     'amount_paid'    => 0,
+                    'pending_amount' => $reservation->remaining,
                     'balance'        => $reservation->remaining,
                     'due_date'       => $reservation->check_in,
                     'payment_method' => $method,
@@ -167,7 +170,7 @@ class TenantDashboardController extends Controller
 
     public function cancelPayment(Request $request)
     {
-        $validated = $request->validate(['invoice_ref' => ['required', 'string']]);
+        $validated = $request->validate(['invoice_ref' => InputRules::reference()]);
 
         $user   = Auth::user();
         $tenant = Tenant::where('user_id', $user->id)->firstOrFail();
@@ -185,14 +188,9 @@ class TenantDashboardController extends Controller
             Storage::disk('public')->delete($invoice->receipt_path);
         }
 
-        $revertedAmount = max(0, (float) $invoice->amount_paid - (float) $invoice->balance);
-        $revertStatus   = $revertedAmount > 0 ? 'Partial' : 'Unpaid';
-
-        $invoice->update([
-            'status'       => $revertStatus,
+        $invoice->update(\App\Services\BillingService::revertSubmission($invoice) + [
             'receipt_path' => null,
             'receipt_no'   => null,
-            'amount_paid'  => $revertedAmount,
         ]);
 
         event(new \App\Events\InvoiceUpdated('cancelled', $invoice->id));
@@ -202,7 +200,7 @@ class TenantDashboardController extends Controller
 
     public function parseReceipt(Request $request)
     {
-        $request->validate(['receipt' => 'required|image|max:5120']);
+        $request->validate(['receipt' => InputRules::image(true)]);
 
         try {
             $file = $request->file('receipt');

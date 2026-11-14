@@ -1,6 +1,7 @@
 // resources/js/pages/Auth/ResetPassword.jsx
 import React, { useState } from 'react';
 import { Head, Link, useForm, usePage } from '@inertiajs/react';
+import { LIMITS } from "../../utils/inputLimits";
 
 export default function ResetPassword({ token, email: initialEmail }) {
     const { props } = usePage();
@@ -89,7 +90,7 @@ export default function ResetPassword({ token, email: initialEmail }) {
                                 <input
                                     type={showPassword ? 'text' : 'password'}
                                     placeholder="Enter new password"
-                                    value={data.password}
+                                    maxLength={LIMITS.PASSWORD_MAX} value={data.password}
                                     onChange={(e) => setData('password', e.target.value)}
                                     autoComplete="new-password"
                                     autoFocus
@@ -120,7 +121,7 @@ export default function ResetPassword({ token, email: initialEmail }) {
                                 <input
                                     type={showConfirm ? 'text' : 'password'}
                                     placeholder="Confirm new password"
-                                    value={data.password_confirmation}
+                                    maxLength={LIMITS.PASSWORD_MAX} value={data.password_confirmation}
                                     onChange={(e) => setData('password_confirmation', e.target.value)}
                                     autoComplete="new-password"
                                     required

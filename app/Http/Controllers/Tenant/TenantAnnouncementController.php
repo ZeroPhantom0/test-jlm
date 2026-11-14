@@ -3,6 +3,7 @@
 
 namespace App\Http\Controllers\Tenant;
 
+use App\Support\InputRules;
 use App\Http\Controllers\Controller;
 use App\Models\Announcement;
 use Illuminate\Http\Request;
@@ -25,6 +26,10 @@ class TenantAnnouncementController extends Controller
 
     private function buildPayload(Request $request): array
     {
+        $request->validate([
+            'search'   => InputRules::search(),
+            'priority' => ['nullable', 'string', 'max:20'],
+        ]);
         $filters = $request->only(['search', 'priority']);
 
         $announcements = Announcement::with('author')

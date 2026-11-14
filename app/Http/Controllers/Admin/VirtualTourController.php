@@ -3,6 +3,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Support\InputRules;
 use App\Events\ReservationUpdated; // <-- Added
 use App\Http\Controllers\Controller;
 use App\Models\Room;
@@ -16,6 +17,10 @@ class VirtualTourController extends Controller
 {
     public function index(Request $request)
     {
+        $request->validate([
+            'search' => InputRules::search(),
+            'status' => ['nullable', 'string', 'max:30'],
+        ]);
         $filters = $request->only(['search', 'status']);
 
         $tours = VirtualTour::with('room:id,room_number,total_beds,daily_rent')
@@ -44,11 +49,11 @@ class VirtualTourController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'room_id'     => 'required|exists:rooms,id|unique:virtual_tours,room_id',
-            'title'       => 'required|string|max:255',
-            'description' => 'nullable|string',
+            'room_id'     => ['required', 'integer', 'exists:rooms,id', 'unique:virtual_tours,room_id'],
+            'title'       => InputRules::text(InputRules::TITLE),
+            'description' => InputRules::text(InputRules::LONG_TEXT, false),
             'status'      => ['required', Rule::in(['Draft', 'Published', 'Archived'])],
-            'thumbnail'   => 'nullable|image|mimes:jpeg,png,jpg,webp|max:10240',
+            'thumbnail'   => InputRules::image(false),
         ]);
 
         if ($request->hasFile('thumbnail')) {
@@ -86,10 +91,10 @@ class VirtualTourController extends Controller
                 'exists:rooms,id',
                 Rule::unique('virtual_tours', 'room_id')->ignore($virtualTour->id),
             ],
-            'title'       => 'required|string|max:255',
-            'description' => 'nullable|string',
+            'title'       => InputRules::text(InputRules::TITLE),
+            'description' => InputRules::text(InputRules::LONG_TEXT, false),
             'status'      => ['required', Rule::in(['Draft', 'Published', 'Archived'])],
-            'thumbnail'   => 'nullable|image|mimes:jpeg,png,jpg,webp|max:10240',
+            'thumbnail'   => InputRules::image(false),
         ]);
 
         // Capture the old thumbnail BEFORE replacing it so we can delete it after

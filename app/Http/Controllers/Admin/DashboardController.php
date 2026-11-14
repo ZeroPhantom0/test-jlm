@@ -36,6 +36,10 @@ class DashboardController extends Controller
     private function buildPayload(Request $request): array
     {
         // 1. Get selected date (default to today)
+        $request->validate([
+            'date'      => ['nullable', 'date_format:Y-m-d'],
+            'timeframe' => ['nullable', 'in:weekly,monthly,semi-annual,yearly'],
+        ]);
         $selectedDateStr = $request->query('date', now()->toDateString());
         $selectedDate = Carbon::parse($selectedDateStr);
 

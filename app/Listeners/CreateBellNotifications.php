@@ -119,7 +119,10 @@ class CreateBellNotifications
         if (! $inv) return;
 
         $isServiceFee = (bool) preg_match('/#(RC|SE)-\d+/', (string) $inv->description);
-        $amount = '₱' . number_format((float) $inv->amount_paid, 2);
+        // A submission awaiting verification shows what the tenant actually sent
+        $amount = '₱' . number_format($inv->status === 'Pending'
+            ? \App\Services\BillingService::submittedAmount($inv)
+            : (float) $inv->amount_paid, 2);
 
         if (Notifier::actorIsTenant()) {
             // Room change / stay extension payments arrive with the request

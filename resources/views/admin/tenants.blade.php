@@ -39,7 +39,7 @@
             <div class="flex items-center gap-4 mb-5 flex-wrap">
                 <div class="flex-1 bg-white border border-slate-300 rounded-[10px] px-3.5 py-1.5 flex items-center gap-2.5">
                     <i class="fa-solid fa-magnifying-glass text-slate-400 text-[13px]"></i>
-                    <input type="text" id="tenant-search" placeholder="Search name or email..." class="w-full text-[13px] outline-none bg-transparent">
+                    <input type="text" maxlength="{{ \App\Support\InputRules::SEARCH }}" id="tenant-search" placeholder="Search name or email..." class="w-full text-[13px] outline-none bg-transparent">
                 </div>
                 <select id="tenant-status-filter" class="bg-white border border-slate-300 rounded-[10px] px-3.5 py-1.5 text-[13px] text-slate-700 outline-none cursor-pointer min-w-[160px]">
                     <option value="">All Statuses</option>

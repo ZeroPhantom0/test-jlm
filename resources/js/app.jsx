@@ -58,6 +58,7 @@ import initTablePagers from "./utils/tablePager";
 import initLivePages from "./utils/livePage";
 import initSettingsForms from "./utils/settingsForms";
 import initSessionTimeout from "./utils/sessionTimeout";
+import { initShellSnapshots } from "./utils/shellCache";
 
 import AdminSidebar from "./components/AdminSidebar";
 import Sidebar from "./components/Sidebar";
@@ -300,6 +301,9 @@ function mountReact() {
 
     // Admin idle-session timeout (no-op unless the admin layout enables it)
     initSessionTimeout();
+
+    // Snapshot sidebar/header on page leave so the next page paints them instantly
+    initShellSnapshots();
 }
 
 if (document.readyState === "loading") {

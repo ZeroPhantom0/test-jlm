@@ -106,7 +106,7 @@
                 <div
                     class="flex-1 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 flex items-center gap-2 transition focus-within:border-slate-300 focus-within:bg-white">
                     <i class="fa-solid fa-magnifying-glass text-slate-400 text-[12px]"></i>
-                    <input id="history-search" type="text" value="{{ $filters['search'] ?? '' }}"
+                    <input maxlength="{{ \App\Support\InputRules::SEARCH }}" id="history-search" type="text" value="{{ $filters['search'] ?? '' }}"
                         placeholder="Search by tenant, room, or description..."
                         class="w-full text-[13px] outline-none bg-transparent">
                 </div>

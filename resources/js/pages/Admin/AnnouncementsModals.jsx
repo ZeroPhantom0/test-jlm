@@ -1,6 +1,7 @@
 // resources/js/pages/Admin/AnnouncementsModals.jsx
 import React, { useState, useEffect, useRef } from 'react';
 import Modal from '../../components/Modal';
+import { LIMITS } from "../../utils/inputLimits";
 
 const csrf = () => {
     const meta = document.querySelector('meta[name="csrf-token"]')?.content;
@@ -312,7 +313,7 @@ export default function AnnouncementsModals() {
                             <label className="block text-[13.5px] font-semibold text-slate-700 mb-1.5">Title</label>
                             <input
                                 type="text"
-                                value={form.title}
+                                maxLength={LIMITS.TITLE} value={form.title}
                                 onChange={(e) => updateField('title', e.target.value)}
                                 placeholder="Announcement title..."
                                 className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-[13.5px] outline-none focus:border-slate-400"
@@ -322,7 +323,7 @@ export default function AnnouncementsModals() {
                         <div>
                             <label className="block text-[13.5px] font-semibold text-slate-700 mb-1.5">Message Content</label>
                             <textarea
-                                value={form.content}
+                                maxLength={LIMITS.CONTENT} value={form.content}
                                 onChange={(e) => updateField('content', e.target.value)}
                                 placeholder="Write your announcement details here..."
                                 className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-[13.5px] outline-none resize-y min-h-[110px] focus:border-slate-400"

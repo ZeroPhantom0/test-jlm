@@ -77,7 +77,9 @@
     <div class="flex-1 flex flex-col min-w-0 h-full overflow-y-auto relative">
 
         {{-- TOP HEADER (React) --}}
-        <div data-react="admin-top-header" data-props='{!! $headerProps !!}' class="sticky top-0 z-[100]"></div>
+        <div id="admin-header-root" data-react="admin-top-header" data-props='{!! $headerProps !!}' class="sticky top-0 z-[100]"></div>
+
+        @include('layouts.partials.shell-restore', ['ids' => ['admin-sidebar-root', 'admin-header-root']])
 
         <main class="flex-1">
             @yield('content')
