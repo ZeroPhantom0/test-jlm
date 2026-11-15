@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import Modal from "../../components/Modal";
 import { LIMITS } from "../../utils/inputLimits";
+import { scanReceipt } from "../../utils/receiptOcr";
 
 const csrf = () =>
     document.querySelector('meta[name="csrf-token"]')?.content ||
@@ -474,42 +475,13 @@ export default function ReservationsModal() {
         updateField("receipt", file);
         setNeedsReceiptReupload(false);
         setOcrError("");
-
         setOcrLoading(true);
-        const fd = new FormData();
-        fd.append("receipt", file);
 
-        try {
-            const res = await fetch("/tenants/reservations/parse-receipt", {
-                method: "POST",
-                headers: {
-                    Accept: "application/json",
-                    "X-CSRF-TOKEN": csrf(),
-                },
-                body: fd,
-            });
-
-            const data = await res.json().catch(() => ({}));
-
-            if (res.ok && data.success && data.reference_no) {
-                updateField("reference_no", data.reference_no);
-            } else if (res.ok && data.success && !data.reference_no) {
-                setOcrError(
-                    "Reference number not detected. Please enter it manually.",
-                );
-            } else {
-                setOcrError(
-                    "Could not scan receipt. Please enter reference number manually.",
-                );
-            }
-        } catch (err) {
-            console.error("OCR request failed", err);
-            setOcrError(
-                "OCR service unavailable. Please enter reference number manually.",
-            );
-        } finally {
-            setOcrLoading(false);
-        }
+        // Shared scanner: compresses the photo, reads the reference number
+        const { reference, error } = await scanReceipt(file);
+        if (reference) updateField("reference_no", reference);
+        setOcrError(reference ? "" : error);
+        setOcrLoading(false);
     };
 
     const confirmCancelReservation = async () => {
@@ -677,6 +649,13 @@ export default function ReservationsModal() {
             setNeedsReceiptReupload(false);
             setOcrLoading(false);
             setOcrError("");
+
+            // Let other widgets (dashboard room browser) celebrate / refresh
+            window.dispatchEvent(
+                new CustomEvent("reservation:submitted", {
+                    detail: { roomId: room.id, roomNumber: room.num, reference: data.reference_no ?? null },
+                }),
+            );
 
             setTimeout(() => {
                 window.dispatchEvent(new Event("reservation:refresh"));

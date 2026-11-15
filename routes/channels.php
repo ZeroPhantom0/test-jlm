@@ -10,6 +10,7 @@ Broadcast::channel('admin.billing',       fn ($user) => $user && $user->isAdmin(
 Broadcast::channel('admin.services',      fn ($user) => $user && $user->isAdmin());
 Broadcast::channel('admin.announcements', fn ($user) => $user && $user->isAdmin());
 Broadcast::channel('admin.messages',      fn ($user) => $user && $user->isAdmin());
+Broadcast::channel('admin.tenants',       fn ($user) => $user && $user->isAdmin());
 
 // ── Tenant-wide channels ──
 Broadcast::channel('tenant.reservations',  fn ($user) => $user && $user->isTenant());
@@ -31,6 +32,11 @@ Broadcast::channel('tenant.{tenantId}.messages', function ($user, int $tenantId)
     }
 
     return (int) $tenant->id === $tenantId;
+});
+
+// ── Per-user bell channel: "a new notification was stored for you" ──
+Broadcast::channel('user.{userId}', function ($user, int $userId) {
+    return $user && (int) $user->id === $userId;
 });
 
 // ── Per-user fallback channel (NEW) ──

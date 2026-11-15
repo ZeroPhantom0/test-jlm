@@ -12,6 +12,21 @@ class User extends Authenticatable
 {
     use HasFactory, Notifiable;
 
+    /** Live: tenant name/email/phone/photo changes refresh Admin → Tenants (not logins/tokens) */
+    protected static function booted(): void
+    {
+        static::saved(function (self $u) {
+            if ($u->role === 'tenant' && ($u->wasRecentlyCreated || $u->wasChanged(['name', 'email', 'phone', 'profile_picture', 'role']))) {
+                \App\Events\TenantsUpdated::dispatchOnce($u->id);
+            }
+        });
+        static::deleted(function (self $u) {
+            if ($u->role === 'tenant') {
+                \App\Events\TenantsUpdated::dispatchOnce($u->id);
+            }
+        });
+    }
+
     protected $fillable = [
         'name',
         'email',

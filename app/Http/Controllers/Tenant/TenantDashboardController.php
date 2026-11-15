@@ -12,10 +12,12 @@ use App\Models\Reservation;
 use App\Models\RoomChangeRequest;
 use App\Models\StayExtensionRequest;
 use App\Models\Tenant;
+use App\Services\TenantDashboardService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Http;
 
 class TenantDashboardController extends Controller
@@ -23,46 +25,37 @@ class TenantDashboardController extends Controller
     // -------------------------------------------------------
     // GET /tenants/dashboard
     // -------------------------------------------------------
-    public function index()
+    public function index(Request $request, TenantDashboardService $dashboard)
     {
-        $user = Auth::user();
-        $data = $this->buildDashboardData($user);
+        // Bad filter params in a shared/bookmarked URL shouldn't break the
+        // dashboard — fall back to defaults instead of redirecting.
+        $filters = Validator::make($request->query(), $dashboard->roomFilterRules());
 
-        return view('tenants.dashboard', array_merge($data, [
-            'user' => $user,
-        ]));
+        return view('tenants.dashboard', [
+            'user'      => Auth::user(),
+            'dashboard' => $dashboard->payload(Auth::user(), $filters->fails() ? [] : $filters->validated()),
+        ]);
+    }
+
+    // -------------------------------------------------------
+    // GET /tenants/dashboard/rooms  (JSON — room browser)
+    // -------------------------------------------------------
+    public function rooms(Request $request, TenantDashboardService $dashboard)
+    {
+        $validated = $request->validate($dashboard->roomFilterRules());
+
+        return response()->json($dashboard->roomBrowserPayload($validated));
     }
 
     // -------------------------------------------------------
     // GET /tenants/dashboard/data  (JSON, for realtime refresh)
+    // Room listings have their own endpoint, so they're left out here.
     // -------------------------------------------------------
-    public function data()
+    public function data(TenantDashboardService $dashboard)
     {
-        $user = Auth::user();
-        $data = $this->buildDashboardData($user);
+        $payload = $dashboard->payload(Auth::user(), [], false);
 
-        return response()->json([
-            'outstandingBalance' => (float) $data['outstandingBalance'],
-            'unpaidCount'        => (int)   $data['unpaidCount'],
-            'primaryInvoice'     => $data['primaryInvoice'],
-            'paymentPayload'     => $data['paymentPayload'],
-            'room'               => $data['room'] ? [
-                'room_number'  => $data['room']->room_number,
-                'room_type'    => $data['room']->room_type,
-                'room_bed_id'  => $data['room']->room_bed_id,
-                'floor'        => $data['room']->floor,
-                'daily_rent'   => (float) $data['room']->daily_rent,
-            ] : null,
-            'check_in'           => $data['tenant']?->approvedReservation?->check_in?->format('M d, Y'),
-            'check_out'          => $data['tenant']?->approvedReservation?->check_out?->format('M d, Y'),
-            'history'            => $data['historyItems']->map(fn ($h) => [
-                'key'    => $h['key'],
-                'icon'   => $h['icon'],
-                'title'  => $h['title'],
-                'date'   => $h['date'],
-                'status' => $h['status'],
-            ])->values(),
-        ]);
+        return response()->json($payload);
     }
 
     // ============================================================
@@ -75,7 +68,8 @@ class TenantDashboardController extends Controller
 
         $validated = $request->validate([
             'invoice_ref'      => InputRules::reference(),
-            'payment_method'   => ['required', 'in:gcash,bank,counter,GCash,Bank Transfer,Over The Counter'],
+            // Bank transfer is no longer offered to tenants
+            'payment_method'   => ['required', 'in:gcash,counter,GCash,Over The Counter'],
             'reference_number' => InputRules::reference(false),
             'receipt'          => InputRules::image(false),
         ]);
@@ -85,7 +79,6 @@ class TenantDashboardController extends Controller
 
         $method = match ($validated['payment_method']) {
             'gcash', 'GCash'              => 'GCash',
-            'bank',  'Bank Transfer'      => 'Bank Transfer',
             'counter', 'Over The Counter' => 'Over The Counter',
             default                       => 'GCash',
         };
@@ -202,275 +195,9 @@ class TenantDashboardController extends Controller
     {
         $request->validate(['receipt' => InputRules::image(true)]);
 
-        try {
-            $file = $request->file('receipt');
-            $apiKey = config('ocr-space.api_key') ?? env('OCR_SPACE_API_KEY');
+        $result = app(\App\Services\ReceiptOcrService::class)->scan($request->file('receipt'));
 
-            if (empty($apiKey)) {
-                return response()->json(['success' => false, 'error' => 'OCR service is not configured.'], 500);
-            }
-
-            $response = Http::timeout(30)
-                ->asMultipart()
-                ->attach('file', file_get_contents($file->getPathname()), $file->getClientOriginalName())
-                ->post('https://api.ocr.space/parse/image', [
-                    'apikey'     => $apiKey,
-                    'language'   => 'eng',
-                    'OCREngine'  => '3',
-                    'scale'      => 'true',
-                    'isTable'    => 'false',
-                ]);
-
-            if ($response->failed()) {
-                return response()->json(['success' => false, 'error' => 'OCR service unavailable.'], 500);
-            }
-
-            $data = $response->json();
-            if (!empty($data['IsErroredOnProcessing'])) {
-                return response()->json(['success' => false, 'error' => 'OCR could not read image.'], 500);
-            }
-
-            $text = $data['ParsedResults'][0]['ParsedText'] ?? '';
-            $referenceNumber = null;
-
-            if (preg_match('/(?:Ref(?:erence)?\s*(?:No\.?|Number)?[:\s]+)(\d[\d\s\-]{7,18}\d)/i', $text, $m)) {
-                $referenceNumber = preg_replace('/[\s\-]+/', '', $m[1]);
-            }
-            if (!$referenceNumber && preg_match('/\b(\d{9,13})\b/', $text, $m)) {
-                $referenceNumber = $m[1];
-            }
-
-            return response()->json(['success' => true, 'reference_no' => $referenceNumber]);
-        } catch (\Throwable $e) {
-            return response()->json(['success' => false, 'error' => 'Failed to process receipt.'], 500);
-        }
-    }
-
-    // ============================================================
-    // SHARED BUILDER (used by index() and data())
-    // ============================================================
-    private function buildDashboardData($user): array
-    {
-        $tenant = Tenant::with(['room', 'approvedReservation'])
-            ->where('user_id', $user->id)
-            ->first();
-
-        $room        = $tenant?->room;
-        $reservation = $tenant?->approvedReservation;
-
-        $isExpired = false;
-        if ($reservation && $reservation->check_out && $reservation->check_out->isPast()) {
-            $isExpired = true;
-        }
-        if ($isExpired) {
-            $room = null;
-        }
-
-        $invoiceBalance  = 0.0;
-        $invoiceCount    = 0;
-        $primaryInvoice  = null;
-        $paymentPayload  = null;
-
-        if ($tenant) {
-            $rejectedRefs = \App\Models\Reservation::where('user_id', $user->id)
-                ->whereIn('status', ['Rejected', 'Cancelled'])
-                ->pluck('reference_no')
-                ->toArray();
-
-            $unpaidInvoicesQuery = Invoice::where('tenant_id', $tenant->id)
-                ->whereIn('status', ['Unpaid', 'Partial', 'Overdue']);
-
-            foreach ($rejectedRefs as $ref) {
-                $unpaidInvoicesQuery->where('description', 'NOT LIKE', "%{$ref}%");
-            }
-
-            $unpaidInvoices = $unpaidInvoicesQuery->orderBy('due_date')->get();
-
-            $invoiceBalance = (float) $unpaidInvoices->sum('balance');
-            $invoiceCount   = $unpaidInvoices->count();
-
-            /** @var Invoice|null $first */
-            $first = $unpaidInvoices->first();
-            if ($first) {
-                $primaryInvoice = [
-                    'reference'    => $first->transaction_no,
-                    'title'        => $first->description,
-                    'amount'       => (float) $first->balance,
-                    'due_date'     => $first->due_date?->format('M j, Y') ?? '—',
-                    'gcash_number' => '0917-123-4567',
-                ];
-
-                $paymentPayload = $primaryInvoice;
-            }
-        }
-
-        $reservationRemaining = 0.0;
-
-        if ($tenant && $reservation && !$isExpired) {
-            if ($reservation->status === 'Approved' && (float) $reservation->remaining > 0) {
-                $billedRemaining = (float) Invoice::where('tenant_id', $tenant->id)
-                    ->whereIn('status', ['Unpaid', 'Partial', 'Overdue', 'Pending'])
-                    ->where(function ($q) {
-                        $q->where('description', 'like', '%remaining%')
-                          ->orWhere('description', 'like', '%reservation%');
-                    })
-                    ->sum('balance');
-
-                $reservationRemaining = max(0, (float) $reservation->remaining - $billedRemaining);
-            }
-        }
-
-        $outstandingBalance = $invoiceBalance + $reservationRemaining;
-        $unpaidCount        = $invoiceCount + ($reservationRemaining > 0 ? 1 : 0);
-
-        if (!$paymentPayload && $reservationRemaining > 0 && $reservation) {
-            $synthetic = [
-                'reference'    => 'RES-' . $reservation->id,
-                'title'        => 'Reservation Remaining Balance',
-                'amount'       => (float) $reservationRemaining,
-                'due_date'     => $reservation->check_in?->format('M j, Y') ?? '—',
-                'gcash_number' => '0917-123-4567',
-            ];
-            $paymentPayload = $synthetic;
-            $primaryInvoice = $primaryInvoice ?: $synthetic;
-        }
-
-        $announcements = Announcement::published()
-            ->orderByDesc('is_pinned')
-            ->latest()
-            ->limit(5)
-            ->get();
-
-        $historyItems = collect();
-        if ($tenant) {
-            $historyItems = collect()
-                ->merge($this->historyReservations($user))
-                ->merge($this->historyMaintenance($tenant))
-                ->merge($this->historyRoomChanges($tenant))
-                ->merge($this->historyStayExtensions($tenant))
-                ->reject(fn ($item) => $item['status'] === 'pending')
-                ->sortByDesc('timestamp')
-                ->take(4)
-                ->values();
-        }
-
-        $greetingName = explode(' ', trim($user->name))[0] ?: 'Tenant';
-
-        return [
-            'tenant'             => $tenant,
-            'room'               => $room,
-            'outstandingBalance' => $outstandingBalance,
-            'unpaidCount'        => $unpaidCount,
-            'announcements'      => $announcements,
-            'historyItems'       => $historyItems,
-            'greetingName'       => $greetingName,
-            'primaryInvoice'     => $primaryInvoice,
-            'paymentPayload'     => $paymentPayload,
-        ];
-    }
-
-    // ============================================================
-    // HISTORY SOURCES
-    // ============================================================
-
-    private function historyReservations($user)
-    {
-        return Reservation::where(function ($q) use ($user) {
-                $q->where('user_id', $user->id)
-                  ->orWhere('tenant_name', $user->name);
-            })
-            ->latest()
-            ->get()
-            ->map(function (Reservation $r) {
-                // Same rule as the expiry job: check-out date + time
-                $isPast = $r->status === 'Approved' && $r->isStayOver();
-
-                $status = match (true) {
-                    $r->status === 'Approved' && $isPast => 'expired',
-                    $r->status === 'Approved'            => 'approved',
-                    $r->status === 'Rejected'            => 'rejected',
-                    $r->status === 'Cancelled'           => 'cancelled',
-                    $r->status === 'Expired'             => 'expired',
-                    default                              => 'pending',
-                };
-
-                return [
-                    'key'       => 'rsv-' . $r->id,
-                    'icon'      => 'fa-regular fa-calendar-check',
-                    'title'     => 'Reservation — ' . $r->desired_room,
-                    'date'      => $r->created_at?->format('M d, Y'),
-                    'timestamp' => $r->processed_at ?? $r->created_at,
-                    'status'    => $status,
-                ];
-            });
-    }
-
-    private function historyMaintenance(Tenant $tenant)
-    {
-        return MaintenanceRequest::where('tenant_id', $tenant->id)
-            ->latest()
-            ->get()
-            ->map(function (MaintenanceRequest $m) {
-                $status = match ($m->status) {
-                    'Completed' => 'completed',
-                    'Cancelled' => 'cancelled',
-                    default     => 'pending',
-                };
-
-                return [
-                    'key'       => 'mt-' . $m->id,
-                    'icon'      => 'fa-solid fa-wrench',
-                    'title'     => $m->title,
-                    'date'      => $m->created_at?->format('M d, Y'),
-                    'timestamp' => $m->completed_at ?? $m->created_at,
-                    'status'    => $status,
-                ];
-            });
-    }
-
-    private function historyRoomChanges(Tenant $tenant)
-    {
-        return RoomChangeRequest::where('tenant_id', $tenant->id)
-            ->latest()
-            ->get()
-            ->map(function (RoomChangeRequest $r) {
-                $status = match ($r->status) {
-                    'Approved' => 'approved',
-                    'Rejected' => 'rejected',
-                    default    => 'pending',
-                };
-
-                return [
-                    'key'       => 'rc-' . $r->id,
-                    'icon'      => 'fa-solid fa-house',
-                    'title'     => 'Room Change — ' . $r->current_room . ' → ' . $r->requested_room,
-                    'date'      => $r->created_at?->format('M d, Y'),
-                    'timestamp' => $r->processed_at ?? $r->created_at,
-                    'status'    => $status,
-                ];
-            });
-    }
-
-    private function historyStayExtensions(Tenant $tenant)
-    {
-        return StayExtensionRequest::where('tenant_id', $tenant->id)
-            ->latest()
-            ->get()
-            ->map(function (StayExtensionRequest $s) {
-                $status = match ($s->status) {
-                    'Approved' => 'approved',
-                    'Rejected' => 'rejected',
-                    default    => 'pending',
-                };
-
-                return [
-                    'key'       => 'se-' . $s->id,
-                    'icon'      => 'fa-regular fa-calendar-plus',
-                    'title'     => 'Stay Extension — +' . $s->extension_days . ' day' . ($s->extension_days === 1 ? '' : 's'),
-                    'date'      => $s->created_at?->format('M d, Y'),
-                    'timestamp' => $s->processed_at ?? $s->created_at,
-                    'status'    => $status,
-                ];
-            });
+        // 200 even when the scan fails: the tenant just types the reference instead
+        return response()->json($result);
     }
 }

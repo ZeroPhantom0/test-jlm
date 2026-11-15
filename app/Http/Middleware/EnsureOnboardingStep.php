@@ -3,6 +3,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Services\PendingSignup;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -10,19 +11,34 @@ use Symfony\Component\HttpFoundation\Response;
 class EnsureOnboardingStep
 {
     /**
-     * Guard the onboarding routes so users go through them in order:
+     * Guard the onboarding routes so they're visited in order:
      *
-     *   personal → allowed to view/save anytime they haven't finished BOTH
-     *   identity → requires Personal Info to exist first
+     *   personal → always allowed while onboarding is unfinished
+     *   identity → requires the personal information step first
      *
-     * Once BOTH are done, both routes redirect to the tenant dashboard.
+     * Who may be here:
+     *   • a pending sign-up (NO account yet — see PendingSignup), or
+     *   • a logged-in user created before that flow who never finished.
+     * Anyone else is sent to sign up / log in; finished users go to the dashboard.
      */
     public function handle(Request $request, Closure $next, string $step): Response
     {
+        // ── Pending sign-up (guest with a session draft) ──
+        if ($draft = PendingSignup::get()) {
+            if ($step === 'identity' && empty($draft['personal'])) {
+                return redirect()
+                    ->route('personal-information')
+                    ->with('status', 'Please complete your personal information first.');
+            }
+            return $next($request);
+        }
+
         $user = $request->user();
 
         if (! $user) {
-            return $next($request);
+            return redirect()
+                ->route('signup')
+                ->with('status', 'Your sign-up session expired. Please start again — no account was created.');
         }
 
         if ($user->isAdmin()) {
@@ -37,19 +53,10 @@ class EnsureOnboardingStep
             return redirect()->route('tenants.dashboard');
         }
 
-        if ($step === 'personal') {
-            // Always allow viewing/saving Step 1 while onboarding is incomplete.
-            return $next($request);
-        }
-
-        if ($step === 'identity') {
-            // Must complete Step 1 first.
-            if (! $hasPersonal) {
-                return redirect()
-                    ->route('personal-information')
-                    ->with('status', 'Please complete your personal information first.');
-            }
-            return $next($request);
+        if ($step === 'identity' && ! $hasPersonal) {
+            return redirect()
+                ->route('personal-information')
+                ->with('status', 'Please complete your personal information first.');
         }
 
         return $next($request);

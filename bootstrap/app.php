@@ -41,6 +41,9 @@ return Application::configure(basePath: dirname(__DIR__))
         // Tenants with no reservation for 6 months → Inactive + one email
         $schedule->command('tenants:mark-inactive')->dailyAt('08:00')->withoutOverlapping();
 
+        // Temporary uploads from sign-ups that were never finished (no account exists for them)
+        $schedule->command('signup:purge-pending')->hourly()->withoutOverlapping();
+
         // Remaining-balance SMS reminders / payment-policy cancellations
         $schedule->command('billing:balance-reminders')->everyMinute()->withoutOverlapping();
     })

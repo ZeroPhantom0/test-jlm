@@ -112,10 +112,16 @@ Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 
 
 // ============================================================
-// ONBOARDING (auth only)
+// ONBOARDING
+// Open to a PENDING sign-up (no account yet) or a logged-in user who
+// never finished; EnsureOnboardingStep decides. The account itself is
+// only created when identity verification is submitted.
 // ============================================================
 
-Route::middleware('auth')->group(function () {
+Route::post('/signup/cancel', [AuthController::class, 'cancelSignup'])->name('signup.cancel');
+Route::get('/signup/file/{field}', [AuthController::class, 'pendingSignupFile'])->name('signup.file');
+
+Route::group([], function () {
     Route::get('/personal-information', [AuthController::class, 'showPersonalInformation'])
         ->middleware('onboarding.step:personal')
         ->name('personal-information');
@@ -144,6 +150,7 @@ Route::middleware(['auth', 'onboarding.complete', 'prevent.back.cache'])
         // ---------- Dashboard ----------
         Route::get('/',               [TenantDashboardController::class, 'index'])->name('dashboard');
         Route::get('/dashboard/data', [TenantDashboardController::class, 'data'])->name('dashboard.data');
+        Route::get('/dashboard/rooms', [TenantDashboardController::class, 'rooms'])->name('dashboard.rooms');
         
         // Payment processing (moved from Billing)
         Route::post('/dashboard/pay',            [TenantDashboardController::class, 'pay'])->name('dashboard.pay');
@@ -152,6 +159,9 @@ Route::middleware(['auth', 'onboarding.complete', 'prevent.back.cache'])
 
         Route::get('/notifications/feed', [TenantNotificationController::class, 'index'])
             ->name('notifications.feed');
+        // Live sidebar state (badges + Services lock), refetched on Pusher events
+        Route::get('/sidebar/state', fn () => response()->json(\App\Services\SidebarState::tenant(\Illuminate\Support\Facades\Auth::user())))
+            ->name('sidebar.state');
         Route::post('/notifications/message-read', [TenantNotificationController::class, 'markMessageRead'])
             ->name('notifications.message-read');
         Route::post('/notifications/read',     [TenantNotificationController::class, 'markRead'])->name('notifications.read');
@@ -226,6 +236,8 @@ Route::middleware(['auth', 'admin', 'prevent.back.cache'])->prefix('admin')->nam
 
     // ---------- Notifications ----------
     Route::get('/notifications/feed',          [AdminNotificationController::class, 'index'])->name('notifications.feed');
+    // Live sidebar badges (refetched on Pusher events)
+    Route::get('/sidebar/state', fn () => response()->json(\App\Services\SidebarState::admin()))->name('sidebar.state');
     Route::post('/notifications/message-read', [AdminNotificationController::class, 'markMessageRead'])->name('notifications.message-read');
     Route::post('/notifications/read',         [AdminNotificationController::class, 'markRead'])->name('notifications.read');
     Route::post('/notifications/read-all',     [AdminNotificationController::class, 'markAllRead'])->name('notifications.read-all');

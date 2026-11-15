@@ -36,6 +36,10 @@ class Tenant extends Model
                 $tenant->removed_at = null;
             }
         });
+
+        // Live: Admin → Tenants table + that tenant's dashboard refresh
+        static::saved(fn (Tenant $t) => \App\Events\TenantsUpdated::dispatchOnce($t->user_id));
+        static::deleted(fn (Tenant $t) => \App\Events\TenantsUpdated::dispatchOnce($t->user_id));
     }
 
     // ============================================================

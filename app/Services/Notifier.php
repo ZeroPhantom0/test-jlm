@@ -60,6 +60,21 @@ class Notifier
 
         AdminNotificationController::flushCache();
 
+        // Tell each recipient's bell to refresh NOW — the row exists at this
+        // point. (Domain events broadcast before listeners run, so a bell that
+        // only listened to those could fetch too early and miss the new row.)
+        // Mass sends (e.g. announcements to all tenants) skip this; they have
+        // their own channel.
+        if ($inserted > 0 && $userIds->count() <= 25) {
+            foreach ($userIds as $uid) {
+                try {
+                    event(new \App\Events\NotificationCreated($uid, ['type' => $n['type'], 'title' => $n['title']]));
+                } catch (\Throwable $e) {
+                    report($e); // broadcasting must never break the write
+                }
+            }
+        }
+
         return $inserted;
     }
 

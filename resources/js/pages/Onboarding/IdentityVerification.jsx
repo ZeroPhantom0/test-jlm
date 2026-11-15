@@ -6,13 +6,16 @@ import CameraCaptureModal from '../../components/CameraCaptureModal';
 import TermsModal from '../Auth/Modals/TermsModal';
 import PrivacyModal from '../Auth/Modals/PrivacyModal';
 
+// Must match AuthController::ID_TYPES
+const ID_TYPES = ['passport', 'drivers-license', 'national-id', 'sss', 'philhealth', 'umid', 'postal-id', 'voter-id'];
+
 const DRAFT_KEY = 'jlm_onboarding_identity_draft';
 
 const isMobile = () =>
     typeof navigator !== 'undefined' &&
     /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
 
-export default function IdentityVerification({ identity }) {
+export default function IdentityVerification({ identity, pendingSignup = false }) {
     let initialDraft = {};
     try {
         const raw = localStorage.getItem(DRAFT_KEY);
@@ -20,7 +23,8 @@ export default function IdentityVerification({ identity }) {
     } catch (_) {}
 
     const initial = {
-        id_type:                initialDraft.id_type                ?? identity?.id_type                ?? '',
+        // Unknown / retired values (e.g. the old "other") fall back to "Choose ID Type"
+        id_type:                [initialDraft.id_type, identity?.id_type].find((v) => ID_TYPES.includes(v)) ?? '',
         id_front:               null,
         id_back:                null,
         verification_agreement: initialDraft.verification_agreement ?? false,
@@ -222,7 +226,7 @@ export default function IdentityVerification({ identity }) {
 
                         {/* ID TYPE */}
                         <div className="identity-form-group">
-                            <label htmlFor="idType" placeholder="Choose ID Type">
+                            <label htmlFor="idType">
                                 Valid ID Type *
                             </label>
                             <div className="identity-select-wrapper">
@@ -231,7 +235,9 @@ export default function IdentityVerification({ identity }) {
                                     name="id_type"
                                     value={data.id_type}
                                     onChange={(e) => setData('id_type', e.target.value)}
+                                    required
                                 >
+                                    <option value="" disabled>Choose ID Type</option>
                                     <option value="passport">Passport</option>
                                     <option value="drivers-license">Driver's License</option>
                                     <option value="national-id">National ID</option>
@@ -239,8 +245,8 @@ export default function IdentityVerification({ identity }) {
                                     <option value="philhealth">PhilHealth ID</option>
                                     <option value="umid">UMID</option>
                                     <option value="postal-id">Postal ID</option>
-                                    <option value="voter-id">Student ID</option>
-                                    <option value="other">Other Government-Issued ID</option>
+                                    <option value="student-id">Student ID</option>
+                                    <option value="voter-id">Voter's ID</option>
                                 </select>
                                 <i className="bi bi-chevron-down"></i>
                             </div>
@@ -375,6 +381,13 @@ export default function IdentityVerification({ identity }) {
                         {errors.verification_agreement && <p style={{ color: '#e11d48', fontSize: 12, marginTop: 6 }}>{errors.verification_agreement}</p>}
 
                         {/* ACTIONS */}
+                        {pendingSignup && (
+                            <p style={{ fontSize: 12.5, color: '#64748b', margin: '0 0 12px', display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                                <i className="bi bi-info-circle" style={{ marginTop: 1 }}></i>
+                                <span>Last step — your account is created when you submit this form.</span>
+                            </p>
+                        )}
+
                         <div className="identity-actions">
                             <button
                                 type="button"
@@ -390,7 +403,9 @@ export default function IdentityVerification({ identity }) {
                                 disabled={processing}
                                 style={{ opacity: processing ? 0.7 : 1, cursor: processing ? 'wait' : 'pointer' }}
                             >
-                                {processing ? 'Uploading...' : 'Submit & Finish'}
+                                {processing
+                                    ? (pendingSignup ? 'Creating your account...' : 'Uploading...')
+                                    : (pendingSignup ? 'Create my account' : 'Submit & Finish')}
                                 <i className="bi bi-check"></i>
                             </button>
                         </div>

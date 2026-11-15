@@ -163,7 +163,7 @@ export default function TenantsModals() {
             }
 
             setShowEdit(false);
-            window.location.reload();
+            window.dispatchEvent(new Event("tenants:refresh")); // live re-render (keeps search / filters)
         } catch (err) {
             setError(err.message || 'Something went wrong.');
         } finally {
@@ -199,7 +199,7 @@ export default function TenantsModals() {
 
             setShowDelete(false);
             setDeleteTarget(null);
-            window.location.reload();
+            window.dispatchEvent(new Event("tenants:refresh")); // live re-render (keeps search / filters)
         } catch (err) {
             // Shown inside the dialog (e.g. "can't be removed while they have an ongoing stay")
             setDeleteError(err.message || 'Something went wrong.');

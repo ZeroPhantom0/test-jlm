@@ -3,6 +3,18 @@ import React, { useState, useEffect } from "react";
 import { flushSync } from "react-dom";
 import { logout } from "../utils/logout";
 import { readCollapsed, writeCollapsed } from "../utils/shellCache";
+import useLiveSidebar from "../utils/liveSidebar";
+import NavBadge from "./NavBadge";
+
+// Sidebar state refreshes whenever one of these tenant channels fires (Pusher)
+const subscribeTenant = (handler) => {
+    const c = window.LiveTenantChannels;
+    if (!c) return [];
+    const unsubs = [c.reservations(handler), c.billing(handler), c.services(handler)];
+    const tenantId = window.__appConfig?.tenantId;
+    if (tenantId) unsubs.push(c.messages(tenantId, handler));
+    return unsubs;
+};
 
 const NAV_ITEMS = [
     {
@@ -94,9 +106,20 @@ export default function Sidebar({
     userName = "Tenant",
     userRole = "Tenant",
     avatar = null, // Strictly null by default
-    isTenant = false,
-    servicesLocked = false, // remaining balance in Billing → no Services
+    isTenant: isTenantProp = false,
+    servicesLocked: servicesLockedProp = false, // remaining balance in Billing → no Services
+    badges: initialBadges = {},
 }) {
+    // Live nav state: Services unlocks the moment a balance is settled,
+    // unread / pending badges update without a reload.
+    const live = useLiveSidebar(
+        "/tenants/sidebar/state",
+        { isTenant: isTenantProp, servicesLocked: servicesLockedProp, badges: initialBadges },
+        subscribeTenant,
+    );
+    const isTenant = live.isTenant;
+    const servicesLocked = live.servicesLocked;
+    const badges = live.badges || {};
     // Highlight the clicked item immediately (the page load follows)
     const [active, setActive] = useState(activeProp);
     const [collapsed, setCollapsed] = useState(readCollapsed);
@@ -340,7 +363,7 @@ export default function Sidebar({
                             >
                                 <a
                                     href={item.href}
-                                    className={`flex items-center justify-between w-full py-2.5 px-3 rounded-lg transition-colors
+                                    className={`relative flex items-center justify-between w-full py-2.5 px-3 rounded-lg transition-colors
                                        ${isActive ? "text-[#e06800] bg-[#e06800]/10" : "hover:text-white"}
                                        ${collapsed ? "md:justify-center md:py-3 md:px-0" : ""}`}
                                 >
@@ -356,6 +379,7 @@ export default function Sidebar({
                                             {item.label}
                                         </span>
                                     </div>
+                                    <NavBadge count={badges[item.key]} collapsed={collapsed} label={item.key === "messages" ? "unread" : "pending"} />
                                 </a>
                             </li>
                         );

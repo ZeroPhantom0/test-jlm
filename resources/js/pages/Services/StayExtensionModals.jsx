@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from "react";
 import Modal from "../../components/Modal";
 import { LIMITS } from "../../utils/inputLimits";
+import { scanReceipt } from "../../utils/receiptOcr";
 
 const csrf = () =>
     document.querySelector('meta[name="csrf-token"]')?.content ||
@@ -168,34 +169,11 @@ export default function StayExtensionModals() {
         setOcrError("");
         setOcrLoading(true);
 
-        const fd = new FormData();
-        fd.append("receipt", file);
-
-        try {
-            const res = await fetch("/tenants/billing/parse-receipt", {
-                method: "POST",
-                headers: {
-                    Accept: "application/json",
-                    "X-CSRF-TOKEN": csrf(),
-                },
-                body: fd,
-            });
-
-            const data = await res.json().catch(() => ({}));
-
-            if (res.ok && data.success && data.reference_no) {
-                setReferenceNo(data.reference_no);
-            } else if (res.ok && data.success && !data.reference_no) {
-                setOcrError("Reference number not detected. Please type it manually.");
-            } else {
-                setOcrError("Could not scan receipt. Please type reference manually.");
-            }
-        } catch (err) {
-            console.error("OCR failed", err);
-            setOcrError("OCR service unavailable. Please type manually.");
-        } finally {
-            setOcrLoading(false);
-        }
+        // Shared scanner: compresses the photo, reads the reference number
+        const { reference, error } = await scanReceipt(file);
+        if (reference) setReferenceNo(reference);
+        setOcrError(reference ? "" : error);
+        setOcrLoading(false);
     };
 
     const handleCopyGCash = () => {

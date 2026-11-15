@@ -130,11 +130,14 @@ export default function RoomsModals() {
         searchEl?.addEventListener('input', applyFilters);
         statusEl?.addEventListener('change', applyFilters);
         typeEl?.addEventListener('change', applyFilters);
+        // Rows are re-rendered live (Pusher) → keep the current filters applied
+        document.addEventListener('live:refreshed', applyFilters);
 
         return () => {
             searchEl?.removeEventListener('input', applyFilters);
             statusEl?.removeEventListener('change', applyFilters);
             typeEl?.removeEventListener('change', applyFilters);
+            document.removeEventListener('live:refreshed', applyFilters);
         };
     }, [applyFilters]);
 
@@ -216,7 +219,7 @@ export default function RoomsModals() {
             const data = await res.json();
             if (!res.ok) throw new Error(data.message || 'Failed to create room.');
             setShowAdd(false);
-            window.location.reload();
+            window.dispatchEvent(new Event("rooms:refresh")); // live re-render (keeps search / filters)
         } catch (err) {
             alert(err.message);
         } finally {
@@ -247,7 +250,7 @@ export default function RoomsModals() {
             const data = await res.json();
             if (!res.ok) throw new Error(data.message || 'Failed to update room.');
             setShowEdit(false);
-            window.location.reload();
+            window.dispatchEvent(new Event("rooms:refresh")); // live re-render (keeps search / filters)
         } catch (err) {
             alert(err.message);
         } finally {
@@ -270,7 +273,7 @@ export default function RoomsModals() {
             if (!res.ok) throw new Error(data.message || 'Failed to delete room.');
             setShowDelete(false);
             setDeleteTarget(null);
-            window.location.reload();
+            window.dispatchEvent(new Event("rooms:refresh")); // live re-render (keeps search / filters)
         } catch (err) {
             alert(err.message);
         } finally {

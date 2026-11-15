@@ -44,6 +44,8 @@
         'isTenant'             => $isTenant,
         // Services nav is hidden while there's a remaining balance in Billing
         'servicesLocked'       => $isTenant && \App\Models\Tenant::hasUnsettledBalance($user?->id),
+        // Live badges (kept current over Pusher by the sidebar itself)
+        'badges'               => $user ? \App\Services\SidebarState::tenant($user)['badges'] : [],
         'hasActiveReservation' => ($hasPendingReservation || $hasUnpaidInvoice),
         'hasPastReservations'  => $isTenant ? true : false,
     ]);

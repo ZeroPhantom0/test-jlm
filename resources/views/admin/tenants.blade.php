@@ -3,7 +3,10 @@
 @section('title', 'Tenants')
 
 @section('content')
-    <div class="p-4 md:p-8 max-w-[1400px] mx-auto space-y-5">
+    {{-- Live: re-renders the counts + table when tenants / reservations / payments change (Pusher) --}}
+    <div class="p-4 md:p-8 max-w-[1400px] mx-auto space-y-5" data-live-page
+         data-live-listen="admin.tenants:.tenant.updated admin.reservations:.reservation.updated admin.billing:.invoice.updated admin.services:.room-change.updated admin.services:.stay-extension.updated public.rooms:.rooms.updated"
+         data-live-refresh-on="tenants:refresh">
 
         {{-- Page Header --}}
         <div class="flex items-center justify-between flex-wrap gap-4">
@@ -19,7 +22,7 @@
         </div>
 
         {{-- Stats Grid --}}
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-5" data-live-region="tenant-stats">
             <div class="bg-white rounded-2xl px-5 py-4 border border-slate-100 shadow-sm">
                 <div class="text-[12px] text-slate-500 font-medium mb-1.5">Total</div>
                 <div class="text-[26px] font-extrabold text-slate-900">{{ $metrics['total'] }}</div>
@@ -59,7 +62,7 @@
                             <th class="py-3 px-4 text-right">Actions</th>
                         </tr>
                     </thead>
-                    <tbody id="tenant-tbody" data-paginate data-pager-reset="#tenant-search, #tenant-status-filter">
+                    <tbody id="tenant-tbody" data-live-region="tenant-rows" data-paginate data-pager-reset="#tenant-search, #tenant-status-filter">
                         @forelse ($tenants as $tenant)
                             @php
                                 $reservation = $tenant->approvedReservation;
@@ -138,12 +141,13 @@
 @push('scripts')
 <script>
 (function () {
-    const rows         = Array.from(document.querySelectorAll('.tenant-row'));
     const searchInput  = document.getElementById('tenant-search');
     const statusFilter = document.getElementById('tenant-status-filter');
-    const emptyRow     = document.getElementById('tenant-empty-filter');
 
     function applyFilters() {
+        // Re-query every time: the rows are swapped in live (Pusher refresh)
+        const rows     = Array.from(document.querySelectorAll('.tenant-row'));
+        const emptyRow = document.getElementById('tenant-empty-filter');
         const q      = (searchInput?.value  || '').toLowerCase().trim();
         const status = (statusFilter?.value || '').trim().toLowerCase();
 
@@ -170,6 +174,8 @@
     });
 
     statusFilter?.addEventListener('change', applyFilters);
+    // Keep the current search / filter after a live refresh
+    document.addEventListener('live:refreshed', applyFilters);
     applyFilters();
 })();
 </script>

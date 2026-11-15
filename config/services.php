@@ -54,7 +54,10 @@ return [
 
     'balance_reminders' => [
         // Hours before time-in that the reminder goes out
-        'hours_before'          => (int) env('BALANCE_REMINDER_HOURS_BEFORE', 3),
+        'hours_before' => (int) env('BALANCE_REMINDER_HOURS_BEFORE', 3),
+        // Minimum time to pay after approval — a booking approved at/after its
+        // check-in time gets this long instead of being cancelled instantly
+        'grace_hours_after_approval' => (int) env('BALANCE_GRACE_HOURS_AFTER_APPROVAL', 3),
         // Minutes after a payment-policy cancellation that the tenant is notified
         'cancel_sms_delay_mins' => (int) env('BALANCE_CANCEL_SMS_DELAY_MINUTES', 5),
         // Used when a reservation has no check_in_time (24h HH:MM)

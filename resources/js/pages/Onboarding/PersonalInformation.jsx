@@ -1,6 +1,6 @@
 // resources/js/Pages/Onboarding/PersonalInformation.jsx
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Head, Link, useForm } from '@inertiajs/react';
+import { Head, Link, router, useForm } from '@inertiajs/react';
 import CameraCaptureModal from '../../components/CameraCaptureModal';
 import { LIMITS } from "../../utils/inputLimits";
 
@@ -10,10 +10,13 @@ const isMobile = () =>
     typeof navigator !== 'undefined' &&
     /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
 
-export default function PersonalInformation({ user, personalInfo }) {
+export default function PersonalInformation({ user, personalInfo, profilePreviewUrl = null, pendingSignup = false }) {
+    // Local form draft is per email, so a shared computer never pre-fills
+    // someone else's details.
+    const draftKey = `${DRAFT_KEY}:${(user?.email || '').toLowerCase()}`;
     let initialDraft = {};
     try {
-        const raw = localStorage.getItem(DRAFT_KEY);
+        const raw = localStorage.getItem(draftKey);
         if (raw) initialDraft = JSON.parse(raw) || {};
     } catch (_) {}
 
@@ -30,10 +33,16 @@ export default function PersonalInformation({ user, personalInfo }) {
     const { data, setData, post, processing, errors } = useForm(initial);
 
     const [previewUrl, setPreviewUrl] = useState(
-        personalInfo?.profile_picture
-            ? `/storage/${personalInfo.profile_picture}`
-            : null
+        profilePreviewUrl
+            || (personalInfo?.profile_picture ? `/storage/${personalInfo.profile_picture}` : null)
     );
+
+    // Leaving an unfinished sign-up: nothing has been saved, so just drop the draft
+    const cancelSignup = () => {
+        if (!window.confirm('Cancel sign-up? Nothing has been saved and no account will be created.')) return;
+        try { localStorage.removeItem(draftKey); } catch (_) {}
+        router.post('/signup/cancel');
+    };
     const [choiceTarget, setChoiceTarget] = useState(null);
     const [showCamera, setShowCamera]     = useState(false);
 
@@ -50,7 +59,7 @@ export default function PersonalInformation({ user, personalInfo }) {
             emergency_number: data.emergency_number,
         };
         try {
-            localStorage.setItem(DRAFT_KEY, JSON.stringify(payload));
+            localStorage.setItem(draftKey, JSON.stringify(payload));
         } catch (_) {}
     }, [
         data.fullname,
@@ -99,7 +108,7 @@ export default function PersonalInformation({ user, personalInfo }) {
         post('/personal-information', {
             forceFormData: true,
             onSuccess: () => {
-                try { localStorage.removeItem(DRAFT_KEY); } catch (_) {}
+                try { localStorage.removeItem(draftKey); } catch (_) {}
             },
         });
     };
@@ -321,12 +330,26 @@ export default function PersonalInformation({ user, personalInfo }) {
                             </div>
                         </div>
 
+                        {pendingSignup && (
+                            <p style={{ fontSize: 12.5, color: '#64748b', margin: '0 0 12px', display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                                <i className="bi bi-info-circle" style={{ marginTop: 1 }}></i>
+                                <span>Your account isn't created yet — it will be once you finish the next step (ID verification). If you leave now, nothing is saved.</span>
+                            </p>
+                        )}
+
                         {/* ACTIONS */}
                         <div className="personal-actions">
-                            <Link href="/login" className="back-login-btn">
-                                <i className="bi bi-chevron-left"></i>
-                                Back to Login
-                            </Link>
+                            {pendingSignup ? (
+                                <button type="button" onClick={cancelSignup} className="back-login-btn">
+                                    <i className="bi bi-x-lg"></i>
+                                    Cancel sign-up
+                                </button>
+                            ) : (
+                                <Link href="/login" className="back-login-btn">
+                                    <i className="bi bi-chevron-left"></i>
+                                    Back to Login
+                                </Link>
+                            )}
                             <button
                                 type="submit"
                                 className="next-step-btn"

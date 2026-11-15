@@ -6,6 +6,7 @@ export default function HistoryModals() {
     const [openKey, setOpenKey] = useState(null);
     const [receipt, setReceipt] = useState(null);
     const [items, setItems] = useState({});
+    const [syncTick, setSyncTick] = useState(0);
 
     // ============================================================
     // Read items map from mount element (passed by Blade)
@@ -225,10 +226,16 @@ export default function HistoryModals() {
 
             const header = e.target.closest(".history-item-header");
             if (header) {
+                if (e.target.closest("button, a")) return; // header buttons/links do their own thing
                 const item = header.closest(".history-item");
                 const key = item?.dataset?.itemKey;
                 if (key) {
-                    setOpenKey((prev) => (prev === key ? null : key));
+                    // Toggle based on what's actually on screen, so it stays
+                    // right even if the list HTML was refreshed live.
+                    const isOpen = document.getElementById(`details-${key}`)?.classList.contains("expanded");
+                    setOpenKey(isOpen ? null : key);
+                    // Same key twice (e.g. after a live refresh) wouldn't re-render → force the sync
+                    if (!isOpen) setSyncTick((t) => t + 1);
                 }
                 return;
             }
@@ -256,7 +263,7 @@ export default function HistoryModals() {
         const chevrons = document.querySelectorAll(".expand-chevron");
 
         panels.forEach((p) => {
-            p.classList.remove("expanded");
+            p.classList.remove("expanded", "hidden");
             p.style.maxHeight = "0px";
             p.style.overflow = "hidden";
             p.style.padding = "0 20px";
@@ -291,7 +298,7 @@ export default function HistoryModals() {
             chevron.classList.add("rotated");
             chevron.style.transform = "rotate(180deg)";
         }
-    }, [openKey]);
+    }, [openKey, syncTick]);
 
     const closeReceipt = () => setReceipt(null);
 

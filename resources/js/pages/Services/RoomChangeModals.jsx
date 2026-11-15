@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Modal from '../../components/Modal';
 import { LIMITS } from "../../utils/inputLimits";
+import { scanReceipt } from "../../utils/receiptOcr";
 
 const csrf = () =>
     document.querySelector('meta[name="csrf-token"]')?.content ||
@@ -167,6 +168,31 @@ export default function RoomChangeModals() {
         return () => document.removeEventListener('click', handler);
     }, [requestsData]);
 
+    // Deep link from the dashboard room browser: ?request_room=<id> opens the
+    // request form with that room picked. Only when this page shows the
+    // "new request" button (i.e. the tenant is allowed to request a change).
+    const deepLinkHandled = useRef(false);
+    useEffect(() => {
+        if (deepLinkHandled.current || availableRooms.length === 0) return;
+        const params = new URLSearchParams(window.location.search);
+        const wanted = params.get('request_room');
+        if (!wanted) return;
+        deepLinkHandled.current = true;
+
+        params.delete('request_room');
+        const qs = params.toString();
+        window.history.replaceState(window.history.state, '', window.location.pathname + (qs ? `?${qs}` : '') + window.location.hash);
+
+        if (!document.getElementById('open-new-room-change')) return;
+        const room = availableRooms.find((r) => String(r.id) === String(wanted));
+        setForm({ requested_room: room ? String(room.id) : '', room_bed_id: '', reason: '' });
+        setSelectedRoomData(room || null);
+        setReceipt(null);
+        setReferenceNo('');
+        setOcrError('');
+        setShowSubmit(true);
+    }, [availableRooms]);
+
     const updateField = (key, value) => setForm((f) => ({ ...f, [key]: value }));
 
     // ============================================================
@@ -194,34 +220,11 @@ export default function RoomChangeModals() {
         setOcrError("");
         setOcrLoading(true);
 
-        const fd = new FormData();
-        fd.append("receipt", file);
-
-        try {
-            const res = await fetch("/tenants/billing/parse-receipt", {
-                method: "POST",
-                headers: {
-                    Accept: "application/json",
-                    "X-CSRF-TOKEN": csrf(),
-                },
-                body: fd,
-            });
-
-            const data = await res.json().catch(() => ({}));
-
-            if (res.ok && data.success && data.reference_no) {
-                setReferenceNo(data.reference_no);
-            } else if (res.ok && data.success && !data.reference_no) {
-                setOcrError("Reference number not detected. Please type it manually.");
-            } else {
-                setOcrError("Could not scan receipt. Please type reference manually.");
-            }
-        } catch (err) {
-            console.error("OCR failed", err);
-            setOcrError("OCR service unavailable. Please type manually.");
-        } finally {
-            setOcrLoading(false);
-        }
+        // Shared scanner: compresses the photo, reads the reference number
+        const { reference, error } = await scanReceipt(file);
+        if (reference) setReferenceNo(reference);
+        setOcrError(reference ? "" : error);
+        setOcrLoading(false);
     };
 
     const handleCopyGCash = () => {

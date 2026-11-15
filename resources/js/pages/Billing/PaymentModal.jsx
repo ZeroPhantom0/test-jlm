@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import Modal from "../../components/Modal";
 import { LIMITS } from "../../utils/inputLimits";
+import { scanReceipt } from "../../utils/receiptOcr";
 
 const csrf = () =>
     document.querySelector('meta[name="csrf-token"]')?.content ||
@@ -9,7 +10,6 @@ const csrf = () =>
 
 const METHOD_MAP = {
     gcash: "GCash",
-    bank: "Bank Transfer",
     counter: "Over The Counter",
 };
 
@@ -183,35 +183,12 @@ export default function PaymentModal() {
         setReceipt(file);
         setOcrError("");
         setOcrLoading(true);
-        
-        const fd = new FormData();
-        fd.append("receipt", file);
 
-        try {
-            const res = await fetch("/tenants/dashboard/parse-receipt", {
-                method: "POST",
-                headers: {
-                    Accept: "application/json",
-                    "X-CSRF-TOKEN": csrf(),
-                },
-                body: fd,
-            });
-
-            const data = await res.json().catch(() => ({}));
-
-            if (res.ok && data.success && data.reference_no) {
-                setReferenceNumber(data.reference_no);
-            } else if (res.ok && data.success && !data.reference_no) {
-                setOcrError("Reference number not detected. Please type it manually.");
-            } else {
-                setOcrError("Could not scan receipt. Please type reference manually.");
-            }
-        } catch (err) {
-            console.error("OCR failed", err);
-            setOcrError("OCR service unavailable. Please type manually.");
-        } finally {
-            setOcrLoading(false);
-        }
+        // Shared scanner: compresses the photo, reads the reference number
+        const { reference, error } = await scanReceipt(file);
+        if (reference) setReferenceNumber(reference);
+        setOcrError(reference ? "" : error);
+        setOcrLoading(false);
     };
 
     const handleSubmit = async () => {
@@ -220,7 +197,7 @@ export default function PaymentModal() {
             setError("Please enter a reference / transaction number.");
             return;
         }
-        if ((method === "gcash" || method === "bank") && !receipt) {
+        if (method === "gcash" && !receipt) {
             setError("Please upload your receipt screenshot.");
             return;
         }
@@ -331,17 +308,12 @@ export default function PaymentModal() {
                         <div className="text-xs font-semibold text-slate-800">
                             Payment Method
                         </div>
-                        <div className="grid grid-cols-3 gap-2.5">
+                        <div className="grid grid-cols-2 gap-2.5">
                             {[
                                 {
                                     key: "gcash",
                                     label: "GCash",
                                     icon: "fa-solid fa-mobile-screen-button",
-                                },
-                                {
-                                    key: "bank",
-                                    label: "Bank Transfer",
-                                    icon: "fa-solid fa-building-columns",
                                 },
                                 {
                                     key: "counter",
@@ -431,7 +403,7 @@ export default function PaymentModal() {
                                         type="text"
                                         maxLength={LIMITS.REFERENCE_NO} value={referenceNumber}
                                         onChange={(e) => setReferenceNumber(e.target.value)}
-                                        placeholder={method === "gcash" ? "e.g. GC-20260323-12345" : "e.g. BT-20260323-78901"}
+                                        placeholder="e.g. 2013 482 951736"
                                         className="w-full border border-slate-200 rounded-lg px-3.5 py-2.5 text-[13px] outline-none focus:border-blue-400"
                                     />
                                     {ocrLoading && (

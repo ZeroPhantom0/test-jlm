@@ -66,6 +66,8 @@
             'userName' => $user?->personalInformation?->full_name ?? ($user?->name ?? 'Administrator'),
             'userRole' => 'Administrator',
             'avatar'   => $avatarUrl,
+            // Live badges (kept current over Pusher by the sidebar itself)
+            'badges'   => \App\Services\SidebarState::admin()['badges'],
         ]);
     @endphp
     <div 

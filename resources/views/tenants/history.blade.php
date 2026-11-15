@@ -190,7 +190,9 @@
                     </div>
 
                     {{-- Expandable details --}}
-                    <div class="history-item-details" id="details-{{ $item['key'] }}">
+                    {{-- Collapsed until opened (React animates max-height) --}}
+                    <div class="history-item-details" id="details-{{ $item['key'] }}"
+                        style="max-height:0;overflow:hidden;padding:0 20px;border-top:1px solid transparent;background:#f8fafc">
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             @foreach ($item['details'] as $d)
                                 <div class="flex flex-col gap-1">
@@ -250,22 +252,8 @@
             let currentCategory = 'all';
 
             // ---- 1. Expand / collapse details ----
-            items.forEach(item => {
-                const header = item.querySelector('.history-item-header');
-                const details = item.querySelector('.history-item-details');
-                const chevron = item.querySelector('.expand-chevron');
-                if (!header || !details) return;
-
-                header.addEventListener('click', (e) => {
-                    if (e.target.closest('button, a')) return;
-
-                    const isHidden = details.classList.contains('hidden');
-                    details.classList.toggle('hidden', !isHidden);
-                    if (chevron) chevron.style.transform = isHidden ? 'rotate(180deg)' : 'rotate(0deg)';
-                });
-            });
-
-            document.querySelectorAll('.history-item-details').forEach(d => d.classList.add('hidden'));
+            // Handled ONLY by HistoryModals.jsx (React). A second toggle here used
+            // to fight it, so a card couldn't be reopened after opening another.
 
             // ---- 2. Filter + sort ----
             function applyFilters() {
@@ -281,8 +269,6 @@
                         visibleCount++;
                     } else {
                         item.style.display = 'none';
-                        const details = item.querySelector('.history-item-details');
-                        if (details) details.classList.add('hidden');
                     }
                 });
 

@@ -5,254 +5,30 @@
 
 @section('title', 'Dashboard')
 
-@php
-    // Fallback payload so Pay Now ALWAYS carries something for the modal.
-    $payNowPayload = $paymentPayload;
-    if (!$payNowPayload && $outstandingBalance > 0) {
-        $payNowPayload = [
-            'reference'    => 'DASH-' . ($tenant?->id ?? $user->id),
-            'title'        => 'Outstanding Balance',
-            'amount'       => (float) $outstandingBalance,
-            'due_date'     => now()->format('M j, Y'),
-            'gcash_number' => '0917-123-4567',
-        ];
-    }
-@endphp
-
 @section('content')
-    <div class="p-4 md:p-8 max-w-[1400px] mx-auto" data-live-page data-live-region="main" data-live-listen="tenant.billing:.invoice.updated tenant.reservations:.reservation.updated tenant.services:.maintenance.updated tenant.services:.room-change.updated tenant.services:.stay-extension.updated tenant.announcements:.announcement.updated" data-live-refresh-on="billing:refresh">
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-
-            {{-- LEFT COLUMN --}}
-            <div class="lg:col-span-2 space-y-5 min-w-0">
-
-                {{-- Welcome --}}
-                <div class="bg-[#111d33] text-white rounded-2xl p-6 flex items-center gap-4">
-                    <div class="w-12 h-12 rounded-full bg-[#1e2d4a] flex items-center justify-center text-[#16a34a] text-2xl shrink-0">
-                        <i class="fa-regular fa-user"></i>
-                    </div>
-                    <div class="min-w-0">
-                        <p class="text-xs text-slate-400">Welcome back,</p>
-                        <h2 class="text-lg font-bold truncate">{{ $user->name }}!</h2>
-                    </div>
-                </div>
-
-                {{-- Balance --}}
-                <div class="bg-white rounded-xl p-5 border border-slate-100 flex flex-wrap items-center justify-between gap-4">
-                    <div class="flex items-center gap-4">
-                        <div class="w-12 h-12 rounded-xl bg-pink-100 flex items-center justify-center text-rose-600 text-xl font-bold shrink-0">
-                            ₱
-                        </div>
-                        <div>
-                            <h3 id="dash-outstanding-balance" class="text-2xl font-bold">
-                                ₱{{ number_format($outstandingBalance, 0) }}
-                            </h3>
-                            <p class="text-xs text-slate-500">Outstanding Balance</p>
-                        </div>
-                    </div>
-                    <div class="text-right">
-                        <p id="dash-unpaid-count" class="text-[11px] text-slate-400 mb-1.5">
-                            {{ $unpaidCount }} unpaid invoice{{ $unpaidCount === 1 ? '' : 's' }}
-                        </p>
-
-                        {{-- PAY NOW — always opens modal, never navigates --}}
-                        <button type="button" id="dash-pay-now-btn"
-                            class="open-payment-modal inline-flex items-center gap-2 bg-[#16a34a] text-white px-5 py-2.5 rounded-lg text-[13px] font-semibold hover:bg-green-700 transition"
-                            data-invoice="{{ $payNowPayload ? json_encode($payNowPayload, JSON_HEX_APOS | JSON_HEX_QUOT) : '' }}">
-                            <i class="fa-regular fa-credit-card"></i> Pay Now
-                        </button>
-                    </div>
-                </div>
-
-                {{-- Room Information --}}
-                <div class="bg-white rounded-xl p-5 border border-slate-100">
-                    <div class="flex items-center gap-2.5 text-base font-bold mb-4">
-                        <i class="fa-solid fa-house text-[#16a34a]"></i>
-                        <span>Room Information</span>
-                    </div>
-
-                    <div id="dash-room-block">
-                        @if ($room)
-                            <div class="bg-slate-50 rounded-xl p-4 flex items-center gap-4 mb-4">
-                                <div class="bg-slate-900 text-white px-5 py-3 rounded-lg text-lg font-bold shrink-0">
-                                    {{ $room->room_number }}
-                                </div>
-                                <div class="min-w-0">
-                                    <h4 class="text-[15px] font-bold">Room {{ $room->room_number }}</h4>
-                                    <p class="text-xs text-slate-500 mt-0.5">
-                                        {{ $room->room_type }}
-                                        @if ($room->room_bed_id) • {{ $room->room_bed_id }} @endif
-                                        • Floor {{ $room->floor }}
-                                    </p>
-                                </div>
-                            </div>
-
-                            <div class="flex flex-col sm:flex-row gap-3">
-                                <div class="bg-green-100 text-green-700 p-4 rounded-xl flex-1">
-                                    <span class="text-[11px] font-semibold">Daily Rent</span>
-                                    <h3 class="text-2xl font-extrabold leading-tight my-0.5">
-                                        ₱{{ number_format((float) $room->daily_rent, 0) }}
-                                    </h3>
-                                    <small class="text-[10px]">Due on the {{ now()->day }}th</small>
-                                </div>
-                                <div class="flex gap-3 sm:flex-[2] flex-1">
-                                    <div class="bg-slate-50 p-4 rounded-xl flex-1 min-w-0">
-                                        <div class="flex items-center gap-1.5 text-[11px] text-slate-500 mb-1.5">
-                                            <i class="fa-regular fa-calendar text-blue-400"></i>
-                                            <span>Check-in Date</span>
-                                        </div>
-                                        <div class="text-sm font-bold">
-                                            {{ $tenant?->approvedReservation?->check_in?->format('M d, Y') ?? '—' }}
-                                        </div>
-                                    </div>
-                                    <div class="bg-slate-50 p-4 rounded-xl flex-1 min-w-0">
-                                        <div class="flex items-center gap-1.5 text-[11px] text-slate-500 mb-1.5">
-                                            <i class="fa-regular fa-calendar text-red-400"></i>
-                                            <span>Check-out Date</span>
-                                        </div>
-                                        <div class="text-sm font-bold">
-                                            {{ $tenant?->approvedReservation?->check_out?->format('M d, Y') ?? 'Open-ended' }}
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        @else
-                            <div class="bg-amber-50 border border-amber-100 rounded-xl p-4 text-[13px] text-amber-700 flex items-center gap-2.5">
-                                <i class="fa-regular fa-circle-info"></i>
-                                <span>You have not been assigned to a room yet. Please contact the admin.</span>
-                            </div>
-                        @endif
-                    </div>
-                </div>
-            </div>
-
-            {{-- RIGHT COLUMN --}}
-            <div class="space-y-5 min-w-0">
-
-                {{-- Announcements --}}
-                <div class="bg-white rounded-xl p-5 border border-slate-100">
-                    <div class="flex items-center gap-2.5 text-base font-bold mb-4">
-                        <i class="fa-solid fa-bullhorn text-blue-500"></i>
-                        <span>Announcements</span>
-                        @if ($announcements->count() > 0)
-                            <span class="bg-blue-500 text-white text-[10px] rounded-full w-4 h-4 flex items-center justify-center ml-0.5">
-                                {{ $announcements->count() + 1 }}
-                            </span>
-                        @else
-                            <span class="bg-blue-500 text-white text-[10px] rounded-full w-4 h-4 flex items-center justify-center ml-0.5">1</span>
-                        @endif
-                    </div>
-
-                    <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-3.5 mb-2.5">
-                        <span class="inline-block bg-indigo-100 text-indigo-700 text-[9px] font-bold px-1.5 py-0.5 rounded mb-1.5">
-                            <i class="fa-solid fa-thumbtack"></i> PINNED
-                        </span>
-                        <h5 class="text-xs font-bold mb-1">JLM Cozy Cabin - House Rules & Boarding Contract</h5>
-                        <p class="text-[11px] text-slate-500 leading-snug">
-                            HOUSE RULES & BOARDING CONTRACT JLM Cozy Cabin — Effective: January 2026 1. QUIET HOURS Quiet hours are strictly observed...
-                        </p>
-                    </div>
-
-                    @forelse ($announcements as $ann)
-                        @php
-                            if ($ann->title === 'JLM Cozy Cabin - House Rules & Boarding Contract') {
-                                continue;
-                            }
-                            $isPinned = $ann->is_pinned;
-                            $isImportant = $ann->priority === 'Important' || $ann->priority === 'Urgent';
-                            $boxClass = $isPinned
-                                ? 'bg-yellow-50 border border-yellow-200'
-                                : ($isImportant
-                                    ? 'bg-orange-50 border border-orange-100'
-                                    : 'bg-slate-50');
-                        @endphp
-                        <div class="{{ $boxClass }} rounded-lg p-3.5 {{ $loop->last ? '' : 'mb-2.5' }}">
-                            @if ($isPinned)
-                                <span class="inline-block bg-indigo-100 text-indigo-700 text-[9px] font-bold px-1.5 py-0.5 rounded mb-1.5">
-                                    <i class="fa-solid fa-thumbtack"></i> PINNED
-                                </span>
-                            @endif
-                            <h5 class="text-xs font-bold mb-1">{{ $ann->title }}</h5>
-                            <p class="text-[11px] text-slate-500 leading-snug">
-                                {{ \Illuminate\Support\Str::limit($ann->content, 120) }}
-                            </p>
-                        </div>
-                    @empty
-                    @endforelse
-
-                    <a href="/tenants/announcements" class="block text-right text-[#16a34a] text-[11px] font-bold pt-1.5">
-                        View all <i class="fa-solid fa-chevron-right text-[9px]"></i>
-                    </a>
-                </div>
-
-                {{-- History --}}
-                @php
-                    $historyPreview = $historyItems ?? collect();
-                    $latestHistory = $historyPreview->take(4);
-                @endphp
-
-                <div class="bg-white rounded-xl p-5 border border-slate-100">
-                    <div class="flex items-center justify-between mb-4">
-                        <div class="flex items-center gap-2.5 text-base font-bold">
-                            <i class="fa-solid fa-clock-rotate-left text-[#16a34a]"></i>
-                            <span>History</span>
-                        </div>
-                        <a href="/tenants/history" class="text-[#16a34a] text-[12px] font-bold inline-flex items-center gap-1 hover:text-green-700 transition">
-                            View all <i class="fa-solid fa-chevron-right text-[9px]"></i>
-                        </a>
-                    </div>
-
-                    <div id="dash-history-block">
-                        @forelse ($latestHistory as $item)
-                            @php
-                                $statusColor = match ($item['status'] ?? 'pending') {
-                                    'approved', 'completed', 'paid' => 'bg-emerald-100 text-emerald-700',
-                                    'rejected', 'cancelled' => 'bg-rose-100 text-rose-700',
-                                    'expired' => 'bg-slate-100 text-slate-500',
-                                    default => 'bg-amber-100 text-amber-700',
-                                };
-                                $dotColor = match ($item['status'] ?? 'pending') {
-                                    'approved', 'completed', 'paid' => 'bg-emerald-500',
-                                    'rejected', 'cancelled' => 'bg-rose-500',
-                                    'expired' => 'bg-slate-400',
-                                    default => 'bg-amber-500',
-                                };
-                            @endphp
-                            <a href="/tenants/history"
-                                class="flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition rounded-lg px-3.5 py-2.5 {{ $loop->last ? '' : 'mb-2' }}">
-                                <div class="flex items-center gap-2.5 min-w-0">
-                                    <div class="w-7 h-7 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-600 shrink-0">
-                                        <i class="{{ $item['icon'] ?? 'fa-regular fa-circle' }} text-[10px]"></i>
-                                    </div>
-                                    <div class="min-w-0">
-                                        <div class="text-[12px] font-semibold text-slate-900 truncate">
-                                            {{ $item['title'] ?? '—' }}
-                                        </div>
-                                        <div class="text-[10.5px] text-slate-500 mt-0.5 flex items-center gap-1.5">
-                                            <span class="w-1.5 h-1.5 rounded-full {{ $dotColor }}"></span>
-                                            {{ $item['date'] ?? '—' }}
-                                        </div>
-                                    </div>
-                                </div>
-                                <span class="px-2 py-0.5 rounded text-[9.5px] font-bold whitespace-nowrap ml-2 uppercase {{ $statusColor }}">
-                                    {{ $item['status'] ?? 'pending' }}
-                                </span>
-                            </a>
-                        @empty
-                            <div class="text-center text-slate-400 text-xs py-5">
-                                <i class="fa-regular fa-inbox text-2xl block mb-2 opacity-60"></i>
-                                Your reservations and service history will appear here.
-                            </div>
-                        @endforelse
-                    </div>
-                </div>
+    {{--
+        Tenant dashboard (React): resources/js/pages/Dashboard/TenantDashboard.jsx
+        Payload: App\Services\TenantDashboardService::payload()
+        Live updates come over the existing Pusher channels inside the component,
+        so this page no longer uses the data-live-page HTML refresh.
+    --}}
+    <div class="p-4 md:p-6 xl:p-8 max-w-[1440px] mx-auto bg-[#F5F7FA] min-h-full">
+        <div id="tenant-dashboard"
+            data-props="{{ json_encode($dashboard, JSON_HEX_APOS | JSON_HEX_QUOT) }}">
+            {{-- Server-rendered skeleton so there's never a blank screen before React mounts --}}
+            <div class="grid grid-cols-1 md:grid-cols-6 xl:grid-cols-12 gap-4" aria-hidden="true">
+                <div class="rb-skeleton rounded-2xl h-[170px] md:col-span-6 xl:col-span-12"></div>
+                <div class="rb-skeleton rounded-2xl h-[320px] md:col-span-6 xl:col-span-8"></div>
+                <div class="rb-skeleton rounded-2xl h-[320px] md:col-span-6 xl:col-span-4"></div>
             </div>
         </div>
     </div>
 
-    {{-- React Payment Modal mount --}}
-    <div id="payment-modal-root" data-live-root="billing:data-updated"
-        @if ($payNowPayload) data-invoice="{{ json_encode($payNowPayload, JSON_HEX_APOS | JSON_HEX_QUOT) }}" @endif>
+    {{-- Booking modal shared with the Reservations page (handles .open-reserve-modal-btn) --}}
+    <div id="tenant-reservations-modals" data-user-name="{{ $user->name }}" data-reservations="{}"></div>
+
+    {{-- Pay Now modal (handles .open-payment-modal; data-invoice kept in sync by the dashboard) --}}
+    <div id="payment-modal-root"
+        @if (!empty($dashboard['bills']['payNow'])) data-invoice="{{ json_encode($dashboard['bills']['payNow'], JSON_HEX_APOS | JSON_HEX_QUOT) }}" @endif>
     </div>
 @endsection
-

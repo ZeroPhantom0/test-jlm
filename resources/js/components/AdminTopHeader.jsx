@@ -128,6 +128,7 @@ export default function AdminTopHeader({
     const unreadCount = processedNotifications.filter((n) => n.isUnread).length;
 
     const fetchingRef = useRef(false);
+    const refetchAgainRef = useRef(false);
 
     // Close menus right before the shell is snapshotted on page leave,
     // so they don't flash open on the next page.
@@ -142,7 +143,11 @@ export default function AdminTopHeader({
     }, []);
 
     const fetchNotifications = async () => {
-        if (fetchingRef.current) return; // skip if already in flight
+        if (fetchingRef.current) {
+            // Already loading: run once more afterwards so a newer change isn't missed
+            refetchAgainRef.current = true;
+            return;
+        }
         fetchingRef.current = true;
         try {
             setLoading(true);
@@ -167,6 +172,10 @@ export default function AdminTopHeader({
         } finally {
             setLoading(false);
             fetchingRef.current = false;
+            if (refetchAgainRef.current) {
+                refetchAgainRef.current = false;
+                setTimeout(() => fetchNotifications(), 0);
+            }
         }
     };
 
@@ -208,6 +217,8 @@ export default function AdminTopHeader({
         // on one of these channels — subscribing to all of them means we
         // don't need to add a new event type just for the bell.
         const unsubs = [
+            // Primary: a bell row was stored for this admin (fires after insert)
+            window.LiveUserNotifications?.(handler),
             chans.reservations(handler), // new / approved / rejected / cancelled reservations
             chans.billing(handler), // payment submitted / verified / rejected
             chans.services(handler), // maintenance / room-change / stay-extension

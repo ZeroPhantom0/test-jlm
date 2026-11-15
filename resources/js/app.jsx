@@ -60,6 +60,8 @@ import initSettingsForms from "./utils/settingsForms";
 import initSessionTimeout from "./utils/sessionTimeout";
 import { initShellSnapshots } from "./utils/shellCache";
 
+import TenantDashboard from "./pages/Dashboard/TenantDashboard";
+import { initPageMotion } from "./utils/motion";
 import AdminSidebar from "./components/AdminSidebar";
 import Sidebar from "./components/Sidebar";
 
@@ -152,6 +154,18 @@ import Sidebar from "./components/Sidebar";
                 ch.listen(".message.sent", handler);
                 return () => ch.stopListening(".message.sent", handler);
             },
+            // Tenant accounts / records / profiles changed (TenantsUpdated)
+            tenants: (handler) => {
+                const ch = window.Echo.private("admin.tenants");
+                ch.listen(".tenant.updated", handler);
+                return () => ch.stopListening(".tenant.updated", handler);
+            },
+            // Any room saved — status, price, beds, tour (PublicRoomsUpdated)
+            rooms: (handler) => {
+                const ch = window.Echo.channel("public.rooms");
+                ch.listen(".rooms.updated", handler);
+                return () => ch.stopListening(".rooms.updated", handler);
+            },
         };
 
         window.LiveTenantChannels = {
@@ -187,6 +201,30 @@ import Sidebar from "./components/Sidebar";
                 ch.listen(".message.sent", handler);
                 return () => ch.stopListening(".message.sent", handler);
             },
+            // Any room saved — availability, price, tour (PublicRoomsUpdated)
+            rooms: (handler) => {
+                const ch = window.Echo.channel("public.rooms");
+                ch.listen(".rooms.updated", handler);
+                return () => ch.stopListening(".rooms.updated", handler);
+            },
+            // This tenant's own record / profile changed (e.g. admin edited the stay)
+            self: (handler) => {
+                const uid = window.__appConfig?.userId;
+                if (!uid) return () => {};
+                const ch = window.Echo.private(`user.${uid}`);
+                ch.listen(".tenant.updated", handler);
+                return () => ch.stopListening(".tenant.updated", handler);
+            },
+        };
+
+        // "A bell notification was stored for you" (private user.{id} channel).
+        // Fires AFTER the row exists, so bells never refetch too early.
+        window.LiveUserNotifications = (handler) => {
+            const uid = window.__appConfig?.userId;
+            if (!uid) return () => {};
+            const ch = window.Echo.private(`user.${uid}`);
+            ch.listen(".notification.created", handler);
+            return () => ch.stopListening(".notification.created", handler);
         };
 
         console.info("[Echo] Initialized (single instance).");
@@ -268,6 +306,14 @@ function mountReact() {
     mountIfExists("payment-modal-root", PaymentModal);
 
     mountIfExists("tenant-reservations-modals", TenantReservationsModal);
+
+    // Tenant dashboard (props = TenantDashboardService payload)
+    const dashboardRoot = document.getElementById("tenant-dashboard");
+    if (dashboardRoot && !dashboardRoot.dataset.mounted) {
+        const props = JSON.parse(dashboardRoot.dataset.props || "{}");
+        createRoot(dashboardRoot).render(<TenantDashboard {...props} />);
+        dashboardRoot.dataset.mounted = "true";
+    }
     mountIfExists("tenant-announcements-modals", TenantAnnouncementsModals);
     mountIfExists("tenant-history-modals", TenantHistoryModals);
 
@@ -304,6 +350,9 @@ function mountReact() {
 
     // Snapshot sidebar/header on page leave so the next page paints them instantly
     initShellSnapshots();
+
+    // Scroll reveal + count-up for server-rendered blocks ([data-reveal], [data-count-to])
+    initPageMotion();
 }
 
 if (document.readyState === "loading") {

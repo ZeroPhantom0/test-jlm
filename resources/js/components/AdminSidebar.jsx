@@ -3,6 +3,14 @@ import React, { useState, useEffect, useRef } from "react";
 import { flushSync } from "react-dom";
 import { logout } from "../utils/logout";
 import { readCollapsed, writeCollapsed } from "../utils/shellCache";
+import useLiveSidebar from "../utils/liveSidebar";
+import NavBadge from "./NavBadge";
+
+// Badges refresh whenever one of these admin channels fires (Pusher)
+const subscribeAdmin = (handler) => {
+    const c = window.LiveAdminChannels;
+    return c ? [c.reservations(handler), c.billing(handler), c.services(handler), c.messages(handler)] : [];
+};
 
 const NAV_ITEMS = [
     {
@@ -135,7 +143,12 @@ export default function AdminSidebar({
     userName = "Administrator",
     userRole = "Administrator",
     avatar = null,
+    badges: initialBadges = {},
 }) {
+    // Live "needs attention" counts (pending reservations, payments to verify…)
+    const live = useLiveSidebar("/admin/sidebar/state", { badges: initialBadges }, subscribeAdmin);
+    const badges = live.badges || {};
+
     // Highlight the clicked item immediately (the page load follows)
     const [active, setActive] = useState(activeProp);
     const [collapsed, setCollapsed] = useState(readCollapsed);
@@ -307,7 +320,7 @@ export default function AdminSidebar({
                                     onClick={() => setServicesOpen(true)}
                                     ref={isActive ? activeRef : null}
                                     className={`
-                                        flex items-center justify-between w-full rounded-[10px]
+                                        relative flex items-center justify-between w-full rounded-[10px]
                                         font-medium whitespace-nowrap transition-all py-2.5 px-3 text-[13.5px]
                                         ${
                                             isActive
@@ -339,6 +352,7 @@ export default function AdminSidebar({
                                             {item.label}
                                         </span>
                                     </div>
+                                    <NavBadge count={badges[item.key]} collapsed={collapsed} label="pending" />
                                     <button
                                         type="button"
                                         onClick={(e) => {
@@ -388,6 +402,7 @@ export default function AdminSidebar({
                                                         }}
                                                     ></i>
                                                     <span>{sub.label}</span>
+                                                    <NavBadge count={badges[sub.key]} label="pending" />
                                                 </a>
                                             </li>
                                         ))}
@@ -403,7 +418,7 @@ export default function AdminSidebar({
                                 href={item.href}
                                 ref={isActive ? activeRef : null}
                                 className={`
-                                    flex items-center w-full rounded-[10px]
+                                    relative flex items-center w-full rounded-[10px]
                                     font-medium whitespace-nowrap transition-all py-2.5 px-3 text-[13.5px]
                                     ${
                                         isActive
@@ -431,6 +446,7 @@ export default function AdminSidebar({
                                         {item.label}
                                     </span>
                                 </div>
+                                <NavBadge count={badges[item.key]} collapsed={collapsed} label={item.key === "messages" ? "unread" : "pending"} />
                             </a>
                         </li>
                     );

@@ -125,19 +125,28 @@ class CreateBellNotifications
             : (float) $inv->amount_paid, 2);
 
         if (Notifier::actorIsTenant()) {
-            // Room change / stay extension payments arrive with the request
-            // itself, which already notifies — don't send two.
-            if ($isServiceFee) return;
+            // Every tenant payment lands in Billing for verification — including
+            // the proof uploaded with a reservation ('created' + Pending) and
+            // room change / stay extension fees — so Billing always gets a bell.
+            $isSubmission = $e->action === 'submitted'
+                || ($e->action === 'created' && $inv->status === 'Pending');
 
-            match ($e->action) {
-                'submitted' => Notifier::admins([
+            $kind = match (true) {
+                (bool) preg_match('/#RC-\d+/', (string) $inv->description)  => 'room change fee',
+                (bool) preg_match('/#SE-\d+/', (string) $inv->description)  => 'stay extension fee',
+                (bool) preg_match('/#RSV-\d+/', (string) $inv->description) => 'reservation payment',
+                default                                                       => null,
+            };
+
+            match (true) {
+                $isSubmission => Notifier::admins([
                     'type' => 'payment', 'key' => "inv-submitted-{$inv->id}-" . ($inv->updated_at?->timestamp ?? time()),
-                    'title' => "Payment submitted — {$amount}",
+                    'title' => "Payment to verify — {$amount}" . ($kind ? " ({$kind})" : ''),
                     'description' => "{$inv->tenant_name} · {$inv->transaction_no} · " . Str::limit((string) $inv->description, 60),
                     'icon' => 'fa-solid fa-money-bill-transfer', 'color' => 'text-emerald-600 bg-emerald-50',
                     'link' => '/admin/billing',
                 ]),
-                'cancelled' => Notifier::admins([
+                $e->action === 'cancelled' && ! $isServiceFee => Notifier::admins([
                     'type' => 'payment', 'key' => "inv-withdrawn-{$inv->id}-" . time(),
                     'title' => 'Payment submission withdrawn',
                     'description' => "{$inv->tenant_name} withdrew the payment for {$inv->transaction_no}",

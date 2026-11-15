@@ -3,7 +3,10 @@
 @section('title', 'Rooms')
 
 @section('content')
-<div class="p-4 md:p-8 max-w-[1400px] mx-auto space-y-5">
+{{-- Live: re-renders the counts + table when rooms / reservations / payments change (Pusher) --}}
+<div class="p-4 md:p-8 max-w-[1400px] mx-auto space-y-5" data-live-page
+     data-live-listen="public.rooms:.rooms.updated admin.reservations:.reservation.updated admin.billing:.invoice.updated admin.services:.room-change.updated admin.tenants:.tenant.updated"
+     data-live-refresh-on="rooms:refresh">
 
     {{-- Page Title & Add Button --}}
     <div class="flex items-center justify-between flex-wrap gap-4">
@@ -22,7 +25,7 @@
     </div>
 
     {{-- Metrics Grid --}}
-    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4" data-live-region="room-stats">
         <div class="bg-white rounded-2xl px-5 py-4 border border-slate-100 shadow-sm">
             <p class="text-[12px] text-slate-500 font-medium mb-1.5">Total Rooms</p>
             <div class="text-2xl font-extrabold text-slate-900">{{ $metrics['total'] }}</div>
@@ -74,7 +77,7 @@
                         <th class="py-3 px-4 text-right">Actions</th>
                     </tr>
                 </thead>
-                <tbody id="rooms-tbody" data-paginate data-pager-reset="#room-search, #room-filter-status, #room-filter-type">
+                <tbody id="rooms-tbody" data-live-region="room-rows" data-paginate data-pager-reset="#room-search, #room-filter-status, #room-filter-type">
                     @forelse ($rooms as $room)
                         <tr class="border-b border-slate-100 last:border-0 hover:bg-slate-50/50 transition-colors"
                             data-room='@json($room->toRowArray())'

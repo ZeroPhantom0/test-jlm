@@ -579,27 +579,34 @@
                 });
             }
 
-            // --- Echo channels ---
-            if (window.Echo) {
-                window.Echo.channel('admin.reservations').listen('.reservation.updated', () => {
-                    console.info('[Live] Reservation updated → refresh');
-                    refreshDashboard();
-                });
-                window.Echo.channel('admin.billing').listen('.invoice.updated', () => {
-                    console.info('[Live] Invoice updated → refresh');
-                    refreshDashboard();
-                });
-                window.Echo.channel('admin.services').listen('.maintenance.updated', () => refreshDashboard());
-                window.Echo.channel('admin.services').listen('.room-change.updated', () => refreshDashboard());
-                window.Echo.channel('admin.services').listen('.stay-extension.updated', () => refreshDashboard());
+            // --- Real-time (Pusher) ---
+            // These are PRIVATE channels. (The old Echo.channel() calls subscribed
+            // to public channels of the same name, so live updates never arrived.)
+            let liveTimer = null;
+            const liveRefresh = () => {
+                clearTimeout(liveTimer);
+                liveTimer = setTimeout(refreshDashboard, 400); // coalesce bursts (approve → invoice + reservation + room)
+            };
+            const chans = window.LiveAdminChannels;
+            if (chans) {
+                chans.reservations(liveRefresh);   // new / approved / cancelled reservations
+                chans.billing(liveRefresh);        // payments submitted / verified
+                chans.services(liveRefresh);       // maintenance, room change, stay extension
+                chans.messages(liveRefresh);       // recent activity
+                chans.tenants?.(liveRefresh);      // active tenant count
+                chans.rooms?.(liveRefresh);        // occupancy / availability
             }
+            document.addEventListener('echo:connected', liveRefresh);   // catch up after a reconnect
+            document.addEventListener('visibilitychange', () => {
+                if (document.visibilityState === 'visible') liveRefresh();
+            });
 
-            // --- Polling fallback ---
+            // --- Polling fallback (only while the socket is down) ---
             setInterval(() => {
-                if (!window.__liveAvailable) {
+                if (!window.__liveAvailable && document.visibilityState === 'visible') {
                     refreshDashboard();
                 }
-            }, 3000);
+            }, 15000);
         });
     </script>
 @endpush

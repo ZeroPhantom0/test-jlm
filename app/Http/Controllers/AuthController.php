@@ -20,6 +20,7 @@ use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
+use App\Services\PendingSignup;
 use App\Support\InputRules;
 use Illuminate\Validation\Rules\Password;
 use Inertia\Inertia;
@@ -27,6 +28,9 @@ use Laravel\Socialite\Facades\Socialite;
 
 class AuthController extends Controller
 {
+    /** Valid ID types accepted on the identity verification step (no "other"). */
+    private const ID_TYPES = ['passport', 'drivers-license', 'national-id', 'sss', 'philhealth', 'umid', 'postal-id', 'voter-id'];
+
     // ============ TENANT LOGIN (STEP 1) ============
     public function showLogin()
     {
@@ -306,48 +310,37 @@ class AuthController extends Controller
         $name     = $pending['profile']['name'];
         $remember = (bool) ($pending['remember'] ?? false);
 
-        // Resolve an existing user (race condition safeguard) or create one.
+        // Resolve an existing user (race condition safeguard).
         $user = User::where('email', $email)->first();
 
-        $isNewAccount = false;
-
         if (! $user) {
-            $user = User::create([
-                'name'              => $name,
-                'email'             => $email,
-                'phone'             => null,
-                'password'          => Hash::make(Str::random(32)),
-                'role'              => 'tenant',
-                'terms_accepted_at' => now(),
+            // Brand-new Google sign-up: still NOT a user. Google already proved
+            // the email, so go straight to onboarding; the account is created
+            // only when onboarding is finished.
+            $request->session()->forget('google_pending_terms');
+            PendingSignup::start([
+                'source'        => 'google',
+                'name'          => $name,
+                'email'         => $email,
+                'phone'         => null,
+                'password_hash' => Hash::make(Str::random(40)), // Google-only login; can be reset later
             ]);
+            $request->session()->regenerate();
 
-            // 🔑 Create the Tenant shell row now that the account is real
-            Tenant::ensureForUser($user);
-
-            AuditLogger::log([
-                'action'       => 'CREATE',
-                'module'       => 'TENANTS',
-                'description'  => 'New tenant registered via Google: ' . $email,
-                'subject_type' => User::class,
-                'subject_id'   => $user->id,
-            ]);
-
-            $this->sendWelcomeEmail($user);
-
-            $isNewAccount = true;
-        } else {
-            // Existing user reached the gate (legacy terms-accepted was null)
-            if (Schema::hasColumn('users', 'terms_accepted_at') && $user->terms_accepted_at === null) {
-                $user->forceFill(['terms_accepted_at' => now()])->save();
-            }
-
-            Tenant::ensureForUser($user); // idempotent
+            return redirect()->route('personal-information');
         }
+
+        // Existing user reached the gate (legacy terms-accepted was null)
+        if (Schema::hasColumn('users', 'terms_accepted_at') && $user->terms_accepted_at === null) {
+            $user->forceFill(['terms_accepted_at' => now()])->save();
+        }
+
+        Tenant::ensureForUser($user); // idempotent
 
         AuditLogger::log([
             'action'       => 'SUBMIT',
             'module'       => 'AUTHENTICATION',
-            'description'  => 'Accepted Terms via Google ' . ($isNewAccount ? 'signup' : 're-acceptance') . ': ' . $email,
+            'description'  => 'Accepted Terms via Google re-acceptance: ' . $email,
             'subject_type' => User::class,
             'subject_id'   => $user->id,
         ]);
@@ -666,37 +659,44 @@ class AuthController extends Controller
             'terms.accepted' => 'Please agree to the Terms and Conditions to continue.',
         ]);
 
-        $user = User::create([
-            'name'              => $validated['fullname'],
-            'email'             => $validated['email'],
-            'phone'             => $validated['phone'],
-            'password'          => Hash::make($validated['password']),
-            'role'              => 'tenant',
-            'terms_accepted_at' => now(),
+        // No account yet — only a draft. The user is created when onboarding
+        // (personal info + identity verification) is finished.
+        PendingSignup::start([
+            'source'        => 'form',
+            'name'          => $validated['fullname'],
+            'email'         => $validated['email'],
+            'phone'         => $validated['phone'],
+            'password_hash' => Hash::make($validated['password']),
         ]);
-
-        // 🔑 Create the shell Tenant row immediately so messaging works
-        Tenant::ensureForUser($user);
-
-        Auth::login($user);
         $request->session()->regenerate();
 
-        AuditLogger::log([
-            'action'       => 'CREATE',
-            'module'       => 'TENANTS',
-            'description'  => 'New tenant account registered: ' . $user->email,
-            'subject_type' => User::class,
-            'subject_id'   => $user->id,
-        ]);
-
-        $this->sendWelcomeEmail($user);
-
         return redirect()->route('personal-information');
+    }
+
+    /** Leave sign-up before finishing: nothing was saved, so just drop the draft. */
+    public function cancelSignup(Request $request)
+    {
+        PendingSignup::discard();
+
+        return redirect()->route('signup')->with('status', 'Sign-up cancelled. No account was created.');
+    }
+
+    /** Preview of a photo uploaded during onboarding (still private until sign-up finishes). */
+    public function pendingSignupFile(string $field)
+    {
+        abort_unless(in_array($field, ['profile'], true), 404);
+        $path = PendingSignup::filePath($field);
+        abort_unless($path, 404);
+
+        return response()->file($path, ['Cache-Control' => 'private, no-store']);
     }
 
     // ============ LOGOUT ============
     public function logout(Request $request)
     {
+        // An unfinished sign-up isn't an account — just drop the draft and its uploads
+        PendingSignup::discard();
+
         $user = Auth::user();
 
         $wasAdmin = $user?->role === 'admin';
@@ -870,13 +870,38 @@ class AuthController extends Controller
     }
 
     // ============ ONBOARDING ============
+    //
+    // Two kinds of visitors reach these steps:
+    //   • a PENDING sign-up (no account yet) — data stays in the session draft
+    //     and the account is created on the final step (PendingSignup);
+    //   • a logged-in user created before this flow existed who never
+    //     finished onboarding — saved directly, as before.
+
     public function showPersonalInformation()
     {
+        if ($draft = PendingSignup::get()) {
+            $p = $draft['personal'] ?? [];
+            return Inertia::render('Onboarding/PersonalInformation', [
+                'user'         => ['name' => $draft['name'], 'email' => $draft['email'], 'phone' => $draft['phone']],
+                'personalInfo' => $p ? [
+                    'full_name'        => $p['full_name'],
+                    'email'            => $p['email'],
+                    'contact_number'   => $p['contact_number'],
+                    'current_address'  => $p['current_address'],
+                    'emergency_name'   => $p['emergency_name'],
+                    'emergency_number' => $p['emergency_number'],
+                ] : null,
+                'profilePreviewUrl' => ! empty($p['profile_picture']) ? route('signup.file', 'profile') . '?v=' . md5($p['profile_picture']) : null,
+                'pendingSignup'     => true,
+            ]);
+        }
+
         /** @var User $user */
         $user = Auth::user();
         return Inertia::render('Onboarding/PersonalInformation', [
-            'user'         => $user,
-            'personalInfo' => $user->personalInformation,
+            'user'          => $user,
+            'personalInfo'  => $user->personalInformation,
+            'pendingSignup' => false,
         ]);
     }
 
@@ -892,13 +917,7 @@ class AuthController extends Controller
             'profile_picture'  => InputRules::image(false, InputRules::AVATAR_KB),
         ]);
 
-        /** @var User $user */
-        $user = Auth::user();
-        $existing = $user->personalInformation;
-
-        $hasChanges = false;
-        $textFields = ['full_name', 'email', 'contact_number', 'current_address', 'emergency_name', 'emergency_number'];
-        $incoming = [
+        $fields = [
             'full_name'        => $validated['fullname'],
             'email'            => $validated['email'],
             'contact_number'   => $validated['contact_number'],
@@ -907,19 +926,24 @@ class AuthController extends Controller
             'emergency_number' => $validated['emergency_number'],
         ];
 
-        if (! $existing) {
-            $hasChanges = true;
-        } else {
-            foreach ($textFields as $field) {
-                if ((string) $existing->$field !== (string) $incoming[$field]) {
+        // Pending sign-up → keep it in the draft; still no account.
+        if (PendingSignup::exists()) {
+            PendingSignup::savePersonal($fields, $request->file('profile_picture'));
+            return redirect()->route('identity-verification');
+        }
+
+        /** @var User $user */
+        $user = Auth::user();
+        $existing = $user->personalInformation;
+
+        $hasChanges = ! $existing || $request->hasFile('profile_picture');
+        if (! $hasChanges) {
+            foreach ($fields as $field => $value) {
+                if ((string) $existing->$field !== (string) $value) {
                     $hasChanges = true;
                     break;
                 }
             }
-        }
-
-        if ($request->hasFile('profile_picture')) {
-            $hasChanges = true;
         }
 
         $profilePath = $existing?->profile_picture;
@@ -927,18 +951,7 @@ class AuthController extends Controller
             $profilePath = $request->file('profile_picture')->store('profiles/' . $user->id, 'public');
         }
 
-        PersonalInformation::updateOrCreate(
-            ['user_id' => $user->id],
-            [
-                'full_name'        => $validated['fullname'],
-                'email'            => $validated['email'],
-                'contact_number'   => $validated['contact_number'],
-                'current_address'  => $validated['current_address'] ?? null,
-                'emergency_name'   => $validated['emergency_name'],
-                'emergency_number' => $validated['emergency_number'],
-                'profile_picture'  => $profilePath,
-            ]
-        );
+        PersonalInformation::updateOrCreate(['user_id' => $user->id], $fields + ['profile_picture' => $profilePath]);
 
         $user->update([
             'name'  => $validated['fullname'],
@@ -960,37 +973,62 @@ class AuthController extends Controller
 
     public function showIdentityVerification()
     {
+        if (PendingSignup::exists()) {
+            // ID photos are only submitted with this final step, never stored half-way
+            return Inertia::render('Onboarding/IdentityVerification', [
+                'identity'      => null,
+                'pendingSignup' => true,
+            ]);
+        }
+
         /** @var User $user */
         $user = Auth::user();
         return Inertia::render('Onboarding/IdentityVerification', [
-            'identity' => $user->identityVerification,
+            'identity'      => $user->identityVerification,
+            'pendingSignup' => false,
         ]);
     }
 
     public function storeIdentityVerification(Request $request)
     {
-        /** @var User $user */
-        $user = Auth::user();
-        $existing = $user->identityVerification;
+        $pending = PendingSignup::exists();
+        /** @var User|null $user */
+        $user = $pending ? null : Auth::user();
+        $existing = $user?->identityVerification;
 
         $validated = $request->validate([
-            'id_type'                => InputRules::text(InputRules::ID_TYPE),
+            'id_type'                => ['required', 'string', \Illuminate\Validation\Rule::in(self::ID_TYPES)],
             'id_front'               => InputRules::image(! $existing?->id_front),
             'id_back'                => InputRules::image(false),
             'verification_agreement' => ['accepted'],
         ]);
 
-        $hasChanges = false;
+        // ── Pending sign-up: THIS is where the account is created ──
+        if ($pending) {
+            $draft = PendingSignup::get();
+            $user = PendingSignup::complete($validated['id_type'], $request->file('id_front'), $request->file('id_back'));
 
-        if (! $existing) {
-            $hasChanges = true;
-        } elseif ($existing->id_type !== $validated['id_type']) {
-            $hasChanges = true;
+            Auth::login($user);
+            $request->session()->regenerate();
+
+            AuditLogger::log([
+                'action'       => 'CREATE',
+                'module'       => 'TENANTS',
+                'description'  => 'New tenant account created after completing onboarding'
+                    . ($draft['source'] === 'google' ? ' (Google)' : '') . ': ' . $user->email,
+                'subject_type' => User::class,
+                'subject_id'   => $user->id,
+            ]);
+
+            $this->sendWelcomeEmail($user);
+
+            return Inertia::location('/tenants');
         }
 
-        if ($request->hasFile('id_front') || $request->hasFile('id_back')) {
-            $hasChanges = true;
-        }
+        // ── Legacy account finishing onboarding ──
+        $hasChanges = ! $existing
+            || $existing->id_type !== $validated['id_type']
+            || $request->hasFile('id_front') || $request->hasFile('id_back');
 
         $frontPath = $existing?->id_front;
         if ($request->hasFile('id_front')) {

@@ -75,7 +75,9 @@ class LivePage {
 
         this.listen.forEach(({ channel, event }) => {
             try {
-                window.Echo.private(channel).listen(event, () => this.schedule());
+                // "public.*" channels are public (e.g. public.rooms); the rest are private
+                const ch = channel.startsWith('public.') ? window.Echo.channel(channel) : window.Echo.private(channel);
+                ch.listen(event, () => this.schedule());
             } catch (e) {
                 console.warn('[Live] subscribe failed', channel, event, e);
             }

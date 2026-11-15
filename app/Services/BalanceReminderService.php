@@ -20,8 +20,11 @@ use Illuminate\Support\Facades\Log;
  * ------------------------------------   ---------------------------------------------
  * More than 3 hours before time-in       Reminder is scheduled for 3 hours before.
  * Exactly / less than 3 hours before     Reminder is sent immediately on approval.
- * Time-in already passed                 No reminder; payment policy applies
- *                                        (reservation is cancelled).
+ * Approved at / after time-in (or less   Deadline = approval + grace hours (default 3),
+ * than the grace period before it)       reminder sent immediately. A booking can
+ *                                        never be cancelled before the tenant had a
+ *                                        fair chance to pay. (See paymentDeadline().)
+ * Deadline passed with a balance owed    Payment policy applies (reservation cancelled).
  * Fully paid                             Nothing is sent.
  *
  * After a payment-policy cancellation the tenant is texted 5 minutes later.
@@ -60,23 +63,18 @@ class BalanceReminderService
             'balance_reminder_sent_at' => null,
         ])->save();
 
-        $timeIn = $this->timeIn($reservation);
-        if (! $timeIn) {
+        $deadline = $this->paymentDeadline($reservation);
+        if (! $deadline) {
             return;
         }
 
-        // The remaining balance is due at check-in — the same deadline the
-        // reminder and the payment-policy cancellation use.
-        $this->alignDueDate($reservation, $timeIn);
+        // The remaining balance is due at the payment deadline (normally
+        // check-in) — the same deadline the reminder and the cancellation use.
+        $this->alignDueDate($reservation, $deadline);
 
-        // Time-in already passed → no reminder; the scheduler applies the policy.
-        if ($timeIn->lessThanOrEqualTo(now())) {
-            return;
-        }
-
-        // Exactly / less than 3 hours before time-in → send now.
-        if (now()->greaterThanOrEqualTo($this->reminderAt($timeIn))) {
-            $this->sendReminder($reservation, $balance, $timeIn);
+        // Within the reminder window (incl. late approvals) → send now.
+        if (now()->greaterThanOrEqualTo($this->reminderAt($deadline))) {
+            $this->sendReminder($reservation, $balance, $deadline);
         }
 
         // Otherwise it stays scheduled: the minute-by-minute command sends it
@@ -145,7 +143,7 @@ class BalanceReminderService
         $sent = 0;
 
         foreach ($this->trackedApproved()->whereNull('balance_reminder_sent_at')->get() as $reservation) {
-            $timeIn = $this->timeIn($reservation);
+            $timeIn = $this->paymentDeadline($reservation);
             if (! $timeIn || $timeIn->lessThanOrEqualTo(now())) {
                 continue; // passed → handled by applyPaymentPolicy()
             }
@@ -172,7 +170,8 @@ class BalanceReminderService
         $cancelled = 0;
 
         foreach ($this->trackedApproved()->get() as $reservation) {
-            $timeIn = $this->timeIn($reservation);
+            // Never before the tenant had a fair chance to pay (see paymentDeadline)
+            $timeIn = $this->paymentDeadline($reservation);
             if (! $timeIn || $timeIn->greaterThan(now())) {
                 continue;
             }
@@ -320,7 +319,7 @@ class BalanceReminderService
     {
         return sprintf(
             "%s: Hi %s, this is a friendly reminder that your reservation %s has a remaining balance of %s. "
-            . "Kindly settle it before your check-in on %s to keep your booking. "
+            . "Kindly settle it by %s to keep your booking. "
             . "You may pay through your tenant portal. Unsettled balances will result in cancellation and the down payment is non-refundable. Thank you!",
             self::BRAND,
             $this->firstName($reservation),
@@ -333,7 +332,7 @@ class BalanceReminderService
     public function cancellationMessage(Reservation $reservation, float $balance, ?Carbon $timeIn): string
     {
         return sprintf(
-            "%s: Hi %s, we regret to inform you that your reservation %s has been cancelled because the remaining balance%s was not settled before your check-in%s. "
+            "%s: Hi %s, we regret to inform you that your reservation %s has been cancelled because the remaining balance%s was not settled by the payment deadline%s. "
             . "As stated in our Payment Policy, the down payment is non-refundable. "
             . "For questions or to make a new reservation, please contact us through your tenant portal. Thank you.",
             self::BRAND,
@@ -369,6 +368,30 @@ class BalanceReminderService
         } catch (\Throwable $e) {
             return $reservation->check_in->copy()->startOfDay();
         }
+    }
+
+    /**
+     * When the remaining balance must be paid: check-in time — but never
+     * sooner than `grace_hours_after_approval` after the booking was approved
+     * (balance_tracked_at). Without this, a booking approved at or after its
+     * own check-in time was cancelled within a minute, before the tenant could
+     * possibly pay, and the down payment was lost.
+     */
+    public function paymentDeadline(Reservation $reservation): ?Carbon
+    {
+        $timeIn = $this->timeIn($reservation);
+        if (! $timeIn) {
+            return null;
+        }
+
+        $approvedAt = $reservation->balance_tracked_at ? Carbon::parse($reservation->balance_tracked_at) : null;
+        if (! $approvedAt) {
+            return $timeIn;
+        }
+
+        $earliest = $approvedAt->copy()->addHours((int) config('services.balance_reminders.grace_hours_after_approval', 3));
+
+        return $timeIn->greaterThan($earliest) ? $timeIn : $earliest;
     }
 
     private function reminderAt(Carbon $timeIn): Carbon

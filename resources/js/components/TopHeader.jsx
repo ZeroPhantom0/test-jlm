@@ -99,6 +99,7 @@ export default function TopHeader({
     const unreadCount = processedNotifications.filter((n) => isTruthy(n.unread)).length;
 
     const fetchingRef = useRef(false);
+    const refetchAgainRef = useRef(false);
 
     // Close menus right before the shell is snapshotted on page leave,
     // so they don't flash open on the next page.
@@ -113,7 +114,11 @@ export default function TopHeader({
     }, []);
 
     const fetchNotifications = async () => {
-        if (fetchingRef.current) return;
+        if (fetchingRef.current) {
+            // Already loading: run once more afterwards so a newer change isn't missed
+            refetchAgainRef.current = true;
+            return;
+        }
         fetchingRef.current = true;
         try {
             setLoading(true);
@@ -134,6 +139,10 @@ export default function TopHeader({
         } finally {
             setLoading(false);
             fetchingRef.current = false;
+            if (refetchAgainRef.current) {
+                refetchAgainRef.current = false;
+                setTimeout(() => fetchNotifications(), 0);
+            }
         }
     };
 
@@ -165,6 +174,8 @@ export default function TopHeader({
         const handler = () => fetchNotifications();
         const tenantId = window.__appConfig?.tenantId;
         const unsubs = [
+            // Primary: a bell row was stored for this tenant (fires after insert)
+            window.LiveUserNotifications?.(handler),
             chans.reservations(handler),
             chans.billing(handler),
             chans.services(handler),

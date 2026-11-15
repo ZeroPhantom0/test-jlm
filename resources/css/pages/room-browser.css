@@ -1,0 +1,110 @@
+/* resources/css/pages/room-browser.css
+   Motion + small visual helpers for the tenant dashboard and room browser.
+   Only transform / opacity are animated (no layout shift). */
+
+@keyframes rb-fade-up {
+    from { opacity: 0; transform: translate3d(0, 12px, 0); }
+    to   { opacity: 1; transform: none; }
+}
+@keyframes rb-fade-in   { from { opacity: 0; } to { opacity: 1; } }
+@keyframes rb-shimmer   { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+@keyframes rb-soft-pulse {
+    0%, 100% { transform: scale(1);    opacity: 1; }
+    50%      { transform: scale(1.06); opacity: .85; }
+}
+@keyframes rb-toast-in  {
+    from { opacity: 0; transform: translate3d(24px, -8px, 0); }
+    to   { opacity: 1; transform: none; }
+}
+@keyframes rb-sheet-up  { from { transform: translate3d(0, 100%, 0); } to { transform: none; } }
+@keyframes rb-drawer-in { from { transform: translate3d(100%, 0, 0); } to { transform: none; } }
+@keyframes rb-pop-in    {
+    from { opacity: 0; transform: scale(.96); }
+    to   { opacity: 1; transform: none; }
+}
+@keyframes rb-drift {
+    0%   { transform: translate3d(0, 0, 0) scale(1); }
+    50%  { transform: translate3d(40px, -18px, 0) scale(1.15); }
+    100% { transform: translate3d(0, 0, 0) scale(1); }
+}
+
+.rb-fade-up   { animation: rb-fade-up 380ms cubic-bezier(.2, .7, .2, 1) both; }
+.rb-fade-in   { animation: rb-fade-in 250ms ease-out both; }
+.rb-pop-in    { animation: rb-pop-in 220ms ease-out both; }
+.rb-pulse     { animation: rb-soft-pulse 1.6s ease-in-out infinite; }
+.rb-toast     { animation: rb-toast-in 300ms cubic-bezier(.2, .7, .2, 1) both; }
+.rb-sheet     { animation: rb-sheet-up 300ms cubic-bezier(.2, .7, .2, 1) both; }
+.rb-drawer    { animation: rb-drawer-in 320ms cubic-bezier(.2, .7, .2, 1) both; }
+/* Bottom sheet on mobile, right-hand drawer from md (768px) up */
+.rb-panel     { animation: rb-sheet-up 300ms cubic-bezier(.2, .7, .2, 1) both; }
+@media (min-width: 768px) {
+    .rb-panel { animation: rb-drawer-in 320ms cubic-bezier(.2, .7, .2, 1) both; }
+}
+
+/* Scroll reveal: JS adds .is-visible when the element enters the viewport */
+.rb-reveal            { opacity: 0; transform: translate3d(0, 16px, 0); transition: opacity 400ms ease-out, transform 400ms ease-out; }
+.rb-reveal.is-visible { opacity: 1; transform: none; }
+
+/* Skeleton shimmer */
+.rb-skeleton { position: relative; overflow: hidden; background: #eef1f5; }
+.rb-skeleton::after {
+    content: ""; position: absolute; inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .65), transparent);
+    animation: rb-shimmer 1.2s infinite;
+}
+
+/* Card hover: lift, deeper shadow, image zoom */
+.rb-card       { transition: transform 220ms ease-out, box-shadow 220ms ease-out, border-color 220ms ease-out; }
+.rb-card:hover { transform: translate3d(0, -4px, 0); box-shadow: 0 14px 30px -12px rgba(2, 18, 44, .25); }
+.rb-card .rb-img       { transition: transform 400ms ease-out; }
+.rb-card:hover .rb-img { transform: scale(1.05); }
+.rb-featured:hover     { box-shadow: 0 0 0 1px rgba(224, 104, 0, .45), 0 18px 40px -14px rgba(224, 104, 0, .35); }
+
+/* Buttons: press scale + arrow nudge */
+.rb-btn              { transition: transform 120ms ease-out, background-color 150ms ease-out, box-shadow 150ms ease-out; }
+.rb-btn:active:not(:disabled) { transform: scale(.97); }
+.rb-btn .rb-arrow    { transition: transform 180ms ease-out; }
+.rb-btn:hover .rb-arrow { transform: translateX(3px); }
+
+/* Match-score ring */
+.rb-ring-track { stroke: rgba(255, 255, 255, .25); }
+.rb-ring-fill  { transition: stroke-dashoffset 900ms cubic-bezier(.2, .7, .2, 1); }
+
+/* Dashboard hero */
+.rb-hero-glow {
+    position: absolute; width: 220px; height: 220px; border-radius: 9999px;
+    background: radial-gradient(circle, rgba(224, 104, 0, .45), rgba(224, 104, 0, 0) 70%);
+    filter: blur(10px); right: -40px; top: -80px; pointer-events: none;
+    animation: rb-drift 14s ease-in-out infinite;
+}
+.rb-word { display: inline-block; opacity: 0; animation: rb-fade-up 420ms ease-out both; }
+
+/* Dual-thumb price slider: two stacked range inputs */
+.rb-range { position: relative; height: 28px; }
+.rb-range input[type="range"] {
+    position: absolute; inset: 0; width: 100%; margin: 0; background: none;
+    pointer-events: none; -webkit-appearance: none; appearance: none;
+}
+.rb-range input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; pointer-events: auto; width: 20px; height: 20px; border-radius: 9999px;
+    background: #fff; border: 2px solid #e06800; box-shadow: 0 1px 3px rgba(0, 0, 0, .2); cursor: pointer;
+}
+.rb-range input[type="range"]::-moz-range-thumb {
+    pointer-events: auto; width: 18px; height: 18px; border-radius: 9999px;
+    background: #fff; border: 2px solid #e06800; cursor: pointer;
+}
+.rb-range input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px rgba(224, 104, 0, .3); }
+
+.rb-scroll-snap { scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; }
+.rb-scroll-snap > * { scroll-snap-align: start; }
+
+/* Respect reduced motion: no movement, opacity fades only */
+@media (prefers-reduced-motion: reduce) {
+    .rb-fade-up, .rb-pop-in, .rb-toast, .rb-word { animation: rb-fade-in 200ms ease-out both !important; }
+    .rb-sheet, .rb-drawer, .rb-panel { animation: rb-fade-in 200ms ease-out both !important; }
+    .rb-pulse, .rb-hero-glow, .rb-skeleton::after { animation: none !important; }
+    .rb-reveal { transform: none !important; }
+    .rb-card, .rb-card:hover, .rb-card .rb-img, .rb-card:hover .rb-img,
+    .rb-btn:active:not(:disabled), .rb-btn:hover .rb-arrow { transform: none !important; }
+    .rb-ring-fill { transition: none !important; }
+}

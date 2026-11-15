@@ -58,8 +58,7 @@
             <div style="background: #f0fdfa; border: 1px solid #99f6e4; border-radius: 12px; padding: 20px; margin-bottom: 24px;">
                 <h3 style="color: #0f766e; font-size: 13px; font-weight: 700; margin: 0 0 12px;">Accepted Payment Methods</h3>
                 <ul style="color: #115e59; font-size: 13px; line-height: 1.8; margin: 0; padding-left: 20px;">
-                    <li><strong>GCash:</strong> 0917-123-4567</li>
-                    <li><strong>Bank Transfer:</strong> Contact office for details</li>
+                    <li><strong>GCash:</strong> 0917-123-4567</li>
                     <li><strong>Over the Counter:</strong> Visit the management office</li>
                 </ul>
             </div>

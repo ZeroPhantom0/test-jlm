@@ -141,155 +141,18 @@ class TenantReservationController extends Controller
      */
     private function currentRoomId(?Tenant $tenant): ?int
     {
-        if (! $tenant || $tenant->status !== 'active' || ! $tenant->room_id) {
-            return null;
-        }
-
-        $stay = $tenant->approvedReservation;
-        if ($stay && ($stay->status !== 'Approved' || $stay->isStayOver())) {
-            return null;
-        }
-
-        return $tenant->room_id;
+        return app(\App\Services\RoomCatalogService::class)->currentRoomId($tenant);
     }
 
+    /** Room cards are built by the shared catalog so the dashboard browser matches this page. */
     private function buildRoomCards($myReservations, ?int $currentRoomId = null)
     {
-        return Room::with([
-            'virtualTour' => fn($q) => $q->where('status', 'Published'),
-            'tenants'     => fn($q) => $q->where('status', 'active')->with('approvedReservation'),
-        ])
-            ->whereHas('virtualTour', fn($q) => $q->where('status', 'Published'))
-            // Sort by room type priority: Solo → Barkada → Bedspace → others, then room number
-            ->orderByRaw("
-                CASE
-                    WHEN room_type LIKE '%Solo%'     THEN 1
-                    WHEN room_type LIKE '%Barkada%'  THEN 2
-                    WHEN room_type LIKE '%Bedspace%' THEN 3
-                    ELSE 4
-                END
-            ")
-            ->orderBy('room_number')
-            ->get()
-            ->map(function (Room $room) use ($myReservations, $currentRoomId) {
-                $bedSlots = $this->buildBedSlots($room);
-
-                $occupiedSlots = collect($bedSlots)->where('status', 'Occupied')->count();
-                $totalBeds     = (int) $room->total_beds;
-                $emptyBeds     = max(0, $totalBeds - $occupiedSlots);
-
-                // Check if user has an ACTIVE reservation for this room
-                $existingReservation = $myReservations->first(function ($res) use ($room) {
-                    return $res->room_id === $room->id
-                        && ($res->status === 'Pending'
-                            || ($res->status === 'Approved' && ! $res->isStayOver()));
-                });
-
-                $hasReserved = (bool) $existingReservation;
-                $isCurrentRoom = ($currentRoomId === $room->id);
-                // "Reserved" = free now but booked for later dates — other dates
-                // can still be booked (overlap is validated per date on submit).
-                $isBookable = ($emptyBeds > 0 && in_array($room->status, ['Available', 'Reserved'], true))
-                    && !$hasReserved && !$isCurrentRoom;
-
-                $availability = $room->availabilityInfo();
-
-                // FOR THE MODAL: Build the tenants list
-                $tenantsList = $room->tenants->map(function ($tenant) {
-                    return [
-                        'name' => $tenant->user?->name ?? 'Unknown',
-                        'bed_id' => $tenant->approvedReservation?->room_bed_id ?? 'N/A',
-                        'status' => $tenant->status,
-                    ];
-                })->values()->toArray();
-
-                return [
-                    'id'          => $room->id,
-                    'num'         => $room->room_number,
-                    'name'        => $room->room_type,
-                    'price'       => (float) $room->daily_rent,
-                    'status'      => $room->status,
-                    'is_bookable' => $isBookable,
-                    'has_reserved' => $hasReserved,
-                    'is_current_room' => $isCurrentRoom,
-                    'empty_beds'  => $emptyBeds,
-                    'occupied_beds' => $occupiedSlots, // ADDED for Modal
-                    'tenants'     => $tenantsList,     // ADDED for Modal
-                    'img'         => $room->virtualTour?->thumbnail_url
-                        ?? 'https://images.unsplash.com/photo-1598928506311-c55ded91a20c?auto=format&fit=crop&w=600&q=80',
-                    'pax'         => match (true) {
-                        str_contains($room->room_type, 'Solo')     => '1-2 pax',
-                        str_contains($room->room_type, 'Bedspace') => '1 pax',
-                        str_contains($room->room_type, 'Barkada')  => '4-6 pax',
-                        default                                    => $room->total_beds . ' pax',
-                    },
-                    'beds'        => $room->total_beds . ' bed' . ($room->total_beds === 1 ? '' : 's'),
-                    'total_beds'  => (int) $room->total_beds,
-                    'bath'        => '1 bath',
-                    'floor'       => $room->floor,
-                    'desc'        => $room->description ?? 'Cozy room with modern finishes.',
-                    // Occupied → nearest check-out among current occupants
-                    'estDate'     => $availability['est_date'],
-                    'estApprox'   => $availability['est_approx'],
-                    'nextBooking' => $availability['next_booking'],
-                    'tourId'      => $room->virtualTour?->id,
-                    'bed_slots'   => $bedSlots,
-                    'is_female_only' => str_contains($room->room_type, 'All Girls'),
-                    'is_male_only'   => str_contains($room->room_type, 'All Boys'),
-                ];
-            })->values();
+        return app(\App\Services\RoomCatalogService::class)->roomCards(collect($myReservations), $currentRoomId);
     }
 
     private function buildBedSlots(Room $room): array
     {
-        if (in_array($room->room_type, ['Solo Room', 'Barkada Room'], true)) {
-            return [];
-        }
-
-        $totalBeds = (int) $room->total_beds;
-        if ($totalBeds <= 0) {
-            return [];
-        }
-
-        $heldByTenants = [];
-        foreach ($room->tenants as $tenant) {
-            $slot = $tenant->approvedReservation?->room_bed_id;
-            if ($slot) {
-                $heldByTenants[$slot] = true;
-            }
-        }
-
-        $heldByReservations = Reservation::where('room_id', $room->id)
-            ->whereIn('status', ['Pending', 'Approved'])
-            ->whereNotNull('room_bed_id')
-            ->where(function ($q) {
-                $q->whereNull('check_out')
-                    ->orWhereDate('check_out', '>=', now()->toDateString());
-            })
-            ->pluck('room_bed_id')
-            ->all();
-        $heldByReservations = array_flip($heldByReservations);
-
-        $slots = [];
-        $slotIndex = 0;
-        for ($i = 1; $i <= ceil($totalBeds / 2); $i++) {
-            foreach (['U' => 'Upper', 'L' => 'Lower'] as $code => $label) {
-                if ($slotIndex >= $totalBeds) {
-                    break 2;
-                }
-                $id = "B{$i}-{$code}";
-                $occupied = isset($heldByTenants[$id]) || isset($heldByReservations[$id]);
-
-                $slots[] = [
-                    'id'     => $id,
-                    'label'  => "Bed {$i} - {$label}",
-                    'status' => $occupied ? 'Occupied' : 'Available',
-                ];
-                $slotIndex++;
-            }
-        }
-
-        return $slots;
+        return app(\App\Services\RoomCatalogService::class)->bedSlots($room);
     }
 
     private function computeDueDate(Carbon $checkIn, Carbon $checkOut): Carbon
@@ -726,85 +589,11 @@ class TenantReservationController extends Controller
 
     public function parseReceipt(Request $request)
     {
-        $request->validate([
-            'receipt' => InputRules::image(true),
-        ]);
+        $request->validate(['receipt' => InputRules::image(true)]);
 
-        try {
-            $file = $request->file('receipt');
-            $apiKey = config('ocr-space.api_key') ?? env('OCR_SPACE_API_KEY');
+        $result = app(\App\Services\ReceiptOcrService::class)->scan($request->file('receipt'));
 
-            if (empty($apiKey)) {
-                Log::error('[parseReceipt] OCR API key is missing.');
-                return response()->json([
-                    'success' => false,
-                    'error'   => 'OCR service is not configured. Please enter the reference number manually.',
-                ], 500);
-            }
-
-            $response = Http::timeout(30)
-                ->asMultipart()
-                ->attach('file', file_get_contents($file->getPathname()), $file->getClientOriginalName())
-                ->post(config('ocr-space.api_url', 'https://api.ocr.space/parse/image'), [
-                    'apikey'     => $apiKey,
-                    'language'   => 'eng',
-                    'OCREngine'  => '3',
-                    'scale'      => 'true',
-                    'isTable'    => 'false',
-                ]);
-
-            if ($response->failed()) {
-                Log::error('[parseReceipt] OCR HTTP failed', [
-                    'status' => $response->status(),
-                    'body'   => substr($response->body(), 0, 500),
-                ]);
-                return response()->json([
-                    'success' => false,
-                    'error'   => 'OCR service unavailable. Please enter the reference number manually.',
-                ], 500);
-            }
-
-            $data = $response->json();
-
-            if (!empty($data['IsErroredOnProcessing'])) {
-                Log::error('[parseReceipt] OCR processing error', [
-                    'errors' => $data['ErrorMessage'] ?? 'Unknown',
-                ]);
-                return response()->json([
-                    'success' => false,
-                    'error'   => 'OCR could not read this image. Please enter the reference number manually.',
-                ], 500);
-            }
-
-            $text = $data['ParsedResults'][0]['ParsedText'] ?? '';
-            Log::info('[parseReceipt] OCR raw text', ['text' => $text]);
-
-            $referenceNumber = null;
-
-            if (preg_match('/(?:Ref(?:erence)?\s*(?:No\.?|Number)?[:\s]+)(\d[\d\s\-]{7,18}\d)/i', $text, $m)) {
-                $referenceNumber = preg_replace('/[\s\-]+/', '', $m[1]);
-            }
-
-            if (!$referenceNumber && preg_match('/\b(\d{9,13})\b/', $text, $m)) {
-                $referenceNumber = $m[1];
-            }
-
-            return response()->json([
-                'success'      => true,
-                'reference_no' => $referenceNumber,
-                'raw_text'     => $text,
-            ]);
-        } catch (\Throwable $e) {
-            Log::error('[parseReceipt] Exception', [
-                'message' => $e->getMessage(),
-                'file'    => $e->getFile(),
-                'line'    => $e->getLine(),
-            ]);
-
-            return response()->json([
-                'success' => false,
-                'error'   => 'Failed to process receipt. Please enter the reference number manually.',
-            ], 500);
-        }
+        // 200 even when the scan fails: the tenant just types the reference instead
+        return response()->json($result);
     }
 }
