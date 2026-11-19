@@ -6,7 +6,7 @@ import { toast } from "../components/Toast";
 
 const ENDPOINT = "/tenants/dashboard/rooms";
 export const PER_PAGE = 12;
-export const DEFAULT_FILTERS = { search: "", min_price: null, max_price: null, type: [], floor: null, sort: "recommended" };
+export const DEFAULT_FILTERS = { search: "", min_price: null, max_price: null, type: [], floor: null, sort: "recommended", availability: null };
 
 export function toQuery(filters, page) {
     const q = new URLSearchParams();
@@ -16,12 +16,13 @@ export function toQuery(filters, page) {
     (filters.type || []).forEach((t) => q.append("type[]", t));
     if (filters.floor != null) q.set("floor", filters.floor);
     if (filters.sort && filters.sort !== "recommended") q.set("sort", filters.sort);
+    if (filters.availability) q.set("availability", filters.availability);
     if (page && page > 1) q.set("page", page);
     return q;
 }
 
 export const activeFilterCount = (f) =>
-    (f.search?.trim() ? 1 : 0) + (f.min_price != null || f.max_price != null ? 1 : 0) + (f.type?.length || 0) + (f.floor != null ? 1 : 0);
+    (f.search?.trim() ? 1 : 0) + (f.min_price != null || f.max_price != null ? 1 : 0) + (f.type?.length || 0) + (f.floor != null ? 1 : 0) + (f.availability ? 1 : 0);
 
 async function fetchRooms(filters, page, signal) {
     const res = await fetch(`${ENDPOINT}?${toQuery(filters, page)}`, {

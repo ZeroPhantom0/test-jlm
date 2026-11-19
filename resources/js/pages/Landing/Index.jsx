@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Head, Link, router } from "@inertiajs/react";
 import SplashScreen from "../../components/SplashScreen";
+import ChatbotWidget from "../../components/ChatbotWidget";
 import { subscribePublic } from "../../utils/publicLive";
 
 /* ============================================================
@@ -121,6 +122,7 @@ export default function Index({ rooms = [] }) {
             <RoomsSection rooms={rooms} />
             <ContactSection />
             <LandingFooter />
+            <ChatbotWidget />
         </div>
     );
 }

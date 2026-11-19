@@ -23,7 +23,6 @@ import BillingModals from "./pages/Admin/BillingModals";
 import ReservationsModals from "./pages/Admin/ReservationsModals";
 import AnnouncementsModals from "./pages/Admin/AnnouncementsModals";
 import VirtualTourModals from "./pages/Admin/VirtualTourModals";
-import SettingsArchive from "./pages/Admin/SettingsArchive";
 import RoomChangeModals from "./pages/Admin/RoomChangeModals";
 import StayExtensionModals from "./pages/Admin/StayExtensionModals";
 import ScenesModals from "./pages/Admin/ScenesModals";
@@ -292,7 +291,6 @@ function mountReact() {
     mountIfExists("admin-reservations-modals", ReservationsModals);
     mountIfExists("admin-announcements-modals", AnnouncementsModals);
     mountIfExists("admin-virtual-tour-modals", VirtualTourModals);
-    mountIfExists("admin-settings-archive", SettingsArchive);
     mountIfExists("admin-room-change-modals", RoomChangeModals);
     mountIfExists("admin-stay-extension-modals", StayExtensionModals);
     mountIfExists("admin-scenes-modals", ScenesModals);

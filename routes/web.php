@@ -4,6 +4,7 @@
 use Illuminate\Support\Facades\Route;
 
 use App\Http\Controllers\LandingController;
+use App\Http\Controllers\ChatbotController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\PublicTourViewerController;
 use App\Http\Controllers\AdminNotificationController;
@@ -49,6 +50,14 @@ use App\Models\VirtualTour;
 Route::get('/', [LandingController::class, 'index'])
     ->middleware('prevent.back.cache')
     ->name('landing');
+
+// Landing-page FAQ chatbot (public, rate-limited)
+Route::prefix('chatbot')->name('chatbot.')->middleware('throttle:60,1')->group(function () {
+    Route::get('/',                    [ChatbotController::class, 'bootstrap'])->name('bootstrap');
+    Route::post('/ask',                [ChatbotController::class, 'ask'])->name('ask');
+    Route::get('/category/{category}', [ChatbotController::class, 'category'])->name('category');
+    Route::get('/faq/{faq}',           [ChatbotController::class, 'faq'])->name('faq');
+});
 
 Route::get('/tour/{virtualTour}', [PublicTourViewerController::class, 'show'])
     ->name('tour.viewer');
@@ -149,7 +158,6 @@ Route::middleware(['auth', 'onboarding.complete', 'prevent.back.cache'])
 
         // ---------- Dashboard ----------
         Route::get('/',               [TenantDashboardController::class, 'index'])->name('dashboard');
-        Route::get('/dashboard/data', [TenantDashboardController::class, 'data'])->name('dashboard.data');
         Route::get('/dashboard/rooms', [TenantDashboardController::class, 'rooms'])->name('dashboard.rooms');
         
         // Payment processing (moved from Billing)

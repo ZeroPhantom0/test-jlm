@@ -50,6 +50,12 @@ const NAV_ITEMS = [
         href: "/tenants/announcements",
     },
     {
+        key: "history",
+        label: "History",
+        icon: "fa-solid fa-clock-rotate-left",
+        href: "/tenants/history",
+    },
+    {
         key: "settings",
         label: "Settings",
         icon: "fa-solid fa-gear",

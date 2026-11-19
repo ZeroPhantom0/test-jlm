@@ -4,6 +4,7 @@
 @import "./pages/admin-dashboard.css";
 @import "./pages/landing.css";
 @import "./pages/room-browser.css";
+@import "./pages/chatbot.css";
 
 @source "../views/**/*.blade.php";
 @source "./**/*.{js,jsx,ts,tsx}";

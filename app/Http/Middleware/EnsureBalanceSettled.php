@@ -24,7 +24,8 @@ class EnsureBalanceSettled
                 return response()->json(['message' => self::MESSAGE], 403);
             }
 
-            return redirect()->route('tenants.dashboard')->with('error', self::MESSAGE);
+            // Bills are settled from the Reservations page (Pay Now)
+            return redirect()->route('tenants.reservations')->with('error', self::MESSAGE);
         }
 
         return $next($request);

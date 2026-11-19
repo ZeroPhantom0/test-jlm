@@ -1,5 +1,5 @@
 // resources/js/pages/Dashboard/components/RoomBrowser.jsx
-// T4 — Browse All Rooms: [For You] [All Rooms (N)] tabs, sticky filters,
+// Browse rooms: [For You] [All Rooms (N)] tabs, sticky filters,
 // grid/list, load more, skeletons, empty state. Data comes from useRoomCatalog.
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { activeFilterCount, PER_PAGE } from "../hooks/useRoomCatalog";
@@ -7,12 +7,16 @@ import { FilterControls, FilterSheet, SearchBox, TypeChips } from "./RoomFilters
 import { RoomCard } from "./RoomCard";
 import { btn, cx, SkeletonCard } from "./ui";
 
-export default function RoomBrowser({ catalog, mode, onDetails, defaultTab = "all", id = "browse-rooms" }) {
+export default function RoomBrowser({ catalog, mode, onDetails, defaultTab = "all", id = "browse-rooms", showAllSignal = 0 }) {
     const { data, rooms, filters, loading, loadingMore, error, resultsKey, hasMore, total, updateFilters, clearFilters, loadMore } = catalog;
     const [tab, setTab] = useState(activeFilterCount(filters) > 0 ? "all" : defaultTab);
     const [view, setView] = useState(() => localStorage.getItem("rb:view") || "grid");
     const [sheetOpen, setSheetOpen] = useState(false);
     useEffect(() => localStorage.setItem("rb:view", view), [view]);
+    // The hero search / category cards ask for the full, filtered list
+    useEffect(() => {
+        if (showAllSignal) setTab("all");
+    }, [showAllSignal]);
 
     // Sticky filter bar sits right under the sticky top header
     const [stickyTop, setStickyTop] = useState(0);

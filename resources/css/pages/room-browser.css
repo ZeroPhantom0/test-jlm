@@ -22,11 +22,6 @@
     from { opacity: 0; transform: scale(.96); }
     to   { opacity: 1; transform: none; }
 }
-@keyframes rb-drift {
-    0%   { transform: translate3d(0, 0, 0) scale(1); }
-    50%  { transform: translate3d(40px, -18px, 0) scale(1.15); }
-    100% { transform: translate3d(0, 0, 0) scale(1); }
-}
 
 .rb-fade-up   { animation: rb-fade-up 380ms cubic-bezier(.2, .7, .2, 1) both; }
 .rb-fade-in   { animation: rb-fade-in 250ms ease-out both; }
@@ -70,15 +65,6 @@
 .rb-ring-track { stroke: rgba(255, 255, 255, .25); }
 .rb-ring-fill  { transition: stroke-dashoffset 900ms cubic-bezier(.2, .7, .2, 1); }
 
-/* Dashboard hero */
-.rb-hero-glow {
-    position: absolute; width: 220px; height: 220px; border-radius: 9999px;
-    background: radial-gradient(circle, rgba(224, 104, 0, .45), rgba(224, 104, 0, 0) 70%);
-    filter: blur(10px); right: -40px; top: -80px; pointer-events: none;
-    animation: rb-drift 14s ease-in-out infinite;
-}
-.rb-word { display: inline-block; opacity: 0; animation: rb-fade-up 420ms ease-out both; }
-
 /* Dual-thumb price slider: two stacked range inputs */
 .rb-range { position: relative; height: 28px; }
 .rb-range input[type="range"] {
@@ -100,9 +86,9 @@
 
 /* Respect reduced motion: no movement, opacity fades only */
 @media (prefers-reduced-motion: reduce) {
-    .rb-fade-up, .rb-pop-in, .rb-toast, .rb-word { animation: rb-fade-in 200ms ease-out both !important; }
+    .rb-fade-up, .rb-pop-in, .rb-toast { animation: rb-fade-in 200ms ease-out both !important; }
     .rb-sheet, .rb-drawer, .rb-panel { animation: rb-fade-in 200ms ease-out both !important; }
-    .rb-pulse, .rb-hero-glow, .rb-skeleton::after { animation: none !important; }
+    .rb-pulse, .rb-skeleton::after { animation: none !important; }
     .rb-reveal { transform: none !important; }
     .rb-card, .rb-card:hover, .rb-card .rb-img, .rb-card:hover .rb-img,
     .rb-btn:active:not(:disabled), .rb-btn:hover .rb-arrow { transform: none !important; }

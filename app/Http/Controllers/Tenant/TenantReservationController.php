@@ -11,6 +11,7 @@ use App\Models\Invoice;
 use App\Models\Reservation;
 use App\Models\Room;
 use App\Models\Tenant;
+use App\Services\TenantDashboardService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -30,36 +31,16 @@ class TenantReservationController extends Controller
         $user   = Auth::user();
         $tenant = Tenant::where('user_id', $user->id)->first();
 
-        $allMyReservations = Reservation::where(function ($q) use ($user, $tenant) {
-            $q->where('user_id', $user->id)
-                ->orWhere('tenant_name', $user->name);
-        })
-            ->latest()
-            ->get();
-
-        $pendingReservations = $allMyReservations->where('status', 'Pending')->values();
-
-        $reservationCards = $this->buildReservationCards($pendingReservations);
+        $allMyReservations = $this->allMyReservations($user);
 
         // PASS CURRENT ROOM ID TO PREVENT RESERVING IT AGAIN
         $rooms = $this->buildRoomCards($allMyReservations, $this->currentRoomId($tenant));
 
-        $myReservationsForReact = $allMyReservations->mapWithKeys(function ($r) {
-            return [
-                $r->reference_no => [
-                    'id'      => $r->id,
-                    'key'     => $r->reference_no,
-                    'status'  => $r->status,
-                    'room'    => $r->desired_room,
-                    'deposit' => $r->formatted_fee,
-                ],
-            ];
-        })->toArray();
-
         return view('tenants.reservations', [
             'tenant'         => $tenant,
-            'myReservations' => $reservationCards,
-            'reservations'   => $myReservationsForReact,
+            'myReservations' => $this->buildReservationCards($allMyReservations),
+            'bills'          => app(TenantDashboardService::class)->outstandingBills($user),
+            'reservations'   => $this->reservationsForReact($allMyReservations),
             'rooms'          => $rooms,
         ]);
     }
@@ -69,69 +50,99 @@ class TenantReservationController extends Controller
         $user   = Auth::user();
         $tenant = Tenant::where('user_id', $user->id)->first();
 
-        $allMyReservations = Reservation::where(function ($q) use ($user, $tenant) {
-            $q->where('user_id', $user->id)
-                ->orWhere('tenant_name', $user->name);
-        })
-            ->latest()
-            ->get();
-
-        $pendingReservations = $allMyReservations->where('status', 'Pending')->values();
-
-        $reservationCards = $this->buildReservationCards($pendingReservations);
+        $allMyReservations = $this->allMyReservations($user);
 
         // PASS CURRENT ROOM ID
         $rooms = $this->buildRoomCards($allMyReservations, $this->currentRoomId($tenant));
 
-        $myReservationsForReact = $allMyReservations->mapWithKeys(function ($r) {
-            return [
-                $r->reference_no => [
-                    'id'      => $r->id,
-                    'key'     => $r->reference_no,
-                    'status'  => $r->status,
-                    'room'    => $r->desired_room,
-                    'deposit' => $r->formatted_fee,
-                ],
-            ];
-        })->toArray();
+        // "My Reservations" is rendered by the same Blade partial as the page
+        $myReservationsHtml = view('tenants.partials.my-reservations', [
+            'myReservations' => $this->buildReservationCards($allMyReservations),
+            'bills'          => app(TenantDashboardService::class)->outstandingBills($user),
+        ])->render();
 
         return response()->json([
-            'myReservations' => $reservationCards,
-            'rooms'          => $rooms,
-            'reservations'   => $myReservationsForReact,
+            'myReservationsHtml' => $myReservationsHtml,
+            'rooms'              => $rooms,
+            'reservations'       => $this->reservationsForReact($allMyReservations),
         ])->header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
     }
 
+    private function allMyReservations($user)
+    {
+        return Reservation::with(['room.virtualTour'])
+            ->where(function ($q) use ($user) {
+                $q->where('user_id', $user->id)
+                    ->orWhere('tenant_name', $user->name);
+            })
+            ->latest()
+            ->get();
+    }
+
+    /** Keyed by reference number, for the booking / cancel modal. */
+    private function reservationsForReact($reservations): array
+    {
+        return $reservations->mapWithKeys(fn ($r) => [
+            $r->reference_no => [
+                'id'      => $r->id,
+                'key'     => $r->reference_no,
+                'status'  => $r->status,
+                'room'    => $r->desired_room,
+                'deposit' => $r->formatted_fee,
+            ],
+        ])->toArray();
+    }
+
+    /**
+     * Rows for "My Reservations": bookings awaiting review and approved stays
+     * that are not over yet. Finished / rejected / cancelled ones are on History.
+     */
     private function buildReservationCards($myReservations)
     {
-        return $myReservations->map(function ($r) {
-            $statusClass = match ($r->status) {
-                'Approved' => 'bg-emerald-100 text-emerald-600',
-                'Rejected' => 'bg-rose-100 text-rose-600',
-                'Expired'  => 'bg-slate-100 text-slate-500',
-                default    => 'bg-amber-100 text-amber-700',
-            };
-            $statusIcon = match ($r->status) {
-                'Approved' => 'fa-regular fa-circle-check',
-                'Rejected' => 'fa-regular fa-circle-xmark',
-                'Expired'  => 'fa-regular fa-clock',
-                default    => 'fa-regular fa-clock',
-            };
+        return $myReservations
+            ->filter(fn (Reservation $r) => $r->status === 'Pending'
+                || ($r->status === 'Approved' && ! $r->isStayOver()))
+            ->map(function (Reservation $r) {
+                $room = $r->room;
+                $tour = $room?->virtualTour?->status === 'Published' ? $room->virtualTour : null;
+                $title = $room
+                    ? $room->room_type . ' – Room ' . $room->room_number
+                    : ($r->desired_room ?: 'Reservation');
 
-            return [
-                'id'          => $r->id,
-                'key'         => $r->reference_no,
-                'room'        => $r->desired_room,
-                'status'      => $r->status,
-                'statusClass' => $statusClass,
-                'statusIcon'  => $statusIcon,
-                'move_in'     => $r->check_in?->format('M j, Y') ?? '—',
-                'move_out'    => $r->check_out?->format('M j, Y') ?? '—',
-                'submitted'   => $r->created_at?->format('M j, Y') ?? '—',
-                'deposit'     => number_format((float) $r->reservation_fee, 2),
-                'note'        => $r->admin_notes,
-            ];
-        })->values();
+                return [
+                    'id'        => $r->id,
+                    'key'       => $r->reference_no,
+                    'room'      => $title,
+                    'status'    => $r->status,
+                    'move_in'   => $r->check_in?->format('M j, Y') ?? '—',
+                    'move_out'  => $r->check_out?->format('M j, Y') ?? '—',
+                    'submitted' => $r->created_at?->format('M j, Y') ?? '—',
+                    'deposit'   => number_format((float) $r->reservation_fee, 2),
+                    'note'      => $r->admin_notes,
+                    // Everything the "View Details" modal shows
+                    'details'   => [
+                        'title'         => $title,
+                        'status'        => $r->status,
+                        'reference'     => $r->reference_no,
+                        'roomType'      => $room?->room_type,
+                        'roomNumber'    => $room?->room_number ?? $r->desired_room,
+                        'floor'         => $room?->floor,
+                        'bed'           => $r->room_bed_id,
+                        'dailyRent'     => $room ? number_format((float) $room->daily_rent, 2) : null,
+                        'img'           => $room ? \App\Services\RoomCatalogService::tourImage($tour) : null,
+                        'tourUrl'       => $tour ? route('tour.viewer', ['virtualTour' => $tour->id, 'from' => '/tenants/reservations']) : null,
+                        'checkIn'       => $r->formatted_check_in,
+                        'checkOut'      => $r->formatted_check_out,
+                        'nights'        => $r->stay_duration,
+                        'paymentOption' => $r->payment_option,
+                        'total'         => number_format((float) $r->total_charges, 2),
+                        'paid'          => number_format((float) $r->reservation_fee, 2),
+                        'remaining'     => number_format((float) $r->remaining, 2),
+                        'submitted'     => $r->created_at?->format('M j, Y') ?? '—',
+                        'note'          => $r->admin_notes,
+                    ],
+                ];
+            })->values();
     }
 
     /**

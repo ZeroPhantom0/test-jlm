@@ -5,12 +5,8 @@ namespace App\Http\Controllers\Tenant;
 
 use App\Support\InputRules;
 use App\Http\Controllers\Controller;
-use App\Models\Announcement;
 use App\Models\Invoice;
-use App\Models\MaintenanceRequest;
 use App\Models\Reservation;
-use App\Models\RoomChangeRequest;
-use App\Models\StayExtensionRequest;
 use App\Models\Tenant;
 use App\Services\TenantDashboardService;
 use Illuminate\Http\Request;
@@ -18,7 +14,6 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Support\Facades\Http;
 
 class TenantDashboardController extends Controller
 {
@@ -45,17 +40,6 @@ class TenantDashboardController extends Controller
         $validated = $request->validate($dashboard->roomFilterRules());
 
         return response()->json($dashboard->roomBrowserPayload($validated));
-    }
-
-    // -------------------------------------------------------
-    // GET /tenants/dashboard/data  (JSON, for realtime refresh)
-    // Room listings have their own endpoint, so they're left out here.
-    // -------------------------------------------------------
-    public function data(TenantDashboardService $dashboard)
-    {
-        $payload = $dashboard->payload(Auth::user(), [], false);
-
-        return response()->json($payload);
     }
 
     // ============================================================

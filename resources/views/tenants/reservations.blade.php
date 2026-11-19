@@ -11,7 +11,7 @@
             </div>
             <div class="flex-1">
                 <h2 class="text-xl font-bold">Reserve a Room</h2>
-                <p class="text-[13px] text-slate-500">Browse rooms with virtual tours and submit a reservation request</p>
+                <p class="text-[13px] text-slate-500">Browse available rooms and submit a reservation request</p>
             </div>
         </div>
 
@@ -20,8 +20,7 @@
             <i class="fa-solid fa-circle-info text-blue-500 mt-0.5"></i>
             <p class="text-[13px] text-blue-800 leading-relaxed">
                 <strong>How Reservations Work</strong><br>
-                Only rooms with a <strong>published virtual tour</strong> are shown below. View the tour, then submit your
-                reservation with your GCash payment proof.
+                Browse available rooms below, view the 360° virtual tour, then submit your reservation details.
                 <strong>Your reservation will be reviewed by the admin. You'll be notified once approved.</strong>
             </p>
         </div>
@@ -36,45 +35,7 @@
             </div>
 
             <div id="my-reservations-list">
-                @forelse($myReservations as $res)
-                    <div
-                        class="px-6 py-4 flex items-center justify-between flex-wrap gap-3 border-b border-slate-200 last:border-b-0">
-                        <div class="flex flex-col gap-1.5">
-                            <div class="flex items-center gap-3 flex-wrap">
-                                <h4 class="text-[14.5px] font-bold text-slate-900">{{ $res['room'] }}</h4>
-                                <span
-                                    class="text-[11px] font-bold px-2.5 py-[3px] rounded-full inline-flex items-center gap-1 {{ $res['statusClass'] }}">
-                                    <i class="{{ $res['statusIcon'] }}"></i> {{ $res['status'] }}
-                                </span>
-                            </div>
-                            <div class="text-[12px] text-slate-500">
-                                Move-in: {{ $res['move_in'] }} · Submitted: {{ $res['submitted'] }}
-                            </div>
-                            @if (!empty($res['note']))
-                                <div
-                                    class="bg-green-50 text-green-800 text-[11px] px-2.5 py-1 rounded-md inline-block mt-1 font-medium">
-                                    {{ $res['note'] }}
-                                </div>
-                            @endif
-                        </div>
-                        <div class="text-right flex flex-col items-end gap-0.5">
-                            <div class="text-base font-extrabold text-emerald-500">₱{{ $res['deposit'] }}</div>
-                            <div class="text-[11px] text-slate-500">deposit</div>
-                            @if ($res['status'] === 'Pending')
-                                <button type="button"
-                                    class="cancel-reservation-btn text-[11px] font-semibold text-rose-500 hover:text-rose-700 mt-1"
-                                    data-res-key="{{ $res['key'] }}">
-                                    Cancel
-                                </button>
-                            @endif
-                        </div>
-                    </div>
-                @empty
-                    <div class="px-6 py-8 text-center text-[13px] text-slate-400">
-                        <i class="fa-regular fa-calendar-check text-3xl mb-2 block opacity-40"></i>
-                        No reservations yet.
-                    </div>
-                @endforelse
+                @include('tenants.partials.my-reservations', ['myReservations' => $myReservations, 'bills' => $bills ?? []])
             </div>
         </div>
 
@@ -260,6 +221,45 @@
     </div>
 
     <div id="tenant-reservations-modals" data-user-name="{{ auth()->user()?->name }}" data-reservations='@json($reservations ?? [])'></div>
+
+    {{-- Pay Now modal (opens from each bill's .open-payment-modal button, which carries its own data-invoice) --}}
+    <div id="payment-modal-root"></div>
+
+    {{-- ============ RESERVATION DETAILS MODAL (filled by the script below) ============ --}}
+    <div id="booking-details-modal" class="fixed inset-0 z-[1200] hidden" role="dialog" aria-modal="true" aria-labelledby="booking-details-title">
+        <div class="absolute inset-0 bg-[#0F1A33]/55 backdrop-blur-sm" data-close-details></div>
+        <div class="relative mx-auto mt-[6vh] w-[calc(100%-2rem)] max-w-lg max-h-[88vh] overflow-y-auto bg-white rounded-2xl shadow-2xl">
+            <div class="relative h-44 bg-slate-200 hidden" data-field="img-wrap">
+                <img data-field="img" src="" alt="" class="w-full h-full object-cover">
+                <a data-field="tour" href="#" class="hidden absolute bottom-3 right-3 bg-black/60 hover:bg-black/75 text-white text-[11px] font-semibold px-3 py-1.5 rounded-full backdrop-blur">
+                    <i class="fa-solid fa-camera mr-1"></i> View 360° Tour
+                </a>
+            </div>
+            <div class="p-6">
+                <div class="flex items-start justify-between gap-3">
+                    <div>
+                        <h3 id="booking-details-title" data-field="title" class="text-[17px] font-bold text-slate-900"></h3>
+                        <p class="text-[12px] text-slate-500 mt-0.5">Reference: <span data-field="reference" class="font-semibold text-slate-700"></span></p>
+                    </div>
+                    <button type="button" data-close-details data-details-x aria-label="Close"
+                        class="w-9 h-9 shrink-0 rounded-full flex items-center justify-center text-slate-500 hover:bg-slate-100">
+                        <i class="fa-solid fa-xmark text-lg"></i>
+                    </button>
+                </div>
+
+                <dl class="mt-5 grid grid-cols-2 gap-x-4 gap-y-3 text-[12.5px]" data-field="rows"></dl>
+
+                <div data-field="note" class="hidden mt-4 bg-green-50 text-green-800 text-[12px] px-3 py-2 rounded-lg"></div>
+
+                <div class="mt-6 flex justify-end">
+                    <button type="button" data-close-details
+                        class="inline-flex items-center justify-center h-10 px-5 rounded-lg bg-[#0A1F44] hover:bg-[#13305f] text-white text-[13px] font-semibold transition">
+                        Close
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
 @endsection
 
 @push('scripts')
@@ -307,8 +307,8 @@
 
                         console.log('[Live] Data received:', data);
 
-                        if (data.myReservations) {
-                            renderReservationCards(data.myReservations);
+                        if (typeof data.myReservationsHtml === 'string') {
+                            renderReservationCards(data.myReservationsHtml);
                         }
 
                         // Re-render Rooms in real-time
@@ -328,43 +328,9 @@
                     .catch(console.error);
             }
 
-            function renderReservationCards(list) {
+            function renderReservationCards(html) {
                 const container = document.getElementById('my-reservations-list');
-                if (!container) return;
-
-                if (!list || !list.length) {
-                    container.innerHTML = `
-                <div class="px-6 py-8 text-center text-[13px] text-slate-400">
-                    <i class="fa-regular fa-calendar-check text-3xl mb-2 block opacity-40"></i>
-                    No reservations yet.
-                </div>`;
-                    return;
-                }
-
-                container.innerHTML = list.map(r => `
-            <div class="px-6 py-4 flex items-center justify-between flex-wrap gap-3 border-b border-slate-200 last:border-b-0">
-                <div class="flex flex-col gap-1.5">
-                    <div class="flex items-center gap-3 flex-wrap">
-                        <h4 class="text-[14.5px] font-bold text-slate-900">${r.room}</h4>
-                        <span class="text-[11px] font-bold px-2.5 py-[3px] rounded-full inline-flex items-center gap-1 ${r.statusClass}">
-                            <i class="${r.statusIcon}"></i> ${r.status}
-                        </span>
-                    </div>
-                    <div class="text-[12px] text-slate-500">
-                        Move-in: ${r.move_in} · Submitted: ${r.submitted}
-                    </div>
-                    ${r.note ? `<div class="bg-green-50 text-green-800 text-[11px] px-2.5 py-1 rounded-md inline-block mt-1 font-medium">${r.note}</div>` : ''}
-                </div>
-                <div class="text-right flex flex-col items-end gap-0.5">
-                    <div class="text-base font-extrabold text-emerald-500">₱${r.deposit}</div>
-                    <div class="text-[11px] text-slate-500">deposit</div>
-                    ${r.status === 'Pending' ? `
-                                <button type="button"
-                                    class="cancel-reservation-btn text-[11px] font-semibold text-rose-500 hover:text-rose-700 mt-1"
-                                    data-res-key="${r.key}">Cancel</button>` : ''}
-                </div>
-            </div>
-        `).join('');
+                if (container) container.innerHTML = html;
             }
 
             // Re-renders the Available Rooms Grid
@@ -533,6 +499,93 @@
             }
 
             window.addEventListener("reservation:refresh", refreshReservations);
+
+            // Bills: a payment was submitted here, or the admin verified / added one
+            let billTimer;
+            const refreshSoon = () => {
+                clearTimeout(billTimer);
+                billTimer = setTimeout(refreshReservations, 400);
+            };
+            window.addEventListener("billing:refresh", refreshSoon);
+            let billingTries = 0;
+            (function subscribeBilling() {
+                if (!window.LiveTenantChannels?.billing) {
+                    if (billingTries++ < 100) setTimeout(subscribeBilling, 50);
+                    return;
+                }
+                window.LiveTenantChannels.billing(refreshSoon);
+            })();
+
+            // ── View Details ──
+            const modal = document.getElementById("booking-details-modal");
+            const field = (name) => modal.querySelector('[data-field="' + name + '"]');
+            const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+            let lastFocus = null;
+
+            function openDetails(d) {
+                field("title").textContent = d.title || "Reservation";
+                field("reference").textContent = d.reference || "—";
+
+                const hasImg = !!d.img;
+                field("img-wrap").classList.toggle("hidden", !hasImg);
+                if (hasImg) field("img").src = d.img;
+                const tour = field("tour");
+                tour.classList.toggle("hidden", !d.tourUrl);
+                if (d.tourUrl) tour.href = d.tourUrl;
+
+                const payment = { full: "Full payment", half: "50% down payment" }[d.paymentOption] || d.paymentOption;
+                const rows = [
+                    ["Status", d.status],
+                    ["Room type", d.roomType],
+                    ["Room", d.roomNumber],
+                    ["Floor", d.floor],
+                    ["Bed", d.bed],
+                    ["Daily rate", d.dailyRent ? "₱" + d.dailyRent : null],
+                    ["Check-in", d.checkIn],
+                    ["Check-out", d.checkOut],
+                    ["Length of stay", d.nights ? d.nights + (d.nights === 1 ? " day" : " days") : null],
+                    ["Payment option", payment],
+                    ["Total charges", "₱" + d.total],
+                    ["Paid upfront", "₱" + d.paid],
+                    ["Remaining balance", "₱" + d.remaining],
+                    ["Submitted", d.submitted],
+                ].filter(([, v]) => v !== null && v !== undefined && v !== "");
+                field("rows").innerHTML = rows.map(([k, v]) =>
+                    '<div><dt class="text-slate-500">' + esc(k) + '</dt>' +
+                    '<dd class="font-semibold text-slate-900">' + esc(v) + '</dd></div>'
+                ).join("");
+
+                const note = field("note");
+                note.classList.toggle("hidden", !d.note);
+                note.textContent = d.note || "";
+
+                lastFocus = document.activeElement;
+                modal.classList.remove("hidden");
+                document.body.style.overflow = "hidden";
+                modal.querySelector("[data-details-x]")?.focus();
+            }
+
+            function closeDetails() {
+                modal.classList.add("hidden");
+                document.body.style.overflow = "";
+                lastFocus?.focus?.();
+            }
+
+            document.addEventListener("click", (e) => {
+                const btn = e.target.closest(".open-booking-details-btn");
+                if (btn) {
+                    try {
+                        openDetails(JSON.parse(btn.dataset.details || "{}"));
+                    } catch (err) {
+                        console.error("Invalid reservation details", err);
+                    }
+                    return;
+                }
+                if (e.target.closest("[data-close-details]")) closeDetails();
+            });
+            document.addEventListener("keydown", (e) => {
+                if (e.key === "Escape" && !modal.classList.contains("hidden")) closeDetails();
+            });
         })();
     </script>
 @endpush

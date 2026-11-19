@@ -3,6 +3,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { LIMITS } from "../../../utils/inputLimits";
 import { activeFilterCount } from "../hooks/useRoomCatalog";
+import { AVAILABILITY_OPTIONS } from "./HeroSearch";
 import { useDialog } from "./RoomDetailDrawer";
 import { btn, cx, peso } from "./ui";
 
@@ -105,6 +106,9 @@ export function FilterControls({ facets, filters, onChange, showTypes = true }) 
                     {facets.floors.map((fl) => <option key={fl} value={fl}>Floor {fl}</option>)}
                 </SelectField>
             )}
+            <SelectField label="Availability" value={filters.availability ?? ""} onChange={(e) => onChange({ availability: e.target.value || null })}>
+                {AVAILABILITY_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </SelectField>
             <SelectField label="Sort by" value={filters.sort} onChange={(e) => onChange({ sort: e.target.value })}>
                 {SORTS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
             </SelectField>

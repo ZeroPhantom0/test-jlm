@@ -51,13 +51,6 @@
                 </div>
                 <p class="text-[13px] text-slate-500">Your complete transaction and service history</p>
             </div>
-
-            {{-- Back to Dashboard --}}
-            <a href="{{ route('tenants.dashboard') }}"
-                class="inline-flex items-center gap-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 px-4 py-2 rounded-lg text-[13px] font-semibold transition shrink-0">
-                <i class="fa-solid fa-arrow-left text-[11px]"></i>
-                Back to Dashboard
-            </a>
         </div>
 
         {{-- Summary cards --}}
